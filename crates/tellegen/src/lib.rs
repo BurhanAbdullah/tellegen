@@ -22,6 +22,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod api;
+pub mod api_contract;
 mod content_id;
 #[cfg(feature = "sensitivity")]
 pub mod document;
@@ -77,8 +78,8 @@ pub use plan::{
 };
 #[cfg(feature = "sensitivity")]
 pub use sens::{
-    Axis, Bound, ColMeta, CostTerm, ElementId, End, Mode, Operand, Parameter, Power, RowMeta,
-    Selector, SensError, SensitivityMatrix, SolveSpec, TapKind, VoltageKind, GB,
+    Axis, Bound, ColMeta, CostTerm, ElementId, End, Mode, Operand, Parameter, Power,
+    RowMeta, Selector, SensError, SensitivityMatrix, SolveSpec, TapKind, VoltageKind, GB,
 };
 pub use solve::SolveIteration;
 #[cfg(feature = "sensitivity")]
