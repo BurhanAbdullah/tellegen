@@ -6,17 +6,6 @@
 //!
 //! [`solve_instance`] is the typed DC OPF entry. [`Study`] accepts a stored
 //! PowerIO balanced network module for interactive browser work.
-//!
-//! ```ignore
-//! use tellegen::{solve_instance, SolveRequest};
-//!
-//! let module = tellegen::ir::deserialize_module(&module_json)?;
-//! use powerio::IntoTypedModule;
-//! let instance_module: powerio::PioModule<powerio::DcOpfInstance> =
-//!     module.into_typed()?;
-//! let response = solve_instance(instance_module.value(), &SolveRequest::default())?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
 
 /// Tellegen engine package version embedded by Cargo.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -32,7 +21,7 @@ pub mod exploration;
 mod formulation;
 pub mod geo;
 #[cfg(feature = "sensitivity")]
-mod history;
+pub mod history;
 pub mod ir;
 #[cfg(feature = "mc-pf")]
 pub mod mc_pf;
@@ -43,7 +32,7 @@ pub mod objective;
 pub mod plan;
 mod problem;
 #[cfg(feature = "sensitivity")]
-mod sens;
+pub mod sens;
 mod solve;
 #[cfg(feature = "sensitivity")]
 pub mod study;
@@ -51,6 +40,8 @@ pub mod study;
 pub mod study_ops;
 #[cfg(all(feature = "sensitivity", not(target_arch = "wasm32")))]
 pub mod study_storage;
+
+mod operator_contract;
 
 #[cfg(feature = "conic")]
 pub use api::solve_ac_instance;
