@@ -30,18 +30,14 @@ mod model;
 pub mod objective;
 #[cfg(feature = "sensitivity")]
 pub mod plan;
-mod problem;
+pub mod canonical_dc_operators;
 #[cfg(feature = "sensitivity")]
 pub mod sens;
 mod solve;
 #[cfg(feature = "sensitivity")]
 pub mod study;
-#[cfg(feature = "sensitivity")]
-pub mod study_ops;
 #[cfg(all(feature = "sensitivity", not(target_arch = "wasm32")))]
 pub mod study_storage;
-
-mod operator_contract;
 
 #[cfg(feature = "conic")]
 pub use api::solve_ac_instance;
