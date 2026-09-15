@@ -136,8 +136,14 @@ mod tests {
     fn canonical_bundle_is_shape_consistent() {
         let instance = case3();
         let operators = CanonicalDcOperators::build(&instance).expect("operators");
+        let active_branches = instance
+            .network()
+            .branches()
+            .iter()
+            .filter(|branch| branch.in_service && branch.from != branch.to)
+            .count();
         operators
-            .validate_shape(instance.network().buses().len(), instance.network().branches().len())
+            .validate_shape(instance.network().buses().len(), active_branches)
             .expect("canonical shape");
         assert!(!operators.branch_susceptances().is_empty());
         assert_eq!(operators.branch_rows().len(), operators.analysis_sources().len());
