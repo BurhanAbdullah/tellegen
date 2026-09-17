@@ -31,6 +31,7 @@ pub mod objective;
 #[cfg(feature = "sensitivity")]
 pub mod plan;
 mod problem;
+pub mod canonical_dc_operators;
 #[cfg(feature = "sensitivity")]
 pub mod sens;
 mod solve;
