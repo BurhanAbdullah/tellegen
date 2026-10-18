@@ -67,6 +67,8 @@ export interface SnapshotBranch {
 	fromTerminals: string[];
 	toTerminals: string[];
 	inService: boolean;
+	/** Element kind, matched against port kinds so a line and a switch sharing a name stay apart. */
+	kind?: string;
 	rating?: BranchRating | null;
 }
 
@@ -152,7 +154,10 @@ export function snapshotFromMcPf(
 	}
 	const branchSnapshots = branches.map((branch): BranchSnapshot => {
 		const ends = [branch.from, branch.to].map((bus, side): BranchEnd | null => {
-			const rows = ports.get(`${branch.id}\u0000${bus}`);
+			const all = ports.get(`${branch.id}\u0000${bus}`);
+			const rows = all?.some((r) => r.kind === branch.kind)
+				? all.filter((r) => r.kind === branch.kind)
+				: all;
 			if (!branch.inService || !rows?.length) return null;
 			const order = side ? branch.toTerminals : branch.fromTerminals;
 			return {
@@ -173,6 +178,23 @@ export function snapshotFromMcPf(
 		buses: buses.map((bus) => busSnapshot(bus, (t) => voltages.get(`${bus.id}\u0000${t}`))),
 		branches: branchSnapshots
 	};
+}
+
+/** Bus results from a live session's transferred terminal arrays (`[re, im]` interleaved), for when
+ * the full result with element ports has not been fetched. Branches are left without results. */
+export function snapshotBusesFromTerminals(
+	ids: ArrayLike<[string, string]>,
+	voltages: ArrayLike<number>,
+	buses: SnapshotBus[]
+): BusSnapshot[] {
+	const index = new Map<string, number>();
+	for (let k = 0; k < ids.length; k++) index.set(`${ids[k][0]}\u0000${ids[k][1]}`, k);
+	return buses.map((bus) =>
+		busSnapshot(bus, (t) => {
+			const k = index.get(`${bus.id}\u0000${t}`);
+			return k === undefined ? undefined : { re: voltages[2 * k], im: voltages[2 * k + 1] };
+		})
+	);
 }
 
 function loadingOf(

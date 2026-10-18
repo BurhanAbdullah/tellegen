@@ -167,6 +167,23 @@ export interface DistGraphBus {
   gen_kw: number;
   has_source: boolean;
   terminal_attachments?: Record<string, DistGraphAttachment[]>;
+  /** Declared voltage magnitude bounds in volts, present only when the model declares them.
+   * Phase–neutral bounds list one value per phase terminal; phase–phase bounds one per pair. */
+  voltage_limits?: DistVoltageLimits;
+}
+
+export interface DistVoltageLimits {
+  vpn_min?: number[];
+  vpn_max?: number[];
+  vpp_min?: number[];
+  vpp_max?: number[];
+}
+
+/** A declared branch rating: per-conductor ampacity in conductor order, or the smaller
+ * winding apparent-power rating of a transformer edge in volt-amperes. */
+export interface DistEdgeRating {
+  i_max?: number[];
+  s_rating?: number;
 }
 
 /** One edge in the collapsed distribution graph. `conductors` pairs the
@@ -180,6 +197,8 @@ export interface DistGraphEdge {
   conductors: [string, string][];
   closed: boolean;
   n_phases: number;
+  /** Present only when the model declares a rating. */
+  rating?: DistEdgeRating;
 }
 
 /** The render-ready bus/terminal projection of a distribution network. */

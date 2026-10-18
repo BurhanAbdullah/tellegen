@@ -119,3 +119,4 @@ export type {
 } from '@tellegen/engine';
 
 export { default as McResults } from './components/McResults.svelte';
+export { default as McWorkbench } from './components/McWorkbench.svelte';

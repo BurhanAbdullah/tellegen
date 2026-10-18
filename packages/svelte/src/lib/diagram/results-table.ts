@@ -113,8 +113,8 @@ export function tableModel(result: ResultSnapshot, names: TableNames, kind: Tabl
 		return {
 			id: name.id,
 			family: name.family,
-			from: names.buses[name.from].id,
-			to: names.buses[name.to].id,
+			from: names.buses[name.from]?.id ?? null,
+			to: names.buses[name.to]?.id ?? null,
 			pFrom: a?.p ?? null,
 			qFrom: a?.q ?? null,
 			pTo: b?.p ?? null,

@@ -5,10 +5,11 @@
 		PanelFrame,
 		ModelDetails,
 		McResults,
+		McWorkbench,
 		getNoticeCenter,
 		errorNoticeTitle
 	} from '@tellegen/svelte';
-	import type { StudyOperation } from '@tellegen/engine';
+	import type { McPfResult, StudyOperation } from '@tellegen/engine';
 	import TellegenWebMcp from '../webmcp/TellegenWebMcp.svelte';
 	import { caseRevision } from '../webmcp/tellegen-adapter.js';
 	import { StudyWorkspace } from './workspace.svelte.js';
@@ -55,6 +56,36 @@
 	let content: HTMLElement | undefined;
 	const pageSize = 20;
 	const multi = $derived(ctrl.app.activeMulti);
+	// The overview needs the whole operating point. Read it once per solve, after load edits settle,
+	// and keep the previous one visible while a newer solve is still running.
+	let mcFull = $state.raw<McPfResult | null>(null);
+	let mcFullLoading = $state(false);
+	let mcFullSeq = 0;
+	$effect(() => {
+		const c = multi;
+		const solve = c?.result?.solve_count;
+		void c?.mcFullResult;
+		if (!c || solve === undefined) {
+			mcFull = null;
+			mcFullLoading = false;
+			return;
+		}
+		const seq = ++mcFullSeq;
+		mcFullLoading = true;
+		const timer = setTimeout(() => {
+			ctrl.multiFullResult(c).then(
+				(full) => {
+					if (seq !== mcFullSeq) return;
+					if (full) mcFull = full;
+					mcFullLoading = false;
+				},
+				() => {
+					if (seq === mcFullSeq) mcFullLoading = false;
+				}
+			);
+		}, 300);
+		return () => clearTimeout(timer);
+	});
 	const mcDoc = $derived(workspace.activeMcDocument);
 	const doc = $derived(workspace.document);
 	const goal = $derived(workspace.goal);
@@ -455,6 +486,16 @@
 								details: multi.mcPfReason ?? 'This case cannot run AC power flow'
 							})}>Why unavailable</button
 					>{/if}
+				{#if multi.result && multi.graph}<McWorkbench
+						result={mcFull}
+						graph={multi.graph}
+						loading={mcFullLoading}
+						selectedBus={multi.selectedBusId}
+						selectedEdge={multi.selectedEdgeId}
+						onselectbus={(id) => ctrl.selectMultiBus(multi.id, id)}
+						onselectedge={(id) => ctrl.selectMultiEdge(multi.id, id)}
+						label={multi.label}
+					/>{/if}
 				{#if multi.result}<McResults
 						result={multi.result}
 						detail={(query) => ctrl.multiResultDetail(multi, query)}

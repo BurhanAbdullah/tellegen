@@ -5,7 +5,9 @@ import {
 	magnitudeUnbalance,
 	pairZone,
 	rankIssues,
+	graphInputs,
 	sequenceUnbalance,
+	snapshotBusesFromTerminals,
 	snapshotFromMcPf,
 	snapshotSummary,
 	type PairVoltage,
@@ -238,5 +240,152 @@ describe('issues and summary', () => {
 		expect(snapshotSummary(s).unbalance).toEqual({ percent: 50, definition: 'VUF', bus: 0 });
 		expect(magnitudeUnbalance(s.buses[0].pairs)?.definition).toBe('NEMA LVUR');
 		expect(magnitudeUnbalance([pn('1', 230), pn('2', 230)])).toBeNull();
+	});
+});
+
+describe('graphInputs and live-session terminals', () => {
+	const graph = {
+		buses: [
+			{
+				id: 'A',
+				terminals: ['1', '2', '3'],
+				grounded: [],
+				load_kw: 0,
+				gen_kw: 0,
+				has_source: true,
+				voltage_limits: { vpp_min: [19000, 19000, 19000], vpp_max: [21000, 21000, 21000] }
+			},
+			{
+				id: 'B',
+				terminals: ['1', '2', '3', 'n'],
+				grounded: ['n'],
+				neutral_terminal: 'n',
+				load_kw: 5,
+				gen_kw: 0,
+				has_source: false,
+				voltage_limits: { vpn_min: [207, 207, 207], vpn_max: [253, 253, 253] }
+			},
+			{
+				id: 'C',
+				terminals: ['1', '2', '3'],
+				grounded: [],
+				load_kw: 0,
+				gen_kw: 0,
+				has_source: false,
+				voltage_limits: { vpp_min: [1, 2, 3], vpp_max: [9, 9, 9] }
+			}
+		],
+		edges: [
+			{
+				kind: 'line' as const,
+				id: 'L1',
+				from: 'A',
+				to: 'B',
+				conductors: [
+					['1', '1'],
+					['2', '2'],
+					['3', '3']
+				] as [string, string][],
+				closed: true,
+				n_phases: 3,
+				rating: { i_max: [200, 200, 200] }
+			},
+			{
+				kind: 'transformer' as const,
+				id: 'T1',
+				from: 'A',
+				to: 'c',
+				conductors: [['1', '1']] as [string, string][],
+				closed: true,
+				n_phases: 3,
+				rating: { s_rating: 4e5 }
+			},
+			{
+				kind: 'switch' as const,
+				id: 'S1',
+				from: 'B',
+				to: 'X',
+				conductors: [] as [string, string][],
+				closed: false,
+				n_phases: 3
+			}
+		]
+	};
+
+	it('maps declared limits and ratings, and refuses to guess non-uniform phase–phase bounds', () => {
+		const g = graphInputs(graph);
+		expect(g.buses.map((b) => b.limits)).toEqual([
+			{ reference: 'phase-phase', min: 19000, max: 21000 },
+			{ reference: 'phase-neutral', min: [207, 207, 207], max: [253, 253, 253] },
+			null
+		]);
+		expect(g.branches.map((b) => b.rating)).toEqual([
+			{ kind: 'current', amps: [200, 200, 200] },
+			{ kind: 'apparent', va: 4e5 },
+			null
+		]);
+		expect(g.branches[2].inService).toBe(false);
+		expect(g.names.branches.map((b) => [b.from, b.to])).toEqual([
+			[0, 1],
+			[0, 2],
+			[1, -1]
+		]);
+		expect(g.entities.filter((e) => e.kind === 'branch').map((e) => e.family)).toEqual([
+			'line',
+			'transformer',
+			'switch'
+		]);
+	});
+
+	it('builds bus results from interleaved session terminal arrays', () => {
+		const g = graphInputs(graph);
+		const ids: [string, string][] = [
+			['B', '1'],
+			['B', '2'],
+			['B', '3'],
+			['B', 'n']
+		];
+		const v = [polar(230, 0), polar(230, -120), polar(205, 120), polar(0, 0)].flatMap((z) => [
+			z.re,
+			z.im
+		]);
+		const buses = snapshotBusesFromTerminals(ids, Float64Array.from(v), g.buses);
+		expect(buses[0].pairs).toEqual([]);
+		expect(buses[1].pairs.map((p) => Math.round(p.volts))).toEqual([230, 230, 205]);
+		expect(buses[1].pairs[2].min).toBe(207);
+		expect(buses[1].unbalance?.definition).toBe('VUF');
+	});
+
+	it('matches ports by element kind when a line and a switch share a name', () => {
+		const port = (kind: string, bus: string, kw: number) => ({
+			element: 'X1',
+			kind,
+			branch: 0,
+			bus,
+			terminal: '1',
+			current_into_element: { re: 1, im: 0 },
+			power_into_element: { re: kw * 1000, im: 0 }
+		});
+		const result = {
+			iterations: 1,
+			terminals: [],
+			element_ports: [
+				port('line', 'A', 5),
+				port('switch', 'A', 99),
+				port('line', 'B', -4.9),
+				port('switch', 'B', -99)
+			]
+		} as unknown as McPfResult;
+		const branch = {
+			id: 'X1',
+			kind: 'line',
+			from: 'A',
+			to: 'B',
+			fromTerminals: ['1'],
+			toTerminals: ['1'],
+			inService: true
+		};
+		const s = snapshotFromMcPf(result, [], [branch]);
+		expect(s.branches[0].ends.map((e) => e?.p)).toEqual([5, -4.9]);
 	});
 });

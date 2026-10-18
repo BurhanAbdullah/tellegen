@@ -151,7 +151,8 @@ fn ingest_dist_value(
     diagnostics: &[powerio::Diagnostic],
 ) -> Result<serde_json::Value, String> {
     let graph = net.to_graph();
-    let graph_value = graph_with_neutral_metadata(net, &graph)?;
+    let mut graph_value = graph_with_neutral_metadata(net, &graph)?;
+    add_limits_and_ratings(net, &mut graph_value);
 
     let mut n_line = 0usize;
     let mut n_switch = 0usize;
@@ -250,6 +251,100 @@ fn graph_with_neutral_metadata(
         }
     }
     Ok(value)
+}
+
+/// Add declared bus voltage limits and branch ratings, which PowerIO's graph projection leaves out,
+/// so the frontend can rank limit violations and loading against what the model declares. Values
+/// keep PowerIO's names and units (volts, amperes, volt-amperes); nothing absent is invented.
+fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
+    use serde_json::{json, Map, Value};
+    let buses: std::collections::BTreeMap<_, _> = net
+        .buses()
+        .iter()
+        .map(|bus| (bus.id.to_ascii_lowercase(), bus))
+        .collect();
+    if let Some(graph_buses) = graph.get_mut("buses").and_then(Value::as_array_mut) {
+        for graph_bus in graph_buses {
+            let Some(bus) = graph_bus
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| buses.get(&id.to_ascii_lowercase()))
+            else {
+                continue;
+            };
+            let mut limits = Map::new();
+            for (name, value) in [
+                ("vpn_min", &bus.vpn_min),
+                ("vpn_max", &bus.vpn_max),
+                ("vpp_min", &bus.vpp_min),
+                ("vpp_max", &bus.vpp_max),
+            ] {
+                if let Some(values) = value {
+                    limits.insert(name.to_owned(), json!(values));
+                }
+            }
+            if !limits.is_empty() {
+                graph_bus["voltage_limits"] = Value::Object(limits);
+            }
+        }
+    }
+    let line_rating = |line: &powerio_dist::DistLine| {
+        line.i_max.clone().or_else(|| {
+            net.linecode(&line.linecode)
+                .and_then(|code| code.i_max.clone())
+        })
+    };
+    let Some(edges) = graph.get_mut("edges").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for edge in edges {
+        let (Some(kind), Some(id)) = (
+            edge.get("kind").and_then(Value::as_str),
+            edge.get("id").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let rating = match kind {
+            "line" => net
+                .lines()
+                .iter()
+                .find(|line| line.name.eq_ignore_ascii_case(id))
+                .and_then(line_rating)
+                .map(|amps| json!({ "i_max": amps })),
+            "switch" => net
+                .switches()
+                .iter()
+                .find(|switch| switch.name.eq_ignore_ascii_case(id))
+                .and_then(|switch| switch.i_max.clone())
+                .map(|amps| json!({ "i_max": amps })),
+            "transformer" => {
+                let endpoint = |key: &str| edge.get(key).and_then(Value::as_str).map(str::to_owned);
+                let (from, to) = (endpoint("from"), endpoint("to"));
+                net.transformers()
+                    .iter()
+                    .find(|t| t.name.eq_ignore_ascii_case(id))
+                    .and_then(|t| {
+                        // An edge joins one winding pair; the smaller winding rating bounds it.
+                        let winding = |bus: &Option<String>| {
+                            t.windings.iter().find(|w| {
+                                bus.as_deref()
+                                    .is_some_and(|b| w.bus.eq_ignore_ascii_case(b))
+                            })
+                        };
+                        let rating = match (winding(&from), winding(&to)) {
+                            (Some(a), Some(b)) => a.s_rating.min(b.s_rating),
+                            (Some(w), None) | (None, Some(w)) => w.s_rating,
+                            (None, None) => return None,
+                        };
+                        (rating > 0.0).then(|| json!({ "s_rating": rating }))
+                    })
+            }
+            _ => None,
+        };
+        if let Some(rating) = rating {
+            edge["rating"] = rating;
+        }
+    }
 }
 
 fn neutral_terminal(
@@ -562,6 +657,43 @@ mod tests {
         assert_eq!(v["mc_pf_supported"], false);
         assert!(tellegen::validate_mc_module_json(v["module_json"].as_str().unwrap()).is_err());
         assert!(v["mc_pf_reason"].as_str().unwrap().contains("model"));
+    }
+
+    #[test]
+    fn graph_carries_declared_voltage_limits_and_ratings_only_when_present() {
+        let mut raw: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        raw["bus"]["load_bus"]["vpn_min"] = serde_json::json!([207.0, 207.0, 207.0]);
+        raw["bus"]["load_bus"]["vpn_max"] = serde_json::json!([253.0, 253.0, 253.0]);
+        raw["line"]["l1"]["i_max"] = serde_json::json!([200.0, 200.0, 200.0]);
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("limits"));
+        let bus = |id: &str| {
+            value["graph"]["buses"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|b| b["id"].as_str().unwrap().eq_ignore_ascii_case(id))
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            bus("load_bus")["voltage_limits"]["vpn_min"],
+            serde_json::json!([207.0, 207.0, 207.0])
+        );
+        assert_eq!(bus("load_bus")["voltage_limits"]["vpn_max"][2], 253.0);
+        assert!(bus("src").get("voltage_limits").is_none());
+        let line = value["graph"]["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["kind"] == "line")
+            .unwrap();
+        assert_eq!(
+            line["rating"]["i_max"],
+            serde_json::json!([200.0, 200.0, 200.0])
+        );
+
+        let plain = parse(&ingest_dist(MICRO_BMOPF, "bmopf").expect("plain"));
+        assert!(plain["graph"]["edges"][0].get("rating").is_none());
     }
 
     #[test]

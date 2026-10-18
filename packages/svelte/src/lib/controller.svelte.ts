@@ -2450,6 +2450,19 @@ export class Controller {
 		return full ? mcPfResultDetail(full, query, summary.solve_count) : null;
 	};
 
+	/** The complete operating point for whole-network views: the stored result, or one read from
+	 * the live session. Null when there is no result or it changed before the read finished. */
+	multiFullResult = async (c: MulticonductorCase): Promise<McPfResult | null> => {
+		if (!c.result) return null;
+		const stored = c.mcFullResult ?? c.mcSnapshot?.result ?? null;
+		const session = c.mcSession;
+		if (stored || !session) return stored;
+		if (c.mcEditRunning) return null;
+		const solve = c.result.solve_count;
+		const full = await session.result();
+		return session === c.mcSession && c.result?.solve_count === solve ? full : null;
+	};
+
 	/** Every terminal's identity, voltage, and injected current, as numeric
 	 * arrays of interleaved `[re, im]` values. */
 	multiTerminalTable = async (
