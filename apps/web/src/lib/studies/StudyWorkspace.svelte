@@ -57,35 +57,44 @@
 	const pageSize = 20;
 	const multi = $derived(ctrl.app.activeMulti);
 	// The overview needs the whole operating point. Read it once per solve, after load edits settle,
-	// and keep the previous one visible while a newer solve is still running.
+	// and keep the previous one visible while a newer solve is still running. Above
+	// AUTO_OVERVIEW_MAX_BUSES the read and recompute take a noticeable fraction of a second
+	// (evidence/diagram), so large cases analyse on request instead of on every edit.
+	const AUTO_OVERVIEW_MAX_BUSES = 25_000;
 	let mcFull = $state.raw<McPfResult | null>(null);
 	let mcFullLoading = $state(false);
 	let mcFullSeq = 0;
+	function readFullResult(c: NonNullable<typeof multi>, seq: number) {
+		ctrl.multiFullResult(c).then(
+			(full) => {
+				if (seq !== mcFullSeq) return;
+				if (full) mcFull = full;
+				mcFullLoading = false;
+			},
+			() => {
+				if (seq === mcFullSeq) mcFullLoading = false;
+			}
+		);
+	}
 	$effect(() => {
 		const c = multi;
 		const solve = c?.result?.solve_count;
 		void c?.mcFullResult;
-		if (!c || solve === undefined) {
+		const seq = ++mcFullSeq;
+		if (!c || solve === undefined || (c.graph?.buses.length ?? 0) > AUTO_OVERVIEW_MAX_BUSES) {
 			mcFull = null;
 			mcFullLoading = false;
 			return;
 		}
-		const seq = ++mcFullSeq;
 		mcFullLoading = true;
-		const timer = setTimeout(() => {
-			ctrl.multiFullResult(c).then(
-				(full) => {
-					if (seq !== mcFullSeq) return;
-					if (full) mcFull = full;
-					mcFullLoading = false;
-				},
-				() => {
-					if (seq === mcFullSeq) mcFullLoading = false;
-				}
-			);
-		}, 300);
+		const timer = setTimeout(() => readFullResult(c, seq), 300);
 		return () => clearTimeout(timer);
 	});
+	function analyseOperatingPoint() {
+		if (!multi) return;
+		mcFullLoading = true;
+		readFullResult(multi, ++mcFullSeq);
+	}
 	const mcDoc = $derived(workspace.activeMcDocument);
 	const doc = $derived(workspace.document);
 	const goal = $derived(workspace.goal);
@@ -495,6 +504,9 @@
 						onselectbus={(id) => ctrl.selectMultiBus(multi.id, id)}
 						onselectedge={(id) => ctrl.selectMultiEdge(multi.id, id)}
 						label={multi.label}
+						onanalyse={(multi.graph.buses.length ?? 0) > AUTO_OVERVIEW_MAX_BUSES
+							? analyseOperatingPoint
+							: undefined}
 					/>{/if}
 				{#if multi.result}<McResults
 						result={multi.result}

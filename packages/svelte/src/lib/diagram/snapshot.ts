@@ -145,29 +145,43 @@ export function snapshotFromMcPf(
 	branches: SnapshotBranch[],
 	label = 'Tellegen multiconductor power flow'
 ): ResultSnapshot {
-	const voltages = new Map<string, McComplex>();
-	for (const t of result.terminals) voltages.set(`${t.bus}\u0000${t.terminal}`, t.voltage);
-	const ports = new Map<string, typeof result.element_ports>();
+	// Nested maps keyed by bus, then element: no composite string keys on a 100k-bus result.
+	const voltages = new Map<string, Map<string, McComplex>>();
+	for (const t of result.terminals) {
+		let bus = voltages.get(t.bus);
+		if (!bus) voltages.set(t.bus, (bus = new Map()));
+		bus.set(t.terminal, t.voltage);
+	}
+	type Port = McPfResult['element_ports'][number];
+	const ports = new Map<string, Map<string, Port[]>>();
 	for (const p of result.element_ports) {
-		const key = `${p.element}\u0000${p.bus}`;
-		ports.set(key, [...(ports.get(key) ?? []), p]);
+		let element = ports.get(p.element);
+		if (!element) ports.set(p.element, (element = new Map()));
+		const rows = element.get(p.bus);
+		if (rows) rows.push(p);
+		else element.set(p.bus, [p]);
 	}
 	const branchSnapshots = branches.map((branch): BranchSnapshot => {
 		const ends = [branch.from, branch.to].map((bus, side): BranchEnd | null => {
-			const all = ports.get(`${branch.id}\u0000${bus}`);
-			const rows = all?.some((r) => r.kind === branch.kind)
+			const all = ports.get(branch.id)?.get(bus);
+			if (!branch.inService || !all?.length) return null;
+			const rows = all.some((r) => r.kind === branch.kind)
 				? all.filter((r) => r.kind === branch.kind)
 				: all;
-			if (!branch.inService || !rows?.length) return null;
-			const order = side ? branch.toTerminals : branch.fromTerminals;
-			return {
-				p: rows.reduce((s, r) => s + r.power_into_element.re, 0) / 1000,
-				q: rows.reduce((s, r) => s + r.power_into_element.im, 0) / 1000,
-				currents: order.flatMap((terminal) => {
-					const row = rows.find((r) => r.terminal === terminal);
-					return row ? [{ terminal, amps: magnitude(row.current_into_element) }] : [];
-				})
-			};
+			let p = 0;
+			let q = 0;
+			const byTerminal = new Map<string, Port>();
+			for (const r of rows) {
+				p += r.power_into_element.re;
+				q += r.power_into_element.im;
+				byTerminal.set(r.terminal, r);
+			}
+			const currents: ConductorCurrent[] = [];
+			for (const terminal of side ? branch.toTerminals : branch.fromTerminals) {
+				const row = byTerminal.get(terminal);
+				if (row) currents.push({ terminal, amps: magnitude(row.current_into_element) });
+			}
+			return { p: p / 1000, q: q / 1000, currents };
 		}) as [BranchEnd | null, BranchEnd | null];
 		return { ends, ...loadingOf(branch, ends) };
 	});
@@ -175,7 +189,10 @@ export function snapshotFromMcPf(
 		kind: 'solved',
 		label,
 		iterations: result.iterations,
-		buses: buses.map((bus) => busSnapshot(bus, (t) => voltages.get(`${bus.id}\u0000${t}`))),
+		buses: buses.map((bus) => {
+			const terminals = voltages.get(bus.id);
+			return busSnapshot(bus, (t) => terminals?.get(t));
+		}),
 		branches: branchSnapshots
 	};
 }

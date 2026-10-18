@@ -12,3 +12,5 @@ export * from './layout-morph.js';
 export * from './phase-bars.js';
 export * from './view-state.js';
 export * from './graph-inputs.js';
+export * from './display-tree.js';
+export * from './voltage-profile.js';

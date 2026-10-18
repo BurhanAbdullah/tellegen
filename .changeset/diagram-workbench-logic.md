@@ -13,10 +13,13 @@ Both are present only when the model declares them.
 
 In `@tellegen/svelte`, `McWorkbench` summarises a multiconductor power-flow result:
 violations, losses, voltage ranges per declared reference, maximum loading and
-maximum unbalance; a ranked issue list that selects the bus or branch; per-phase
-voltage bars against declared limits and per-conductor currents at both ends; and
-bus and branch CSV export. Unbalance is the voltage unbalance factor from
-terminal phasors, shown beside the magnitude spread. `controller.multiFullResult`
+maximum unbalance; a ranked issue list that selects the bus or branch; search
+over buses and branches; per-phase voltage bars against declared limits and
+per-conductor currents at both ends; a voltage profile along the display tree with
+the same-depth envelope; sortable bus and branch tables; and CSV export. Cases
+larger than 25,000 buses compute the overview on request. Unbalance is the voltage
+unbalance factor from terminal phasors, shown beside the magnitude spread.
+`controller.multiFullResult`
 reads the full operating point from a stored result or the live session. The
 renderer-independent logic lives in `src/lib/diagram`, ported from the diagram
 projection draft (#177).

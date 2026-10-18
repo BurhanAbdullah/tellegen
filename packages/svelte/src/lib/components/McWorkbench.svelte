@@ -1,8 +1,16 @@
 <script lang="ts">
 	import type { DistGraph, McPfResult } from '@tellegen/engine';
+	import OmniSearch from './OmniSearch.svelte';
+	import ResultsTable from './ResultsTable.svelte';
+	import VoltageProfile from './VoltageProfile.svelte';
 	import {
+		buildSearchIndex,
+		busState,
 		conductorBars,
+		displayTree,
+		feederEnvelope,
 		graphInputs,
+		loadingState,
 		magnitudeUnbalance,
 		pairBar,
 		queryTable,
@@ -11,7 +19,9 @@
 		snapshotSummary,
 		tableCsv,
 		tableModel,
+		voltageProfile,
 		type Issue,
+		type SearchMatch,
 		type TableKind
 	} from '../diagram/index.js';
 
@@ -23,7 +33,8 @@
 		selectedEdge,
 		onselectbus,
 		onselectedge,
-		label = 'Multiconductor power flow'
+		label = 'Multiconductor power flow',
+		onanalyse
 	}: {
 		/** The full operating point; `null` while it is being fetched. */
 		result: McPfResult | null;
@@ -35,6 +46,8 @@
 		onselectedge: (id: string) => void;
 		/** Case name, used in exported file names and provenance. */
 		label?: string;
+		/** When set, the overview is computed on request rather than after every solve. */
+		onanalyse?: () => void;
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
@@ -49,6 +62,61 @@
 	);
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
 	const edgeIndex = $derived(new Map(graph.edges.map((e, i) => [e.id, i])));
+	// Network-only structures are rebuilt when the case changes, not after every solve.
+	const tree = $derived(displayTree(graph));
+	const searchIndex = $derived(buildSearchIndex(inputs.entities));
+	const busIds = $derived(graph.buses.map((b) => b.id));
+	const envelope = $derived(snapshot ? feederEnvelope(tree, snapshot) : null);
+	/** The selected bus, or the deeper end of the selected branch. */
+	const profileTarget = $derived.by(() => {
+		if (selectedBus !== null && busIndex.has(selectedBus))
+			return busIndex.get(selectedBus) as number;
+		const k = selectedEdge !== null ? edgeIndex.get(selectedEdge) : undefined;
+		if (k === undefined) return null;
+		const { from, to } = inputs.names.branches[k];
+		if (from < 0 || to < 0) return null;
+		return tree.depth[from] > tree.depth[to] ? from : to;
+	});
+	const profile = $derived(
+		snapshot && envelope && profileTarget !== null
+			? voltageProfile(graph, tree, snapshot, profileTarget, envelope)
+			: null
+	);
+	let tableKind = $state<TableKind>('bus');
+	const tables = $derived(
+		snapshot
+			? {
+					bus: tableModel(snapshot, inputs.names, 'bus'),
+					branch: tableModel(snapshot, inputs.names, 'branch')
+				}
+			: null
+	);
+	const tableSelected = $derived(
+		tableKind === 'bus'
+			? selectedBus !== null
+				? (busIndex.get(selectedBus) ?? -1)
+				: -1
+			: selectedEdge !== null
+				? (edgeIndex.get(selectedEdge) ?? -1)
+				: -1
+	);
+	/** Search results show the bus voltage nearest a limit, or the branch loading. */
+	function searchHint(m: SearchMatch) {
+		if (!snapshot) return null;
+		if (m.kind === 'branch') {
+			const loading = snapshot.branches[m.index].loading;
+			return loading === null ? null : { text: `${n(loading, 1)} %`, state: loadingState(loading) };
+		}
+		const bus = snapshot.buses[m.index];
+		if (!bus.pairs.length) return null;
+		const lowest = bus.pairs.reduce((a, b) => (b.volts < a.volts ? b : a));
+		return { text: `${n(lowest.volts)} V`, state: busState(bus) };
+	}
+	/** Selecting what is already selected would toggle it off in the controller. */
+	function selectOnce(kind: 'bus' | 'branch', index: number) {
+		const id = kind === 'bus' ? graph.buses[index].id : graph.edges[index].id;
+		if (id !== (kind === 'bus' ? selectedBus : selectedEdge)) select(kind, index);
+	}
 
 	const n = (v: number, digits = 2) =>
 		v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -128,6 +196,11 @@
 		<h4>Overview</h4>
 		{#if loading}<span role="status">Reading the full operating point…</span>{/if}
 	</div>
+	<OmniSearch
+		index={searchIndex}
+		hint={searchHint}
+		onselect={(m) => selectOnce(m.kind === 'bus' ? 'bus' : 'branch', m.index)}
+	/>
 	{#if summary}
 		{@const { voltage, overload, warning } = summary.counts}
 		<div class="kpis">
@@ -145,7 +218,7 @@
 				>
 				<span class="sub"
 					>{warning
-						? `+ ${warning} warnings`
+						? `+ ${warning} warning${warning === 1 ? '' : 's'}`
 						: limitsDeclared
 							? 'within declared limits'
 							: 'no limits declared'}</span
@@ -296,10 +369,47 @@
 			</p>
 		{/if}
 
+		{#if profile}
+			<h4>Voltage profile</h4>
+			<VoltageProfile
+				{profile}
+				{busIds}
+				{selectedBus}
+				onselectbus={(id) => {
+					if (id !== selectedBus) onselectbus(id);
+				}}
+			/>
+		{/if}
+
+		{#if tables}
+			<details class="tables">
+				<summary>Results table</summary>
+				<div class="tabs" role="tablist" aria-label="Results table">
+					{#each ['bus', 'branch'] as const as kind (kind)}
+						<button role="tab" aria-selected={tableKind === kind} onclick={() => (tableKind = kind)}
+							>{kind === 'bus' ? 'Buses' : 'Branches'}</button
+						>
+					{/each}
+				</div>
+				{#key tableKind}
+					<ResultsTable
+						model={tables[tableKind]}
+						selected={tableSelected}
+						onselect={(i) => selectOnce(tableKind, i)}
+					/>
+				{/key}
+			</details>
+		{/if}
+
 		<div class="actions">
 			<button onclick={() => exportCsv('bus')}>Bus CSV</button>
 			<button onclick={() => exportCsv('branch')}>Branch CSV</button>
 		</div>
+	{:else if !loading && onanalyse}
+		<p class="hint">
+			This case is large, so the overview reads the full operating point on request.
+		</p>
+		<div class="actions"><button onclick={onanalyse}>Analyse operating point</button></div>
 	{:else if !loading}
 		<p class="hint">Run the power flow to see the overview.</p>
 	{/if}
@@ -476,6 +586,36 @@
 	}
 	.end {
 		margin: 8px 0 3px;
+	}
+	.workbench :global(.omni) {
+		margin: 6px 0 10px;
+	}
+	.tables {
+		margin-top: 12px;
+	}
+	.tables summary {
+		cursor: pointer;
+		font-weight: 600;
+	}
+	.tabs {
+		display: flex;
+		gap: 12px;
+		margin: 8px 0 6px;
+	}
+	.tabs button {
+		font: 10px var(--font-mono);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: var(--text-secondary);
+		background: transparent;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		padding: 2px 0;
+		cursor: pointer;
+	}
+	.tabs button[aria-selected='true'] {
+		color: var(--ink);
+		border-bottom-color: var(--accent);
 	}
 	.actions {
 		display: flex;
