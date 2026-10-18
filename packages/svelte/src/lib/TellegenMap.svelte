@@ -39,6 +39,7 @@
 	import { getPanelLayout } from './panels.svelte.js';
 	import type { RGBA } from './colors.js';
 	import DiagramCanvas from './components/DiagramCanvas.svelte';
+	import SchematicCanvas from './components/SchematicCanvas.svelte';
 
 	let {
 		onbusclick,
@@ -75,6 +76,10 @@
 	const displayedNetwork = $derived(app.studyView?.network ?? diagramCase?.network);
 	const diagramNetwork = $derived(
 		multiNetwork ?? (displayedNetwork?.coordinate_space === 'diagram' ? displayedNetwork : null)
+	);
+	/** A multiconductor case shown as a schematic replaces both the map and the diagram canvas. */
+	const schematicCase = $derived(
+		!app.studyView && app.activeMulti?.schematic && app.activeMulti.graph ? app.activeMulti : null
 	);
 	const diagramCaseId = $derived(
 		app.studyView?.caseId ?? diagramMulti?.id ?? diagramCase?.id ?? 'diagram'
@@ -1294,7 +1299,7 @@
 	$effect(() => {
 		const seq = app.cameraSeq;
 		const snapshot = app.cameraRequest;
-		if (diagramNetwork || !map || !snapshot || seq === handledCameraSeq) return;
+		if (diagramNetwork || schematicCase || !map || !snapshot || seq === handledCameraSeq) return;
 		handledCameraSeq = seq;
 		handledFrameSeq = app.frameSeq;
 		map.jumpTo(snapshot);
@@ -1306,7 +1311,7 @@
 	// until its cue exists; anything unframeable settles immediately.
 	$effect(() => {
 		const seq = app.frameSeq;
-		if (diagramNetwork || !map || seq === handledFrameSeq) return;
+		if (diagramNetwork || schematicCase || !map || seq === handledFrameSeq) return;
 		const m = map;
 		const target = app.frameTarget;
 		const settle = () => app.settleFrame();
@@ -1336,7 +1341,18 @@
 	});
 </script>
 
-{#if diagramNetwork}
+{#if schematicCase}
+	<SchematicCanvas
+		mc={schematicCase}
+		onselectbus={(id) => {
+			if (id !== schematicCase.selectedBusId) onmultibusclick(schematicCase.id, id);
+		}}
+		onselectedge={(id) => {
+			if (id !== schematicCase.selectedEdgeId) onmultiedgeclick?.(schematicCase.id, id);
+		}}
+		onclose={() => (schematicCase.schematic = false)}
+	/>
+{:else if diagramNetwork}
 	<DiagramCanvas
 		network={diagramNetwork}
 		multiconductor={diagramMulti}

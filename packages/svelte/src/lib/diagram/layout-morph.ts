@@ -1,7 +1,8 @@
 /** Animated transition between two layouts of the same buses, so the eye can follow a feeder. */
 export const MORPH_MS = 900;
-/** Above this size the per-frame interpolation and upload are unmeasured on a GPU; switch instantly. */
-export const MORPH_MAX_BUSES = 25_000;
+/** Measured smooth up to 98,633 buses on the reference machine (M4 Max, #177 M0 evidence, with a
+ * warm-up frame); larger drawings switch instantly until measured. */
+export const MORPH_MAX_BUSES = 100_000;
 
 export interface Camera {
 	target: ArrayLike<number>;

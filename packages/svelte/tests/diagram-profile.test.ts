@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DistGraph } from '@tellegen/engine';
 import {
 	displayTree,
+	leafOrderLayout,
+	sourceLayout,
 	treePath,
 	voltageProfile,
 	MAX_PROFILE_POINTS,
@@ -94,5 +96,49 @@ describe('voltageProfile', () => {
 		expect(p.zones[0].rows).toHaveLength(MAX_PROFILE_POINTS);
 		expect(p.zones[0].rows[0].step).toBe(20);
 		expect(p.notice).toContain(`last ${MAX_PROFILE_POINTS} of ${n}`);
+	});
+});
+
+describe('schematic layouts', () => {
+	it('gives leaves their own rows, centres parents and routes tree edges as elbows', () => {
+		const tree = displayTree(graph);
+		const g = leafOrderLayout(graph, tree, { dx: 100, dy: 20 });
+		const at = (i: number) => [g.positions[i * 3], g.positions[i * 3 + 1]];
+		expect(at(0)).toEqual([0, 0]);
+		expect(at(3)).toEqual([300, 0]);
+		expect(at(4)).toEqual([0, 40]);
+		expect(at(5)).toEqual([0, 80]);
+		expect([...g.role]).toEqual([0, 0, 0, 2]);
+		expect([...g.segmentEdge].filter((k) => k === 3)).toHaveLength(1);
+		expect(g.bounds).toEqual([0, 0, 300, 80]);
+	});
+
+	it('projects geographic positions to Web Mercator, y down, relative to the centroid', () => {
+		const tree = displayTree(graph);
+		const placed = graph.buses.map((b, i) => ({ id: b.id, lon: 150 + i * 1e-5, lat: -30 }));
+		const geo = sourceLayout(graph, placed, true, tree);
+		// One metre apart near longitude 150 stays one metre apart: no float32 collapse at 1.6e7 m.
+		const metre = ((6_378_137 * Math.PI) / 180) * 1e-5;
+		expect(geo.positions[3] - geo.positions[0]).toBeCloseTo(metre, 2);
+		expect(Math.abs(geo.positions[0])).toBeLessThan(10);
+		const north = sourceLayout(
+			graph,
+			[
+				{ id: 'S', lon: 0, lat: 1 },
+				{ id: 'M', lon: 0, lat: 0 }
+			],
+			true,
+			tree
+		);
+		expect(north.positions[1]).toBeLessThan(north.positions[4]);
+		const planar = sourceLayout(
+			graph,
+			graph.buses.map((b, i) => ({ id: b.id, lon: i, lat: i })),
+			false,
+			tree
+		);
+		expect(planar.positions[3] - planar.positions[0]).toBe(1);
+		expect(planar.positions[4] - planar.positions[1]).toBe(-1);
+		expect(planar.segmentEdge).toHaveLength(graph.edges.length);
 	});
 });

@@ -61,11 +61,49 @@ test('protocol tasks stay within their interaction budgets', async ({ page }) =>
 	});
 });
 
-test.fixme('7. switch between the map and the schematic, keeping the selection', async () => {
-	// Needs the schematic canvas (M3, follow-up PR).
+test('7. switch to the schematic and between layouts, keeping the selection', async ({ page }) => {
+	const overview = await solvedOverview(page);
+	await overview.locator('.issues button').first().click();
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
+	await expect(schematic).toBeVisible();
+	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	await toolbar.getByRole('combobox').selectOption('loading-heat');
+	await expect(page.getByText('≥ 100 %')).toBeVisible();
+	await toolbar.getByRole('button', { name: /Geographic|Source positions/ }).click();
+	await expect(
+		toolbar.getByRole('button', { name: /Geographic|Source positions/ })
+	).toHaveAttribute('aria-pressed', 'true');
+	await expect(overview.getByRole('heading', { name: 'Phases at lb' })).toBeVisible();
+	for (const [name, extension] of [
+		['PNG', 'png'],
+		['SVG', 'svg']
+	] as const) {
+		const download = page.waitForEvent('download');
+		await toolbar.getByRole('button', { name, exact: true }).click();
+		expect((await download).suggestedFilename()).toMatch(new RegExp(`schematic\\.${extension}$`));
+	}
+	await toolbar.getByRole('button', { name: 'Close' }).click();
+	await expect(schematic).toHaveCount(0);
 });
-test.fixme('8. share a link that reopens the same selection', async () => {
-	// Needs the selection in the URL (follow-up PR).
+
+test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {
+	const overview = await solvedOverview(page);
+	await overview.locator('.issues button').first().click();
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await page.getByRole('button', { name: 'Save result' }).click();
+	await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible({ timeout: 30_000 });
+	await expect(page).toHaveURL(/[?&]study=[^&]+.*sel=bus%3Alb|sel=bus%3Alb.*study=/);
+	await expect(page).toHaveURL(/view=schematic/);
+
+	const reopened = await context.newPage();
+	await reopened.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await reopened.goto(page.url());
+	const restored = reopened.getByRole('region', { name: 'Operating point overview' });
+	await expect(restored.getByRole('heading', { name: 'Phases at lb' })).toBeVisible({
+		timeout: 60_000
+	});
+	await expect(reopened.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
 });
 
 test('the overview works from the keyboard alone', async ({ page }) => {

@@ -34,7 +34,9 @@
 		onselectbus,
 		onselectedge,
 		label = 'Multiconductor power flow',
-		onanalyse
+		onanalyse,
+		schematic = false,
+		onschematic
 	}: {
 		/** The full operating point; `null` while it is being fetched. */
 		result: McPfResult | null;
@@ -48,6 +50,9 @@
 		label?: string;
 		/** When set, the overview is computed on request rather than after every solve. */
 		onanalyse?: () => void;
+		/** Whether the case is shown as a schematic, and how to toggle it. */
+		schematic?: boolean;
+		onschematic?: (show: boolean) => void;
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
@@ -195,6 +200,11 @@
 	<div class="heading">
 		<h4>Overview</h4>
 		{#if loading}<span role="status">Reading the full operating point…</span>{/if}
+		{#if onschematic}<button
+				class="schematic-toggle"
+				aria-pressed={schematic}
+				onclick={() => onschematic(!schematic)}>{schematic ? 'Show map' : 'Show schematic'}</button
+			>{/if}
 	</div>
 	<OmniSearch
 		index={searchIndex}
@@ -586,6 +596,20 @@
 	}
 	.end {
 		margin: 8px 0 3px;
+	}
+	.schematic-toggle {
+		margin-left: auto;
+		font: inherit;
+		color: var(--ink);
+		background: var(--paper);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		padding: 3px 8px;
+		cursor: pointer;
+	}
+	.schematic-toggle[aria-pressed='true'] {
+		color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.workbench :global(.omni) {
 		margin: 6px 0 10px;

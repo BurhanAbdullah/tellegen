@@ -272,6 +272,12 @@ export class MulticonductorCase {
 	/** The selected edge id, whose conductor pairing expands in the panel;
 	 * mutually exclusive with selectedBusId. */
 	selectedEdgeId = $state<string | null>(null);
+	/** The full operating point read for whole-network views (overview, schematic); null until read,
+	 * and cleared when a large case's operating point changes. */
+	overviewResult: McPfResult | null = $state.raw<McPfResult | null>(null);
+	overviewLoading = $state(false);
+	/** Show this case as a schematic instead of the map. */
+	schematic = $state(false);
 
 	constructor(init: {
 		id: string;
