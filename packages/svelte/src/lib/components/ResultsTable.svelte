@@ -102,14 +102,15 @@
 	>
 		<div class="head" role="row" style:grid-template-columns={template}>
 			{#each model.columns as c (c.key)}
-				<button
+				<div
 					role="columnheader"
 					class:num={c.numeric}
 					aria-sort={sortKey === c.key ? (descending ? 'descending' : 'ascending') : 'none'}
-					title={c.title ?? `Sort by ${c.label}`}
-					onclick={() => sort(c.key, c.numeric)}
-					>{c.label}{#if c.unit}<small>{c.unit}</small>{/if}</button
 				>
+					<button title={c.title ?? `Sort by ${c.label}`} onclick={() => sort(c.key, c.numeric)}
+						>{c.label}{#if c.unit}<small>{c.unit}</small>{/if}</button
+					>
+				</div>
 			{/each}
 		</div>
 		<div class="body" style:height="{rows.length * ROW}px">
@@ -182,6 +183,7 @@
 		border-bottom: 1px solid var(--line);
 	}
 	.head button {
+		width: 100%;
 		padding: 4px 6px;
 		text-align: left;
 		font: inherit;
@@ -191,8 +193,11 @@
 		cursor: pointer;
 		white-space: nowrap;
 	}
-	.head button[aria-sort='ascending'],
-	.head button[aria-sort='descending'] {
+	.head .num button {
+		text-align: right;
+	}
+	.head [aria-sort='ascending'] button,
+	.head [aria-sort='descending'] button {
 		color: var(--ink);
 	}
 	small {

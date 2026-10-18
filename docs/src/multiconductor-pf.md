@@ -16,6 +16,14 @@ A current result belongs to the input that produced it. Cancelling or failing a 
 
 After an initial solve, select a bus to edit each attached load branch's active and reactive power. The browser coalesces rapid changes and automatically warm-solves from the last converged voltages. It retains the same sparse factorization because load power changes alter the nonlinear current injection, not the passive network operator. The physical impedance and voltage-envelope terms still follow the edited power; only the fixed-point compensation reference is frozen. Resetting a row removes its override, and saved results contain the edited input as well as its matching solution. An edit changes only the solver's load laws: the network is not copied, and each edit returns a small summary in one round trip. The Studies panel then fetches only the selected bus and one page of equipment results. The portable input, solution, and complete result are built only for save, export, geography attachment, or an explicit full rebuild. [Multiconductor PF performance](mc-pf-performance.md) states the latency target and payload budgets with measurements.
 
+## Operating-point overview
+
+Above the detailed results, the Studies panel summarises the displayed operating point: limit violations, losses, the voltage range for each declared voltage reference, the most heavily loaded branch, and the largest voltage unbalance. Selecting a tile selects its bus or branch on the map. Issues are ranked with violations first, then by how far they exceed their limit: voltages outside the case's declared phase-to-neutral or phase-to-phase limits, and branches at 90 % of their declared rating or more. A case that declares no limits or ratings shows no issues and says so; nothing is ranked against invented bounds.
+
+For a selected bus, bars place each terminal-pair voltage within its declared band. Unbalance is the voltage unbalance factor |V2|/|V1| from terminal phasors, shown beside the phase-to-neutral magnitude spread; when the spread is much larger, the difference is neutral shift, which the unbalance factor excludes. For a selected branch, bars show the current in every conductor at both ends on one scale, with the neutral's share of the largest phase current. A voltage profile follows the path from the source to the selection, split at transformers and wherever the voltage reference changes. Behind it, a shaded band shows the range of all buses at the same depth and reference. The path is a breadth-first tree over closed branches, not a claim about a unique path through a meshed network, and its steps count branches, not length.
+
+Search finds buses and branches by ID. The bus and branch tables sort, filter to issues, and follow the selection; arrow keys move it. CSV exports keep full precision and begin with the case and solve that produced them. Cases with more than 25,000 buses compute the overview when asked rather than after every load edit, because reading a full result of that size takes a noticeable fraction of a second ([evidence](https://github.com/eigenergy/tellegen/tree/main/evidence/diagram)).
+
 Save a result in Studies to retain its input, solver options, terminal values, and PowerIO solution. Import/export moves the saved result between browsers. Reopening checks that its input and results agree without solving again. A geographic attachment updates both saved modules and retains all electrical values. These versioned multiconductor snapshots do not offer the balanced-network planning objectives or sensitivities.
 
 Raw OpenDSS files remain available for inspection. The multiconductor calculation requires supported BMOPF data or a typed PowerIO AC power flow input with explicit source and device settings.
@@ -36,7 +44,9 @@ tellegen solve-mc < case.pio.json
 tellegen solve-mc-bmopf '{"max_iterations":200}' < case.bmopf.json
 ```
 
-`tellegen describe` includes the options and result schemas. The JSON result carries complex terminal voltages, currents, device powers, source reactions, iteration counts, and KCL residuals.
+`tellegen describe` includes the options and result schemas.
+
+The browser's distribution graph carries the case's declared limits when present: `DistGraphBus.voltage_limits` lists phase-to-neutral (`vpn_min`, `vpn_max`) or phase-to-phase (`vpp_min`, `vpp_max`) bounds in volts, and `DistGraphEdge.rating` gives per-conductor ampacity (`i_max`) or a transformer edge's smaller winding rating in volt-amperes (`s_rating`). The `McWorkbench` component in `@tellegen/svelte` renders the overview from a full `McPfResult` and the graph; `controller.multiFullResult(case)` supplies that result from a stored solve or the live session. The JSON result carries complex terminal voltages, currents, device powers, source reactions, iteration counts, and KCL residuals.
 
 The browser package provides `solveMcModule(moduleJson, options, signal)` and `solveMcBmopf(text, options)`. The module operation runs in a separate worker so cancelling it leaves other calculations intact. Environments without workers check cancellation after synchronous execution and discard a cancelled result.
 

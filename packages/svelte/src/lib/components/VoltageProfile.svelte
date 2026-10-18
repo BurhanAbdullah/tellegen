@@ -17,6 +17,44 @@
 	} = $props();
 
 	let showEnvelope = $state(true);
+	// One Tab stop for the whole profile (a deep feeder has hundreds of points); arrow keys move
+	// along the path (Left/Right) and between pairs (Up/Down), Enter selects.
+	const rows = $derived(profile.zones.flatMap((zone) => zone.rows));
+	let cursor = $state<{ row: number; pair: number } | null>(null);
+	const active = $derived.by(() => {
+		if (cursor && cursor.row < rows.length && cursor.pair < rows[cursor.row].pairs.length)
+			return cursor;
+		const selected = rows.findIndex((r) => busIds[r.bus] === selectedBus);
+		return { row: selected >= 0 ? selected : rows.length - 1, pair: 0 };
+	});
+	let svgRoot = $state<HTMLDivElement>();
+	function move(e: KeyboardEvent, row: number, pair: number) {
+		const keys: Record<string, [number, number]> = {
+			ArrowRight: [row + 1, pair],
+			ArrowLeft: [row - 1, pair],
+			ArrowDown: [row, pair + 1],
+			ArrowUp: [row, pair - 1],
+			Home: [0, pair],
+			End: [rows.length - 1, pair]
+		};
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onselectbus(busIds[rows[row].bus]);
+			return;
+		}
+		const next = keys[e.key];
+		if (!next) return;
+		e.preventDefault();
+		const r = Math.max(0, Math.min(rows.length - 1, next[0]));
+		const k = Math.max(0, Math.min(rows[r].pairs.length - 1, next[1]));
+		cursor = { row: r, pair: k };
+		requestAnimationFrame(() =>
+			svgRoot?.querySelector<SVGElement>(`[data-point="${r}-${k}"]`)?.focus()
+		);
+	}
+	/** Row index across all zones, for the roving cursor. */
+	const rowOffset = (z: number) =>
+		profile.zones.slice(0, z).reduce((n, zone) => n + zone.rows.length, 0);
 	const W = 320;
 	const H = 132;
 	const left = 40;
@@ -66,7 +104,7 @@
 	}
 </script>
 
-<div class="profile">
+<div class="profile" bind:this={svgRoot}>
 	<div class="heading">
 		<span>{busIds[profile.root]} → {busIds[profile.target]} · {profile.pathBuses.length} buses</span
 		>
@@ -106,8 +144,9 @@
 					<polyline points={p.line} stroke={p.color} />
 				{/each}
 				{#each zone.rows as row, i (row.bus)}
-					{#each row.pairs as p (p.pair.join('-'))}
+					{#each row.pairs as p, k (p.pair.join('-'))}
 						{@const bad = pairState(p) === 'violation'}
+						{@const g = rowOffset(z) + i}
 						<circle
 							class="point"
 							class:bad
@@ -118,17 +157,14 @@
 							fill={bad ? 'var(--text-danger)' : 'var(--paper)'}
 							stroke={colour(p.pair[0])}
 							role="button"
-							tabindex="0"
+							data-point="{g}-{k}"
+							tabindex={active.row === g && active.pair === k ? 0 : -1}
 							aria-label="{busIds[row.bus]} {p.pair.join('–')} {fmt(p.volts)} V{bad
 								? ', violation'
 								: ''}"
 							onclick={() => onselectbus(busIds[row.bus])}
-							onkeydown={(e) => {
-								if (e.key === 'Enter' || e.key === ' ') {
-									e.preventDefault();
-									onselectbus(busIds[row.bus]);
-								}
-							}}><title>{busIds[row.bus]} · {p.pair.join('–')} · {fmt(p.volts)} V</title></circle
+							onkeydown={(e) => move(e, g, k)}
+							><title>{busIds[row.bus]} · {p.pair.join('–')} · {fmt(p.volts)} V</title></circle
 						>
 					{/each}
 				{/each}
@@ -140,7 +176,7 @@
 		</figure>
 	{/each}
 	<p class="hint">
-		{profile.notice} Dashed: declared limits{showEnvelope
+		{profile.notice} Arrow keys move along the path and between pairs. Dashed: declared limits{showEnvelope
 			? ' · shaded: all buses at the same depth and reference'
 			: ''}.
 	</p>
