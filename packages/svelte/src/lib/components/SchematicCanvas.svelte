@@ -6,6 +6,7 @@
 		OrthographicViewState,
 		PickingInfo
 	} from '@deck.gl/core';
+	import { mcSchematicLayout, type SchematicStrategy } from '@tellegen/engine';
 	import type { MulticonductorCase } from '../state.svelte.js';
 	import type { RGBA } from '../colors.js';
 	import { priceGradient, sensGradient } from '../colors.js';
@@ -21,7 +22,9 @@
 		ease,
 		fitText,
 		graphInputs,
-		leafOrderLayout,
+		diagramLayer,
+		EMPTY_GEOMETRY,
+		fromEngineLayout,
 		lerpInto,
 		loadingColour,
 		MISSING_COLOUR,
@@ -67,6 +70,9 @@
 	const WARNING: RGBA = [178, 94, 0, 255];
 
 	let layout = $state<Layout>('schematic');
+	let strategy = $state<SchematicStrategy>('tidy');
+	/** The geometry on screen; replaced by `show`, which animates between layouts. */
+	let shown = $state.raw<SchematicGeometry | null>(null);
 	let colour = $state<Colour>('none');
 	let width = $state(0);
 	let height = $state(0);
@@ -86,11 +92,14 @@
 	const graph = $derived(mc.graph!);
 	const tree = $derived(displayTree(graph));
 	const inputs = $derived(graphInputs(graph));
-	const schematic = $derived(leafOrderLayout(graph, tree));
 	const source = $derived(
-		mc.view ? sourceLayout(graph, mc.view.buses, mc.coordsKind === 'geographic', tree) : null
+		mc.view
+			? sourceLayout(graph, mc.view.buses, mc.coordsKind === 'geographic', tree, mc.view.edges)
+			: null
 	);
-	const geometry = $derived<SchematicGeometry>(layout === 'source' && source ? source : schematic);
+	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	/** Toolbar and legend start right of the left dock, so no panel covers them. */
+	const toolLeft = $derived(panels.compact ? 12 : panels.dockWidth('left') + 24);
 	const snapshot = $derived(
 		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
 	);
@@ -394,9 +403,7 @@
 								? `${graph.edges[geometry.segmentEdge[info.index]].kind} ${graph.edges[geometry.segmentEdge[info.index]].id}`
 								: null
 				});
-				status = null;
-				updateLabels();
-				render();
+				void show('schematic', strategy);
 			})
 			.catch(
 				(e: unknown) =>
@@ -427,10 +434,12 @@
 	// Bring an outside selection (overview, table, search) into view when it is off screen.
 	$effect(() => {
 		const i = selectedBus;
-		if (i < 0 || !deck || morph) return;
+		// Until the first layout arrives there are no positions; a NaN camera would re-run this forever.
+		if (i < 0 || !deck || morph || !shown) return;
 		const g = geometry;
 		const scale = 2 ** camera.zoom;
 		const [x, y] = [g.positions[i * 3], g.positions[i * 3 + 1]];
+		if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 		const sx = (x - camera.target[0]) * scale + width / 2;
 		const sy = (y - camera.target[1]) * scale + height / 2;
 		if (sx > 40 && sx < width - 40 && sy > 40 && sy < height - 40) return;
@@ -442,17 +451,50 @@
 		deck?.setProps({ initialViewState: { ...next, minZoom: -24, maxZoom: 8 } });
 	}
 
-	/** Switch layout. Buses glide from where they are on screen to the new layout along straight
+	// The schematic is laid out in the engine (Rust); each strategy is computed once per graph.
+	const engineLayouts = new Map<SchematicStrategy, Promise<SchematicGeometry>>();
+	let showSeq = 0;
+	function target(nextLayout: Layout, nextStrategy: SchematicStrategy): Promise<SchematicGeometry> {
+		if (nextLayout === 'source' && source) return Promise.resolve(source);
+		let pending = engineLayouts.get(nextStrategy);
+		if (!pending) {
+			pending = mcSchematicLayout(graph, { strategy: nextStrategy }).then(fromEngineLayout);
+			engineLayouts.set(nextStrategy, pending);
+			pending.catch(() => engineLayouts.delete(nextStrategy));
+		}
+		return pending;
+	}
+
+	/** Show a layout. Buses glide from where they are on screen to the new layout along straight
 	 * chords; a warm-up frame uploads the target geometry before the clock starts. */
-	function switchLayout(next: Layout) {
-		if (next === layout || (next === 'source' && !source)) return;
-		const before = geometry.positions;
+	async function show(nextLayout: Layout, nextStrategy: SchematicStrategy) {
+		if (nextLayout === 'source' && !source) return;
+		const seq = ++showSeq;
+		const slow = setTimeout(() => {
+			if (seq === showSeq) status = 'Laying out the schematic…';
+		}, 150);
+		let next: SchematicGeometry;
+		try {
+			next = await target(nextLayout, nextStrategy);
+		} catch (e) {
+			status = `The schematic could not be laid out: ${e instanceof Error ? e.message : e}`;
+			return;
+		} finally {
+			clearTimeout(slow);
+		}
+		if (seq !== showSeq) return;
+		status = null;
+		const previous = shown;
 		const from = { ...camera };
-		layout = next;
-		const to = fitCamera(geometry);
+		layout = nextLayout;
+		strategy = nextStrategy;
+		shown = next;
+		const to = fitCamera(next);
 		setCamera(to);
 		const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-		if (!deck || reduced || graph.buses.length > MORPH_MAX_BUSES) return;
+		if (!previous || !deck || reduced || graph.buses.length > MORPH_MAX_BUSES) return;
+		if (morph) cancelAnimationFrame(morph.raf);
+		const before = previous.positions;
 		const endpoints = Int32Array.from(
 			graph.edges.flatMap((_, k) => {
 				const { from: a, to: b } = inputs.names.branches[k];
@@ -470,7 +512,7 @@
 			warm: false,
 			raf: 0
 		};
-		const target = geometry.positions;
+		const destination = next.positions;
 		const tick = (now: number) => {
 			const m = morph;
 			if (!m) return;
@@ -481,7 +523,7 @@
 			}
 			m.start ??= now;
 			const k = ease(Math.min(1, (now - m.start) / MORPH_MS));
-			lerpInto(m.cur, m.from, target, k);
+			lerpInto(m.cur, m.from, destination, k);
 			chordsInto(m.s, m.t, m.endpoints, m.cur);
 			if (k < 1) {
 				render();
@@ -518,7 +560,7 @@
 
 	const layoutName = $derived(
 		layout === 'schematic'
-			? 'Schematic (leaf order from the sources)'
+			? `Schematic (${strategy === 'tidy' ? 'tidy' : 'leaf order'} from the sources)`
 			: mc.coordsKind === 'geographic'
 				? 'Source positions (Web Mercator)'
 				: 'Source positions (drawing)'
@@ -575,6 +617,14 @@
 				);
 			});
 		out.toBlob((blob) => blob && download(blob, `${fileStem()}.png`), 'image/png');
+	}
+	/** The schematic as a PowerIO diagram layer: load it with the case to reuse the layout. */
+	function exportLayer() {
+		const layer = diagramLayer(graph, geometry, {
+			strategy,
+			version: geometry.version ?? 0
+		});
+		download(new Blob([layer], { type: 'application/geo+json' }), `${fileStem()}.geo.json`);
 	}
 	function exportSvg() {
 		const g = geometry;
@@ -649,19 +699,38 @@
 	>
 		<canvas bind:this={canvas}></canvas>
 	</div>
-	<div class="toolbar" style:top="{panels.top + 8}px" role="toolbar" aria-label="Schematic">
+	<div
+		class="toolbar"
+		style:top="{panels.top + 8}px"
+		style:left="{toolLeft}px"
+		role="toolbar"
+		aria-label="Schematic"
+	>
 		<div class="segmented" role="group" aria-label="Layout">
-			<button aria-pressed={layout === 'schematic'} onclick={() => switchLayout('schematic')}
+			<button aria-pressed={layout === 'schematic'} onclick={() => show('schematic', strategy)}
 				>Schematic</button
 			>
 			<button
 				aria-pressed={layout === 'source'}
 				disabled={!source}
 				title={source ? 'Positions from the case data' : 'This case has no source positions'}
-				onclick={() => switchLayout('source')}
+				onclick={() => show('source', strategy)}
 				>{mc.coordsKind === 'geographic' ? 'Geographic' : 'Source positions'}</button
 			>
 		</div>
+		{#if layout === 'schematic'}
+			<label>
+				<span class="sr-only">Schematic arrangement</span>
+				<select
+					value={strategy}
+					title="Tidy packs subtrees closely; leaf order gives every leaf its own row"
+					onchange={(e) => show('schematic', e.currentTarget.value as SchematicStrategy)}
+				>
+					<option value="tidy">Tidy</option>
+					<option value="leaf-order">Leaf order</option>
+				</select>
+			</label>
+		{/if}
 		<label class="colour">
 			<span class="sr-only">Colour by</span>
 			<select
@@ -679,9 +748,14 @@
 			>SVG</button
 		>
 		<button onclick={onclose} title="Return to the map">Close</button>
+		{#if layout === 'schematic'}<button
+				onclick={exportLayer}
+				title="Download this schematic as a PowerIO diagram layer (.geo.json) to reuse with the case"
+				>Layout</button
+			>{/if}
 	</div>
 	{#if colour !== 'none' && snapshot}
-		<div class="legend" style:top="{panels.top + 50}px">
+		<div class="legend" style:top="{panels.top + 50}px" style:left="{toolLeft}px">
 			{#if colour === 'loading-heat'}
 				Loading <span>0 %</span><i style:background={priceGradient}></i><span>≥ 100 %</span>
 			{:else}
@@ -714,8 +788,8 @@
 	}
 	.toolbar {
 		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
+		flex-wrap: wrap;
+		max-width: calc(100% - 24px);
 		display: flex;
 		gap: 6px;
 		align-items: center;
@@ -760,8 +834,6 @@
 	}
 	.legend {
 		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
 		display: flex;
 		gap: 6px;
 		align-items: center;

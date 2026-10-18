@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { DistGraph } from '@tellegen/engine';
 import {
 	displayTree,
-	leafOrderLayout,
+	diagramLayer,
+	fromEngineLayout,
+	multiWireBranch,
 	sourceLayout,
 	treePath,
 	voltageProfile,
@@ -100,17 +102,80 @@ describe('voltageProfile', () => {
 });
 
 describe('schematic layouts', () => {
-	it('gives leaves their own rows, centres parents and routes tree edges as elbows', () => {
+	it('converts the engine layout into GPU arrays without reinterpreting it', () => {
+		const g = fromEngineLayout({
+			version: 1,
+			strategy: 'tidy',
+			positions: [0, 0, 100, 20],
+			segments: [0, 0, 50, 0, 50, 0, 50, 20, 50, 20, 100, 20],
+			segment_edge: [0, 0, 0],
+			role: [0],
+			parent: [0, 0],
+			parent_edge: [-1, 0],
+			depth: [0, 1],
+			roots: [0],
+			bounds: [0, 0, 100, 20]
+		});
+		expect([...g.positions]).toEqual([0, 0, 0, 100, 20, 0]);
+		expect([...g.sources]).toEqual([0, 0, 0, 50, 0, 0, 50, 20, 0]);
+		expect([...g.targets]).toEqual([50, 0, 0, 50, 20, 0, 100, 20, 0]);
+		expect([...g.segmentEdge]).toEqual([0, 0, 0]);
+		expect(g.bounds).toEqual([0, 0, 100, 20]);
+	});
+
+	it('follows routed paths from the case and keeps unrouted branches straight', () => {
 		const tree = displayTree(graph);
-		const g = leafOrderLayout(graph, tree, { dx: 100, dy: 20 });
-		const at = (i: number) => [g.positions[i * 3], g.positions[i * 3 + 1]];
-		expect(at(0)).toEqual([0, 0]);
-		expect(at(3)).toEqual([300, 0]);
-		expect(at(4)).toEqual([0, 40]);
-		expect(at(5)).toEqual([0, 80]);
-		expect([...g.role]).toEqual([0, 0, 0, 2]);
-		expect([...g.segmentEdge].filter((k) => k === 3)).toHaveLength(1);
-		expect(g.bounds).toEqual([0, 0, 300, 80]);
+		const placed = graph.buses.map((b, i) => ({ id: b.id, lon: i * 10, lat: 0 }));
+		const routed = sourceLayout(graph, placed, false, tree, [
+			{
+				id: 'e1',
+				from: 'M',
+				to: 'S',
+				path: [
+					[10, 0],
+					[5, 5],
+					[0, 0]
+				]
+			}
+		]);
+		expect([...routed.segmentEdge].filter((k) => k === 0)).toHaveLength(2);
+		expect([...routed.segmentEdge].filter((k) => k === 1)).toHaveLength(1);
+	});
+
+	it('writes the drawn schematic as a PowerIO diagram layer, routing lines by id', () => {
+		const geometry = fromEngineLayout({
+			version: 1,
+			strategy: 'tidy',
+			positions: [0, 0, 120, 0, 240, 0, 360, 0, 0, 56, 0, 112],
+			segments: [0, 0, 120, 0, 120, 0, 180, 0, 180, 0, 240, 0, 240, 0, 360, 0, 360, 0, 0, 56],
+			segment_edge: [0, 1, 2, 2, 3],
+			role: [0, 0, 0, 2],
+			parent: [0, 0, 1, 2, 4, 5],
+			parent_edge: [-1, 0, 1, 2, -1, -1],
+			depth: [0, 1, 2, 3, 0, 0],
+			roots: [0, 4, 5],
+			bounds: [0, 0, 360, 112]
+		});
+		const layer = JSON.parse(diagramLayer(graph, geometry, { strategy: 'tidy', version: 1 }));
+		expect(layer.powerio_geo).toEqual({ space: 'diagram', kind: 'synthetic' });
+		expect(layer.tellegen_layout).toEqual({ algorithm: 'schematic', strategy: 'tidy', version: 1 });
+		const points = layer.features.filter(
+			(f: { geometry: { type: string } }) => f.geometry.type === 'Point'
+		);
+		expect(points).toHaveLength(6);
+		expect(points[3]).toMatchObject({
+			properties: { bus: 'L2' },
+			geometry: { coordinates: [360, 0] }
+		});
+		const lines = layer.features.filter(
+			(f: { geometry: { type: string } }) => f.geometry.type === 'LineString'
+		);
+		expect(lines.map((f: { properties: { id: string } }) => f.properties.id)).toEqual(['e1', 'e2']);
+		expect(lines[1].geometry.coordinates).toEqual([
+			[180, 0],
+			[240, 0],
+			[360, 0]
+		]);
 	});
 
 	it('projects geographic positions to Web Mercator, y down, relative to the centroid', () => {
@@ -138,7 +203,83 @@ describe('schematic layouts', () => {
 			tree
 		);
 		expect(planar.positions[3] - planar.positions[0]).toBe(1);
-		expect(planar.positions[4] - planar.positions[1]).toBe(-1);
+		// Drawing coordinates are already y down, as DiagramCanvas draws them.
+		expect(planar.positions[4] - planar.positions[1]).toBe(1);
 		expect(planar.segmentEdge).toHaveLength(graph.edges.length);
+	});
+});
+
+describe('multi-wire view', () => {
+	const wired: DistGraph = {
+		buses: [
+			{
+				...bus('A', true),
+				grounded: ['n'],
+				terminal_attachments: { '1': [{ kind: 'source', id: 'vs' }] }
+			},
+			{ ...bus('B'), terminal_attachments: { '3': [{ kind: 'load', id: 'ld3' }] } }
+		],
+		edges: [
+			{
+				...edge('L', 'A', 'B'),
+				conductors: [
+					['1', '2'],
+					['2', '1'],
+					['3', '3'],
+					['n', 'n']
+				]
+			},
+			{
+				...edge('T', 'a', 'B', 'transformer'),
+				conductors: [
+					['1', '1'],
+					['2', '2']
+				]
+			}
+		]
+	};
+	const snapshot: ResultSnapshot = {
+		...result,
+		buses: [],
+		branches: [
+			{
+				ends: [
+					{
+						p: 1,
+						q: 0,
+						currents: [
+							{ terminal: '1', amps: 90 },
+							{ terminal: 'n', amps: 12 }
+						]
+					},
+					null
+				],
+				loading: null,
+				basis: null
+			},
+			{ ends: [null, null], loading: null, basis: null }
+		]
+	};
+
+	it('draws every conductor between terminal rails, crossing where the terminal map crosses', () => {
+		const view = multiWireBranch(wired, 0, snapshot)!;
+		expect(view.buses.map((b) => b.id)).toEqual(['A', 'B']);
+		expect(view.buses[0].terminals.find((t) => t.name === 'n')?.grounded).toBe(true);
+		expect(view.buses[1].terminals.find((t) => t.name === '3')?.attachments).toEqual(['load ld3']);
+		expect(view.wires).toHaveLength(4);
+		const [w1, w2] = view.wires;
+		expect(w1.y1).toBeLessThan(w1.y2);
+		expect(w2.y1).toBeGreaterThan(w2.y2);
+		expect(view.wires.map((w) => w.amps)).toEqual([90, null, null, 12]);
+		expect(view.winding).toBeNull();
+	});
+
+	it('draws a transformer as a winding box with no conductor continuity across it', () => {
+		const view = multiWireBranch(wired, 1, null)!;
+		expect(view.winding).not.toBeNull();
+		expect(view.wires).toHaveLength(4);
+		for (const w of view.wires)
+			expect(w.x2 <= view.winding!.x || w.x1 >= view.winding!.x + view.winding!.width).toBe(true);
+		expect(multiWireBranch(wired, 9, null)).toBeNull();
 	});
 });

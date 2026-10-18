@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { DistGraph, McPfResult } from '@tellegen/engine';
+	import MultiWire from './MultiWire.svelte';
 	import OmniSearch from './OmniSearch.svelte';
 	import ResultsTable from './ResultsTable.svelte';
 	import VoltageProfile from './VoltageProfile.svelte';
@@ -12,6 +13,7 @@
 		graphInputs,
 		loadingState,
 		magnitudeUnbalance,
+		multiWireBranch,
 		pairBar,
 		queryTable,
 		rankIssues,
@@ -171,6 +173,11 @@
 	// Phase–neutral magnitudes also move with neutral shift, which VUF excludes; show both.
 	const busSpread = $derived(
 		busSelection?.unbalance ? magnitudeUnbalance(busSelection.pairs) : null
+	);
+	const multiWire = $derived(
+		selectedEdge !== null && edgeIndex.has(selectedEdge)
+			? multiWireBranch(graph, edgeIndex.get(selectedEdge) as number, snapshot)
+			: null
 	);
 	const edgeSelection = $derived(
 		snapshot && selectedEdge !== null && edgeIndex.has(selectedEdge)
@@ -377,6 +384,10 @@
 					? ` · neutral carries ${n(edgeSelection.neutralShare, 0)} % of the largest phase current`
 					: ''}
 			</p>
+			{#if multiWire}
+				<h4>Multi-wire view</h4>
+				<MultiWire view={multiWire} />
+			{/if}
 		{/if}
 
 		{#if profile}

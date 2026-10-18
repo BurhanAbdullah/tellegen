@@ -1,4 +1,4 @@
-import type { DistGraph } from '@tellegen/engine';
+import type { DistGraph, SchematicLayout } from '@tellegen/engine';
 import type { DisplayTree } from './display-tree.js';
 
 /** Drawing geometry for one layout: bus positions and branch segments (several per routed edge). */
@@ -12,6 +12,8 @@ export interface SchematicGeometry {
 	/** Per edge: 0 tree route, 1 closed non-tree link, 2 open or unreachable. */
 	role: Uint8Array;
 	bounds: [number, number, number, number];
+	/** Engine layout version, for provenance; absent for source positions. */
+	version?: number;
 }
 
 function segments(
@@ -60,96 +62,72 @@ const indexer = (graph: DistGraph) => {
 	return (id: string) => map.get(id.toLowerCase()) ?? -1;
 };
 
-/** Leaf-order schematic: depth runs left to right, every leaf gets its own row and each parent sits
- * at the middle of its children. Tree edges route as orthogonal elbows; closed non-tree links and
- * open branches are drawn straight so they read as exceptions, never as tree routes. */
-export function leafOrderLayout(
-	graph: DistGraph,
-	tree: DisplayTree,
-	{ dx = 120, dy = 28 } = {}
-): SchematicGeometry {
-	const n = graph.buses.length;
-	const children: number[][] = Array.from({ length: n }, () => []);
-	for (let i = 0; i < n; i++) if (tree.parent[i] !== i) children[tree.parent[i]].push(i);
+/** Engine schematic layout (`mcSchematicLayout`, computed in Rust) as GPU-ready arrays. */
+export function fromEngineLayout(layout: SchematicLayout): SchematicGeometry {
+	const n = layout.positions.length / 2;
 	const positions = new Float32Array(n * 3);
-	let row = 0;
-	for (const root of tree.roots) {
-		// Iterative post-order so deep feeders do not overflow the stack.
-		const stack: [number, number][] = [[root, 0]];
-		while (stack.length) {
-			const top = stack[stack.length - 1];
-			const [u, next] = top;
-			if (next < children[u].length) {
-				top[1]++;
-				stack.push([children[u][next], 0]);
-				continue;
-			}
-			stack.pop();
-			const kids = children[u];
-			positions[u * 3] = tree.depth[u] * dx;
-			positions[u * 3 + 1] = kids.length
-				? (positions[kids[0] * 3 + 1] + positions[kids[kids.length - 1] * 3 + 1]) / 2
-				: row++ * dy;
-		}
-		row++; // A blank row between components.
+	for (let i = 0; i < n; i++) {
+		positions[i * 3] = layout.positions[i * 2];
+		positions[i * 3 + 1] = layout.positions[i * 2 + 1];
 	}
-	const index = indexer(graph);
-	const role = new Uint8Array(graph.edges.length);
-	graph.edges.forEach((e, k) => {
-		const a = index(e.from);
-		const b = index(e.to);
-		const treeEdge = a >= 0 && b >= 0 && (tree.parentEdge[a] === k || tree.parentEdge[b] === k);
-		role[k] = !e.closed || a < 0 || b < 0 ? 2 : treeEdge ? 0 : 1;
-	});
-	const geometry = segments(graph, positions, index, (k, a, b) => {
-		if (role[k] !== 0) return null;
-		const [p, c] = tree.parent[b] === a ? [a, b] : [b, a];
-		const [xp, yp, xc, yc] = [
-			positions[p * 3],
-			positions[p * 3 + 1],
-			positions[c * 3],
-			positions[c * 3 + 1]
-		];
-		const xm = xp + dx / 2;
-		return yp === yc
-			? [
-					[xp, yp],
-					[xc, yc]
-				]
-			: [
-					[xp, yp],
-					[xm, yp],
-					[xm, yc],
-					[xc, yc]
-				];
-	});
-	return { positions, ...geometry, role, bounds: bounds(positions) };
+	const m = layout.segment_edge.length;
+	const sources = new Float32Array(m * 3);
+	const targets = new Float32Array(m * 3);
+	for (let s = 0; s < m; s++) {
+		sources[s * 3] = layout.segments[s * 4];
+		sources[s * 3 + 1] = layout.segments[s * 4 + 1];
+		targets[s * 3] = layout.segments[s * 4 + 2];
+		targets[s * 3 + 1] = layout.segments[s * 4 + 3];
+	}
+	return {
+		positions,
+		sources,
+		targets,
+		segmentEdge: Int32Array.from(layout.segment_edge),
+		role: Uint8Array.from(layout.role),
+		bounds: layout.bounds,
+		version: layout.version
+	};
 }
 
+/** An empty drawing, before the first layout arrives. */
+export const EMPTY_GEOMETRY: SchematicGeometry = {
+	positions: new Float32Array(),
+	sources: new Float32Array(),
+	targets: new Float32Array(),
+	segmentEdge: new Int32Array(),
+	role: new Uint8Array(),
+	bounds: [0, 0, 1, 1]
+};
+
 /** Positions as placed in the source data: geographic longitude/latitude projected to Web Mercator
- * metres (y down), or planar drawing coordinates as given, relative to their centroid. Branches are
- * drawn straight. */
+ * metres (y down), or drawing coordinates as given (already y down, as `DiagramCanvas` draws them),
+ * relative to their centroid. Branches are drawn straight. */
 export function sourceLayout(
 	graph: DistGraph,
 	placed: { id: string; lon: number; lat: number }[],
 	geographic: boolean,
-	tree: DisplayTree
+	tree: DisplayTree,
+	/** Routed paths from the case (`MultiView.edges`), drawn in place of straight segments. */
+	routes: { id: string; from: string; to: string; path: [number, number][] }[] = []
 ): SchematicGeometry {
 	const R = 6_378_137;
 	const byId = new Map(placed.map((b) => [b.id.toLowerCase(), b]));
+	const project = (lon: number, lat: number): [number, number] => {
+		if (!geographic) return [lon, lat];
+		const clamped = Math.max(-85, Math.min(85, lat));
+		return [
+			(R * lon * Math.PI) / 180,
+			-R * Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360))
+		];
+	};
 	// Project in float64 and store relative to the centroid: absolute Web Mercator metres reach 1e7,
 	// where float32 resolves only to about a metre and neighbouring LV buses would collapse.
 	const xy = graph.buses.map((b) => {
 		const p = byId.get(b.id.toLowerCase());
-		if (!p) return null;
-		if (!geographic) return [p.lon, -p.lat];
-		const lat = Math.max(-85, Math.min(85, p.lat));
-		return [
-			(R * p.lon * Math.PI) / 180,
-			-R * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
-		];
+		return p ? project(p.lon, p.lat) : null;
 	});
-	const known = xy.filter((p): p is number[] => p !== null);
+	const known = xy.filter((p): p is [number, number] => p !== null);
 	const cx = known.reduce((s, p) => s + p[0], 0) / Math.max(1, known.length);
 	const cy = known.reduce((s, p) => s + p[1], 0) / Math.max(1, known.length);
 	const positions = new Float32Array(graph.buses.length * 3);
@@ -172,8 +150,67 @@ export function sourceLayout(
 	});
 	return {
 		positions,
-		...segments(graph, positions, index, () => null),
+		...segments(graph, positions, index, (k) => {
+			// A route belongs to one edge by id and endpoints; parallel edges keep their own paths.
+			const e = graph.edges[k];
+			const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+			const route = routes.find(
+				(r) =>
+					same(r.id, e.id) &&
+					((same(r.from, e.from) && same(r.to, e.to)) || (same(r.from, e.to) && same(r.to, e.from)))
+			);
+			if (!route || route.path.length < 2) return null;
+			return route.path.map(([lon, lat]) => {
+				const [x, y] = project(lon, lat);
+				return [x - cx, y - cy];
+			});
+		}),
 		role,
 		bounds: bounds(positions)
 	};
+}
+
+/** The drawn schematic as a PowerIO diagram layer (GeoJSON with `powerio_geo.space = "diagram"`):
+ * one point per bus and one route per line, matched by line id, y down. `kind: "synthetic"` marks
+ * the positions as computed, and `tellegen_layout` records how. Load it with the case to reuse the
+ * layout, or hand it to PowerIO tooling. */
+export function diagramLayer(
+	graph: DistGraph,
+	geometry: SchematicGeometry,
+	provenance: { strategy: string; version: number }
+): string {
+	const round = (v: number) => Math.round(v * 100) / 100;
+	const features: unknown[] = graph.buses.map((bus, i) => ({
+		type: 'Feature',
+		properties: { bus: bus.id },
+		geometry: {
+			type: 'Point',
+			coordinates: [round(geometry.positions[i * 3]), round(geometry.positions[i * 3 + 1])]
+		}
+	}));
+	const routes = new Map<number, number[][]>();
+	for (let s = 0; s < geometry.segmentEdge.length; s++) {
+		const k = geometry.segmentEdge[s];
+		const points = routes.get(k) ?? [
+			[round(geometry.sources[s * 3]), round(geometry.sources[s * 3 + 1])]
+		];
+		points.push([round(geometry.targets[s * 3]), round(geometry.targets[s * 3 + 1])]);
+		routes.set(k, points);
+	}
+	graph.edges.forEach((edge, k) => {
+		const points = routes.get(k);
+		// Only lines carry routes in a PowerIO layer; switches and transformers follow their buses.
+		if (edge.kind !== 'line' || !points || points.length < 2) return;
+		features.push({
+			type: 'Feature',
+			properties: { id: edge.id, bus_from: edge.from, bus_to: edge.to },
+			geometry: { type: 'LineString', coordinates: points }
+		});
+	});
+	return JSON.stringify({
+		type: 'FeatureCollection',
+		powerio_geo: { space: 'diagram', kind: 'synthetic' },
+		tellegen_layout: { algorithm: 'schematic', ...provenance },
+		features
+	});
 }

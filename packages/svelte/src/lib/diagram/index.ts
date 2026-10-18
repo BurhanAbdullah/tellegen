@@ -15,3 +15,4 @@ export * from './graph-inputs.js';
 export * from './display-tree.js';
 export * from './voltage-profile.js';
 export * from './schematic-layout.js';
+export * from './multi-wire.js';

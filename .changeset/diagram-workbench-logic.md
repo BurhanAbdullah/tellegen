@@ -21,7 +21,11 @@ larger than 25,000 buses compute the overview on request. Setting
 `MulticonductorCase.schematic` makes `TellegenMap` show the case as a deck.gl
 schematic or at its source positions, with an animated switch between them,
 result colouring, the shared selection and PNG/SVG export. `overviewResult` holds
-the operating point the overview and schematic share. Unbalance is the voltage
+the operating point the overview and schematic share. The schematic layout runs in
+the engine: `mcSchematicLayout` in `@tellegen/engine` returns tidy or leaf-order
+geometry and the display forest. The schematic can be downloaded as a PowerIO
+diagram layer, follows a case's own routes in source positions, and a selected
+branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.
 `controller.multiFullResult`
 reads the full operating point from a stored result or the live session. The

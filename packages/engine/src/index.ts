@@ -570,6 +570,54 @@ export async function extractGeo(moduleJson: string): Promise<string> {
   );
 }
 
+export type SchematicStrategy = "tidy" | "leaf-order";
+
+export interface SchematicOptions {
+  /** `tidy` packs subtrees by their per-depth contours; `leaf-order` gives every leaf a row. */
+  strategy?: SchematicStrategy;
+  /** Horizontal distance per branch step. */
+  dx?: number;
+  /** Minimum vertical distance between rows. */
+  dy?: number;
+}
+
+/** Columnar schematic geometry in graph order; y grows downwards. Edge roles: 0 tree route,
+ * 1 closed branch outside the display tree (a loop), 2 open or unreachable. */
+export interface SchematicLayout {
+  version: number;
+  strategy: SchematicStrategy;
+  /** `x, y` per bus. */
+  positions: number[];
+  /** `x0, y0, x1, y1` per segment; a routed edge has several. */
+  segments: number[];
+  segment_edge: number[];
+  role: number[];
+  parent: number[];
+  parent_edge: number[];
+  depth: number[];
+  roots: number[];
+  bounds: [number, number, number, number];
+}
+
+/** Lay out a multiconductor graph as a schematic in the engine: a breadth-first forest from the
+ * source buses (matching the browser's display tree), with right-angled tree routes. */
+export async function mcSchematicLayout(
+  graph: DistGraph,
+  options: SchematicOptions = {},
+): Promise<SchematicLayout> {
+  const graphJson = JSON.stringify(graph);
+  assertEngineInputLength(graphJson.length);
+  return JSON.parse(
+    expectText(
+      await engineHost().call({
+        op: "mc_schematic_layout",
+        graph_json: graphJson,
+        options_json: JSON.stringify(options),
+      }),
+    ),
+  );
+}
+
 /** Fill case coordinates from a PowerWorld `.pwd` sibling: substation symbols
  * project to approximate longitude/latitude and join onto buses through the
  * `SubNum` extras key. Rejects when no bus joined. */
@@ -1761,6 +1809,7 @@ export interface EngineTransport {
     kind: "synthetic" | "manual",
   ): Promise<StampedLayoutCase>;
   extractGeo(moduleJson: string): Promise<string>;
+  mcSchematicLayout(graph: DistGraph, options?: SchematicOptions): Promise<SchematicLayout>;
   applyDisplayGeo(
     moduleJson: string,
     bytes: Uint8Array,
@@ -1813,6 +1862,7 @@ export const browserWasmTransport: EngineTransport = {
   applyMcGeo,
   applyLayout,
   extractGeo,
+  mcSchematicLayout,
   applyDisplayGeo,
   capabilities,
   solveModule,

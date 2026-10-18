@@ -68,7 +68,9 @@ test('7. switch to the schematic and between layouts, keeping the selection', as
 	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
 	await expect(schematic).toBeVisible();
 	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
-	await toolbar.getByRole('combobox').selectOption('loading-heat');
+	await toolbar.getByRole('combobox', { name: 'Schematic arrangement' }).selectOption('leaf-order');
+	await toolbar.getByRole('combobox', { name: 'Schematic arrangement' }).selectOption('tidy');
+	await toolbar.getByRole('combobox', { name: 'Colour by' }).selectOption('loading-heat');
 	await expect(page.getByText('≥ 100 %')).toBeVisible();
 	await toolbar.getByRole('button', { name: /Geographic|Source positions/ }).click();
 	await expect(
@@ -155,4 +157,59 @@ test('every overview control has an accessible name', async ({ page }) => {
 			.map((el) => el.outerHTML.slice(0, 120))
 	);
 	expect(unnamed).toEqual([]);
+});
+
+test('the schematic layout file loads back with the case as its diagram', async ({
+	page,
+	context
+}) => {
+	const overview = await solvedOverview(page);
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	const download = page.waitForEvent('download');
+	await toolbar.getByRole('button', { name: 'Layout', exact: true }).click();
+	const file = await download;
+	expect(file.suggestedFilename()).toMatch(/schematic\.geo\.json$/);
+	const layer = await readFile(await file.path(), 'utf8');
+	const parsed = JSON.parse(layer);
+	expect(parsed.powerio_geo).toEqual({ space: 'diagram', kind: 'synthetic' });
+	const lb = parsed.features.find(
+		(f: { properties: { bus?: string } }) => f.properties.bus === 'lb'
+	);
+
+	// A fresh tab loads the case with the layout as its drawing, through the existing reader.
+	const fresh = await context.newPage();
+	await fresh.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await fresh.goto('/');
+	await fresh.locator('input[type=file]').setInputFiles([
+		{
+			name: 'four-wire-limits.bmopf.json',
+			mimeType: 'application/json',
+			buffer: await readFile(fixture)
+		},
+		{
+			name: 'four-wire-limits.schematic.geo.json',
+			mimeType: 'application/json',
+			buffer: Buffer.from(layer)
+		}
+	]);
+	await expect(
+		fresh.getByRole('application', { name: 'Network diagram', exact: true })
+	).toBeVisible({
+		timeout: 60_000
+	});
+	const circles = fresh.locator('[data-bus-id] circle');
+	await expect(circles.first()).toBeVisible();
+	const cx = await circles.evaluateAll((els) => els.map((el) => Number(el.getAttribute('cx'))));
+	expect(cx).toContain(lb.geometry.coordinates[0]);
+});
+
+test('a selected line shows every conductor in the multi-wire view', async ({ page }) => {
+	const overview = await solvedOverview(page);
+	await overview.getByRole('combobox', { name: 'Find a bus or branch' }).fill('l1');
+	await page.keyboard.press('Enter');
+	await expect(overview.getByRole('heading', { name: 'Multi-wire view' })).toBeVisible();
+	await expect(
+		overview.getByRole('img', { name: /line l1: 4 conductor segments between src and lb/ })
+	).toBeVisible();
 });
