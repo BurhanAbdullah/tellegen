@@ -16,3 +16,4 @@ export * from './display-tree.js';
 export * from './voltage-profile.js';
 export * from './schematic-layout.js';
 export * from './multi-wire.js';
+export * from './schematic-equipment.js';

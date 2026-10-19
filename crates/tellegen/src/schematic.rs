@@ -10,6 +10,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use powerio_dist::DistGraph;
+#[cfg(test)]
+use powerio_dist::DistGraphAttachment;
 use serde::{Deserialize, Serialize};
 
 /// Bump when the geometry for the same graph and options changes.
@@ -33,6 +35,9 @@ pub struct SchematicOptions {
     pub dx: f64,
     /// Minimum vertical distance between rows.
     pub dy: f64,
+    /// Vertical space reserved below a bus per kind of attached equipment (load, generator,
+    /// IBR, shunt, source), so attachment symbols never overlap the next row. Zero disables.
+    pub attachment_gap: f64,
 }
 
 impl Default for SchematicOptions {
@@ -41,6 +46,7 @@ impl Default for SchematicOptions {
             strategy: SchematicStrategy::Tidy,
             dx: 120.0,
             dy: 28.0,
+            attachment_gap: 22.0,
         }
     }
 }
@@ -69,6 +75,11 @@ pub struct SchematicLayout {
     pub depth: Vec<u32>,
     pub roots: Vec<u32>,
     pub bounds: [f64; 4],
+    /// Echo of [`SchematicOptions::attachment_gap`]; attachment symbol `i` of a bus sits
+    /// `(i + 1) * attachment_gap` below it.
+    pub attachment_gap: f64,
+    /// Distinct attachment kinds per bus, the number of reserved symbol slots.
+    pub attachment_slots: Vec<u8>,
 }
 
 struct Forest {
@@ -178,7 +189,7 @@ impl Contour {
 }
 
 /// Vertical positions: `y` of each bus within its subtree's frame plus each child's frame shift.
-fn rows(forest: &Forest, strategy: SchematicStrategy, dy: f64) -> Vec<f64> {
+fn rows(forest: &Forest, strategy: SchematicStrategy, dy: f64, extent: &[f64]) -> Vec<f64> {
     let n = forest.parent.len();
     let mut local = vec![0.0; n];
     let mut shift = vec![0.0; n];
@@ -202,11 +213,12 @@ fn rows(forest: &Forest, strategy: SchematicStrategy, dy: f64) -> Vec<f64> {
                 SchematicStrategy::LeafOrder => {
                     if kids.is_empty() {
                         local[u] = next_leaf;
-                        next_leaf += dy;
                     } else {
                         let (first, last) = (kids[0], kids[kids.len() - 1]);
                         local[u] = (local[first] + local[last]) / 2.0;
                     }
+                    // The next row starts below this bus and its attachment symbols.
+                    next_leaf = f64::max(next_leaf, local[u] + extent[u] + dy);
                 }
                 SchematicStrategy::Tidy => {
                     let mut merged: Option<Contour> = None;
@@ -233,9 +245,10 @@ fn rows(forest: &Forest, strategy: SchematicStrategy, dy: f64) -> Vec<f64> {
                         rows: VecDeque::new(),
                         offset: 0.0,
                     });
-                    contour
-                        .rows
-                        .push_front((local[u] - contour.offset, local[u] - contour.offset));
+                    contour.rows.push_front((
+                        local[u] - contour.offset,
+                        local[u] + extent[u] - contour.offset,
+                    ));
                     contours[u] = Some(contour);
                 }
             }
@@ -283,7 +296,27 @@ fn rows(forest: &Forest, strategy: SchematicStrategy, dy: f64) -> Vec<f64> {
 
 pub fn schematic_layout(graph: &DistGraph, options: &SchematicOptions) -> SchematicLayout {
     let forest = forest(graph);
-    let y = rows(&forest, options.strategy, options.dy);
+    // One reserved slot per distinct attachment kind; each kind is drawn once with its count.
+    let attachment_slots: Vec<u8> = graph
+        .buses
+        .iter()
+        .map(|bus| {
+            let mut kinds: Vec<_> = bus
+                .terminal_attachments
+                .values()
+                .flatten()
+                .map(|a| a.kind)
+                .collect();
+            kinds.sort_by_key(|k| format!("{k:?}"));
+            kinds.dedup();
+            kinds.len() as u8
+        })
+        .collect();
+    let extent: Vec<f64> = attachment_slots
+        .iter()
+        .map(|&k| f64::from(k) * options.attachment_gap)
+        .collect();
+    let y = rows(&forest, options.strategy, options.dy, &extent);
     let n = graph.buses.len();
     let mut positions = Vec::with_capacity(n * 2);
     for (depth, row) in forest.depth.iter().zip(&y) {
@@ -334,13 +367,13 @@ pub fn schematic_layout(graph: &DistGraph, options: &SchematicOptions) -> Schema
         f64::NEG_INFINITY,
         f64::NEG_INFINITY,
     ];
-    for i in 0..n {
+    for (i, below) in extent.iter().enumerate() {
         let (x, y) = at(i);
         bounds = [
             bounds[0].min(x),
             bounds[1].min(y),
             bounds[2].max(x),
-            bounds[3].max(y),
+            bounds[3].max(y + below),
         ];
     }
     if n == 0 {
@@ -362,6 +395,8 @@ pub fn schematic_layout(graph: &DistGraph, options: &SchematicOptions) -> Schema
         depth: forest.depth.iter().map(|&d| d as u32).collect(),
         roots: forest.roots.iter().map(|&r| r as u32).collect(),
         bounds,
+        attachment_gap: options.attachment_gap,
+        attachment_slots,
     }
 }
 
@@ -422,6 +457,7 @@ mod tests {
             strategy: SchematicStrategy::LeafOrder,
             dx: 100.0,
             dy: 20.0,
+            ..SchematicOptions::default()
         };
         let layout = schematic_layout(&feeder(), &options);
         assert_eq!(
@@ -457,6 +493,7 @@ mod tests {
             strategy: SchematicStrategy::Tidy,
             dx: 10.0,
             dy: 1.0,
+            ..SchematicOptions::default()
         };
         let layout = schematic_layout(&g, &options);
         let y: Vec<f64> = (0..6).map(|i| layout.positions[i * 2 + 1]).collect();
@@ -467,6 +504,61 @@ mod tests {
             ..options
         };
         assert_eq!(schematic_layout(&g, &leaf).bounds[3], 2.0);
+    }
+
+    /// Attaches equipment `(bus, kind, id)` to terminal 1 of the named buses.
+    fn attach(mut g: DistGraph, items: &[(&str, &str, &str)]) -> DistGraph {
+        for (bus, kind, id) in items {
+            let b = g.buses.iter_mut().find(|b| b.id == *bus).expect("bus");
+            let a: DistGraphAttachment =
+                serde_json::from_value(serde_json::json!({ "kind": kind, "id": id }))
+                    .expect("attachment JSON");
+            b.terminal_attachments
+                .entry("1".into())
+                .or_default()
+                .push(a);
+        }
+        g
+    }
+
+    #[test]
+    fn attachments_reserve_room_below_their_bus_in_both_strategies() {
+        // L2 carries a load and a generator (two slots); X carries two loads (one slot, the
+        // symbol shows the count). Every row below moves down by the reserved room.
+        let g = attach(
+            feeder(),
+            &[
+                ("L2", "load", "ld1"),
+                ("L2", "generator", "g1"),
+                ("X", "load", "ld2"),
+                ("X", "load", "ld3"),
+            ],
+        );
+        for strategy in [SchematicStrategy::LeafOrder, SchematicStrategy::Tidy] {
+            let options = SchematicOptions {
+                strategy,
+                dx: 100.0,
+                dy: 20.0,
+                attachment_gap: 10.0,
+            };
+            let bare = schematic_layout(&feeder(), &options);
+            let layout = schematic_layout(&g, &options);
+            assert_eq!(layout.attachment_slots, vec![0, 0, 0, 2, 1, 0]);
+            assert_eq!(layout.attachment_gap, 10.0);
+            let y = |l: &SchematicLayout, i: usize| l.positions[i * 2 + 1];
+            assert_eq!(y(&layout, 4) - y(&bare, 4), 20.0, "{strategy:?}");
+            assert_eq!(y(&layout, 5) - y(&bare, 5), 30.0, "{strategy:?}");
+            assert_eq!(layout.bounds[3], y(&layout, 5));
+        }
+        // Zero gap disables the reservation.
+        let flat = SchematicOptions {
+            attachment_gap: 0.0,
+            ..SchematicOptions::default()
+        };
+        assert_eq!(
+            schematic_layout(&g, &flat).positions,
+            schematic_layout(&feeder(), &flat).positions
+        );
     }
 
     #[test]

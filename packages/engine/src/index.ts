@@ -579,6 +579,8 @@ export interface SchematicOptions {
   dx?: number;
   /** Minimum vertical distance between rows. */
   dy?: number;
+  /** Vertical room reserved below a bus per kind of attached equipment; 0 disables. */
+  attachment_gap?: number;
 }
 
 /** Columnar schematic geometry in graph order; y grows downwards. Edge roles: 0 tree route,
@@ -597,6 +599,10 @@ export interface SchematicLayout {
   depth: number[];
   roots: number[];
   bounds: [number, number, number, number];
+  /** Attachment symbol `i` of a bus sits `(i + 1) * attachment_gap` below it. */
+  attachment_gap: number;
+  /** Distinct attachment kinds per bus: the reserved symbol slots. */
+  attachment_slots: number[];
 }
 
 /** Lay out a multiconductor graph as a schematic in the engine: a breadth-first forest from the

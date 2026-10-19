@@ -38,6 +38,13 @@
 		titleBlock,
 		viewportSvg,
 		worstBand,
+		attachmentGlyph,
+		ATTACHMENT_NAMES,
+		branchGlyph,
+		glyphPath,
+		schematicEquipment,
+		type EquipmentItem,
+		type Glyph,
 		type LabelCandidate,
 		type SchematicGeometry
 	} from '../diagram/index.js';
@@ -98,6 +105,43 @@
 			: null
 	);
 	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	/** Equipment symbols on the shown layout: branch symbols interrupt their line. */
+	const equipment = $derived(shown ? schematicEquipment(graph, shown) : null);
+	/** Symbols draw once they are legible (a glyph about 6 px across); below that the plain lines
+	 * and their kind colours carry the topology. */
+	const symbolsOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 3);
+	/** The branch geometry as drawn, interrupted under symbols when they show. */
+	const drawn = $derived<SchematicGeometry>(symbolsOn && equipment ? equipment.cut : geometry);
+	const SYMBOL_INK: RGBA = [52, 56, 62, 255];
+	const legendGlyphs = $derived(
+		equipment
+			? (
+					[
+						['transformer', branchGlyph('transformer', true), 'transformer'],
+						['switch', branchGlyph('switch', true), 'switch, closed'],
+						['switch', branchGlyph('switch', false), 'switch, open'],
+						...(['source', 'generator', 'ibr', 'load', 'shunt'] as const).map(
+							(k) => [k, attachmentGlyph(k), ATTACHMENT_NAMES[k]] as const
+						)
+					] as [EquipmentItem['kind'], Glyph | null, string][]
+				).filter(
+					([kind, glyph, label]) =>
+						glyph &&
+						equipment.kinds.has(kind) &&
+						(kind !== 'switch' ||
+							graph.edges.some(
+								(e) => e.kind === 'switch' && e.closed === (label === 'switch, closed')
+							))
+				)
+			: []
+	);
+	const itemLabel = (d: EquipmentItem) => {
+		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;
+		const ids = d.ids.slice(0, 4).join(', ') + (d.ids.length > 4 ? ` +${d.ids.length - 4}` : '');
+		return d.bus >= 0
+			? `${d.ids.length > 1 ? `${d.ids.length} ${name}s` : name} ${ids} at ${graph.buses[d.bus].id}`
+			: `${name} ${ids}${graph.edges[d.edge].closed ? '' : ' (open)'}`;
+	};
 	/** Toolbar and legend start right of the left dock, so no panel covers them. */
 	const toolLeft = $derived(panels.compact ? 12 : panels.dockWidth('left') + 24);
 	const snapshot = $derived(
@@ -150,7 +194,9 @@
 		// Centre the drawing in the free area between the docked panels.
 		const cx = (x0 + x1) / 2 - (left - right) / 2 / scale;
 		const cy = (y0 + y1) / 2 - (top - bottom) / 2 / scale;
-		return { target: [cx, cy, 0] as [number, number, number], zoom: Math.min(zoom, 4) };
+		// Schematic units are sized for about 1:1 to 2:1; closer, a small network's symbols balloon.
+		const max = g.attachmentGap ? 1 : 4;
+		return { target: [cx, cy, 0] as [number, number, number], zoom: Math.min(zoom, max) };
 	}
 
 	function segmentColours(g: SchematicGeometry): Uint8Array {
@@ -208,18 +254,20 @@
 				})
 			];
 		}
+		const d = drawn;
 		const selectedSegments: number[] = [];
 		if (selectedEdges.size)
-			for (let s = 0; s < g.segmentEdge.length; s++)
-				if (selectedEdges.has(g.segmentEdge[s])) selectedSegments.push(s);
+			for (let s = 0; s < d.segmentEdge.length; s++)
+				if (selectedEdges.has(d.segmentEdge[s])) selectedSegments.push(s);
 		const point = (i: number): [number, number] => [g.positions[i * 3], g.positions[i * 3 + 1]];
 		const base = {
-			length: g.segmentEdge.length,
+			length: d.segmentEdge.length,
 			attributes: {
-				getSourcePosition: { value: g.sources, size: 3 },
-				getTargetPosition: { value: g.targets, size: 3 }
+				getSourcePosition: { value: d.sources, size: 3 },
+				getTargetPosition: { value: d.targets, size: 3 }
 			}
 		};
+		const symbols = symbolsOn && equipment ? equipment : null;
 		return [
 			// Result colours are quiet for normal values; a faint underlay keeps the topology legible.
 			...(colour === 'none'
@@ -238,11 +286,11 @@
 				...common,
 				id: `branches-${layout}`,
 				data: {
-					length: g.segmentEdge.length,
+					length: d.segmentEdge.length,
 					attributes: {
-						getSourcePosition: { value: g.sources, size: 3 },
-						getTargetPosition: { value: g.targets, size: 3 },
-						getColor: { value: segmentColours(g), size: 4, normalized: true }
+						getSourcePosition: { value: d.sources, size: 3 },
+						getTargetPosition: { value: d.targets, size: 3 },
+						getColor: { value: segmentColours(d), size: 4, normalized: true }
 					}
 				},
 				getWidth: colour === 'none' ? 1.6 : 2.2,
@@ -253,12 +301,54 @@
 				...common,
 				id: 'selected-branch',
 				data: selectedSegments,
-				getSourcePosition: (s: number) => [g.sources[s * 3], g.sources[s * 3 + 1], 0],
-				getTargetPosition: (s: number) => [g.targets[s * 3], g.targets[s * 3 + 1], 0],
+				getSourcePosition: (s: number) => [d.sources[s * 3], d.sources[s * 3 + 1], 0],
+				getTargetPosition: (s: number) => [d.targets[s * 3], d.targets[s * 3 + 1], 0],
 				getColor: ACCENT,
 				getWidth: 4,
 				widthUnits: 'pixels'
 			}),
+			...(symbols
+				? [
+						new LineLayer({
+							...common,
+							id: 'equipment',
+							data: {
+								length: symbols.sources.length / 3,
+								attributes: {
+									getSourcePosition: { value: symbols.sources, size: 3 },
+									getTargetPosition: { value: symbols.targets, size: 3 }
+								}
+							},
+							getColor: SYMBOL_INK,
+							getWidth: 1.25,
+							widthUnits: 'pixels'
+						}),
+						// Invisible discs over each symbol make it clickable and give it a tooltip.
+						new ScatterplotLayer({
+							...common,
+							id: 'equipment-hits',
+							data: symbols.items,
+							getPosition: (d: EquipmentItem) => [d.x, d.y, 0],
+							getRadius: symbols.unit * 1.3,
+							radiusUnits: 'common',
+							getFillColor: [0, 0, 0, 1],
+							pickable: true
+						}),
+						new TextLayer({
+							...common,
+							id: 'equipment-counts',
+							data: symbols.items.filter((d) => d.bus >= 0 && d.ids.length > 1),
+							getPosition: (d: EquipmentItem) => [d.x + symbols.unit * 1.1, d.y, 0],
+							getText: (d: EquipmentItem) => `×${d.ids.length}`,
+							getColor: SYMBOL_INK,
+							getSize: 10,
+							getTextAnchor: 'start',
+							getAlignmentBaseline: 'center',
+							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+							characterSet: 'auto'
+						})
+					]
+				: []),
 			new ScatterplotLayer({
 				...common,
 				id: `buses-${layout}`,
@@ -394,14 +484,21 @@
 						if (info.index < 0 || !info.layer) return;
 						if (info.layer.id.startsWith('buses-')) onselectbus(graph.buses[info.index].id);
 						else if (info.layer.id.startsWith('branches-'))
-							onselectedge(graph.edges[geometry.segmentEdge[info.index]].id);
+							onselectedge(graph.edges[drawn.segmentEdge[info.index]].id);
+						else if (info.layer.id === 'equipment-hits') {
+							const item = info.object as EquipmentItem;
+							if (item.edge >= 0) onselectedge(graph.edges[item.edge].id);
+							else onselectbus(graph.buses[item.bus].id);
+						}
 					},
 					getTooltip: (info: PickingInfo) =>
 						info.index >= 0 && info.layer?.id.startsWith('buses-')
 							? `${graph.buses[info.index].id}`
 							: info.index >= 0 && info.layer?.id.startsWith('branches-')
-								? `${graph.edges[geometry.segmentEdge[info.index]].kind} ${graph.edges[geometry.segmentEdge[info.index]].id}`
-								: null
+								? `${graph.edges[drawn.segmentEdge[info.index]].kind} ${graph.edges[drawn.segmentEdge[info.index]].id}`
+								: info.index >= 0 && info.layer?.id === 'equipment-hits'
+									? itemLabel(info.object as EquipmentItem)
+									: null
 				});
 				void show('schematic', strategy);
 			})
@@ -420,7 +517,7 @@
 
 	// Redraw when the data, colours or selection change; relabel when the camera moves.
 	$effect(() => {
-		void [geometry, edgeColours, busColours, selectedBus, selectedEdges, labels];
+		void [geometry, drawn, edgeColours, busColours, selectedBus, selectedEdges, labels];
 		if (!morph) render();
 	});
 	let labelFrame = 0;
@@ -643,12 +740,25 @@
 				muted: 'rgb(77 81 86)',
 				lineSets: [
 					{
-						sources: g.sources,
-						targets: g.targets,
-						colors: segmentColours(g),
-						count: g.segmentEdge.length,
+						sources: drawn.sources,
+						targets: drawn.targets,
+						colors: segmentColours(drawn),
+						count: drawn.segmentEdge.length,
 						width: 1.6
-					}
+					},
+					...(symbolsOn && equipment
+						? [
+								{
+									sources: equipment.sources,
+									targets: equipment.targets,
+									colors: new Uint8Array((equipment.sources.length / 3) * 4).map(
+										(_, i) => SYMBOL_INK[i % 4]
+									),
+									count: equipment.sources.length / 3,
+									width: 1.25
+								}
+							]
+						: [])
 				],
 				points: {
 					positions: g.positions,
@@ -765,6 +875,27 @@
 			· grey: no limit or rating
 		</div>
 	{/if}
+	{#if colour === 'none' && symbolsOn && legendGlyphs.length}
+		<ul
+			class="legend symbols"
+			style:top="{panels.top + 50}px"
+			style:left="{toolLeft}px"
+			aria-label="Symbols"
+		>
+			{#each legendGlyphs as [kind, glyph, label], i (i)}
+				<li>
+					<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+						><path
+							d={glyphPath(glyph!, 8, kind === 'transformer' || kind === 'switch' ? 12 : 2, 0)}
+						/>{#if kind === 'transformer' || kind === 'switch'}<path
+								class="wire"
+								d="M-2 0H0.8M23.2 0H26"
+							/>{:else}<path class="wire" d="M-2 -10V0H2" />{/if}</svg
+					>{label}
+				</li>
+			{/each}
+		</ul>
+	{/if}
 	{#if status}<p class="status" role="status">{status}</p>{/if}
 </div>
 
@@ -843,6 +974,26 @@
 		background: var(--paper);
 		border: 1px solid var(--line);
 		border-radius: 3px;
+	}
+	.legend.symbols {
+		flex-wrap: wrap;
+		max-width: min(560px, calc(100% - 24px));
+		margin: 0;
+		padding: 2px 8px;
+		list-style: none;
+	}
+	.legend.symbols li {
+		display: flex;
+		gap: 2px;
+		align-items: center;
+	}
+	.legend.symbols path {
+		fill: none;
+		stroke: var(--ink);
+		stroke-width: 1.1;
+	}
+	.legend.symbols path.wire {
+		stroke: var(--text-secondary);
 	}
 	.legend i {
 		display: inline-block;

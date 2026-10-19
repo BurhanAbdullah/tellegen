@@ -23,7 +23,9 @@ schematic or at its source positions, with an animated switch between them,
 result colouring, the shared selection and PNG/SVG export. `overviewResult` holds
 the operating point the overview and schematic share. The schematic layout runs in
 the engine: `mcSchematicLayout` in `@tellegen/engine` returns tidy or leaf-order
-geometry and the display forest. The schematic can be downloaded as a PowerIO
+geometry and the display forest, reserving room below each bus for its attached
+equipment. The schematic draws transformer, switch (open or closed) and attachment
+symbols (load, generator, inverter-based resource, source, shunt) with a legend. The schematic can be downloaded as a PowerIO
 diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.

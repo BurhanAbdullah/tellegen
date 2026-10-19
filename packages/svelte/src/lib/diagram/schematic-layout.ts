@@ -14,6 +14,8 @@ export interface SchematicGeometry {
 	bounds: [number, number, number, number];
 	/** Engine layout version, for provenance; absent for source positions. */
 	version?: number;
+	/** Room reserved below each bus per attachment kind (engine layouts only). */
+	attachmentGap?: number;
 }
 
 function segments(
@@ -86,7 +88,8 @@ export function fromEngineLayout(layout: SchematicLayout): SchematicGeometry {
 		segmentEdge: Int32Array.from(layout.segment_edge),
 		role: Uint8Array.from(layout.role),
 		bounds: layout.bounds,
-		version: layout.version
+		version: layout.version,
+		attachmentGap: layout.attachment_gap
 	};
 }
 
@@ -109,7 +112,12 @@ export function sourceLayout(
 	geographic: boolean,
 	tree: DisplayTree,
 	/** Routed paths from the case (`MultiView.edges`), drawn in place of straight segments. */
-	routes: { id: string; from: string; to: string; path: [number, number][] }[] = []
+	routes: {
+		id: string;
+		from: string;
+		to: string;
+		path: [number, number][];
+	}[] = []
 ): SchematicGeometry {
 	const R = 6_378_137;
 	const byId = new Map(placed.map((b) => [b.id.toLowerCase(), b]));
