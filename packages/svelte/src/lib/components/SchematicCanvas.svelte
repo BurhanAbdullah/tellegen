@@ -48,6 +48,7 @@
 		BASEMAP_ATTRIBUTION,
 		BASEMAP_STYLE,
 		basemapCamera,
+		cameraFromMap,
 		galvanicZones,
 		landmarkCandidates,
 		landmarkGlyph,
@@ -585,6 +586,31 @@
 			return t === null ? MISSING_COLOUR : bandColour(t);
 		})
 	);
+
+	/** Whether `view` shows at least one bus of `g`. */
+	function showsAny(
+		g: SchematicGeometry,
+		view: { target: [number, number, number]; zoom: number }
+	) {
+		const scale = 2 ** view.zoom;
+		const [hw, hh] = [width / 2 / scale, height / 2 / scale];
+		for (let i = 0; i < g.positions.length; i += 3) {
+			const dx = g.positions[i] - view.target[0];
+			const dy = g.positions[i + 1] - view.target[1];
+			if (Math.abs(dx) <= hw && Math.abs(dy) <= hh) return true;
+		}
+		return false;
+	}
+
+	/** Leaving from geographic positions (Close, or *Show map* in the overview), hand the view back
+	 * so the map continues from it. */
+	function handOffCamera() {
+		const origin = source?.mercatorOrigin;
+		if (layout !== 'source' || !origin || !shown) return;
+		const view = basemapCamera(camera, origin);
+		app.camera = { center: view.center, zoom: view.zoom, bearing: 0, pitch: 0 };
+		app.cameraHandoff = true;
+	}
 
 	/** Screen insets of the area no panel or toolbar covers. */
 	function freeArea() {
@@ -1169,6 +1195,7 @@
 	});
 	$effect(() => () => {
 		if (morph) cancelAnimationFrame(morph.raf);
+		handOffCamera();
 		deck?.finalize();
 	});
 
@@ -1339,7 +1366,13 @@
 		layout = nextLayout;
 		strategy = nextStrategy;
 		shown = next;
-		const to = fitCamera(next);
+		// Opening on geographic positions, continue from the main map's view when it shows part of
+		// this feeder; otherwise fit the drawing.
+		const fromMap =
+			!previous && nextLayout === 'source' && next.mercatorOrigin && app.camera
+				? cameraFromMap(app.camera, next.mercatorOrigin)
+				: null;
+		const to = fromMap && showsAny(next, fromMap) ? fromMap : fitCamera(next);
 		setCamera(to);
 		const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 		if (!previous || !deck || reduced || graph.buses.length > MORPH_MAX_BUSES) return;

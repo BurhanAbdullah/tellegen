@@ -864,11 +864,13 @@
 
 				map = m;
 				overlay = o;
+				const handedOff = app.cameraHandoff;
+				app.cameraHandoff = false;
 				// Frame the active grid once the map is ready. The initial frame request
 				// (from the case load) can fire before the async map import finishes and
 				// be lost; re-issuing it here ensures the first view is the active case,
 				// not the default world view. A remount opens at the default view too.
-				if (mapGen > 0 && app.camera) m.jumpTo(app.camera);
+				if ((mapGen > 0 || handedOff) && app.camera) m.jumpTo(app.camera);
 				else if (app.cameraSeq === handledCameraSeq)
 					app.requestFrame(app.activeCaseId ?? app.activeLocalId ?? 'all');
 				if (mapGen > 0) {

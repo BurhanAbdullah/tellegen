@@ -348,6 +348,9 @@ export interface StudyDisplaySnapshot {
 
 export class AppState {
 	camera: CameraSnapshot | null = $state.raw<CameraSnapshot | null>(null);
+	/** Set when a view hands its camera to the map it returns to (the diagram closing from
+	 * geographic positions): the re-created map starts at `camera` instead of framing the case. */
+	cameraHandoff = false;
 	cameraRequest: CameraSnapshot | null = $state.raw<CameraSnapshot | null>(null);
 	cameraSeq = $state(0);
 	diagramCamera: DiagramCameraSnapshot | null = $state.raw<DiagramCameraSnapshot | null>(null);

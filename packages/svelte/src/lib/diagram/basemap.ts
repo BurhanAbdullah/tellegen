@@ -28,3 +28,25 @@ export function basemapCamera(
 		zoom: Math.log2((WORLD * 2 ** camera.zoom) / 512)
 	};
 }
+
+/** Web Mercator metres (y down) of a longitude and latitude in degrees. */
+export function lngLatToMercator(lng: number, lat: number): [number, number] {
+	const clamped = Math.max(-85, Math.min(85, lat));
+	return [
+		(R * lng * Math.PI) / 180,
+		-R * Math.log(Math.tan(Math.PI / 4 + (clamped * Math.PI) / 360))
+	];
+}
+
+/** The schematic camera showing what a MapLibre camera shows (the inverse of
+ * {@link basemapCamera}), for opening the diagram where the map was. */
+export function cameraFromMap(
+	map: { center: [number, number]; zoom: number },
+	origin: [number, number]
+): { target: [number, number, number]; zoom: number } {
+	const [x, y] = lngLatToMercator(map.center[0], map.center[1]);
+	return {
+		target: [x - origin[0], y - origin[1], 0],
+		zoom: Math.log2((512 * 2 ** map.zoom) / WORLD)
+	};
+}

@@ -30,7 +30,8 @@ import {
 	placeLandmarks,
 	landmarkGlyph,
 	basemapCamera,
-	mercatorToLngLat
+	mercatorToLngLat,
+	cameraFromMap
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -577,6 +578,15 @@ describe('basemap camera', () => {
 		);
 		expect(lng).toBeCloseTo(90, 9);
 		expect(lat).toBeCloseTo(30, 9);
+	});
+
+	it('round-trips between the map camera and the schematic camera', () => {
+		const origin: [number, number] = [261_000, -6_250_000];
+		const map = { center: [2.35, 48.85] as [number, number], zoom: 13.4 };
+		const back = basemapCamera(cameraFromMap(map, origin), origin);
+		expect(back.center[0]).toBeCloseTo(2.35, 9);
+		expect(back.center[1]).toBeCloseTo(48.85, 9);
+		expect(back.zoom).toBeCloseTo(13.4, 9);
 	});
 
 	it('matches the schematic camera: same centre, and one metre over the same pixels', () => {
