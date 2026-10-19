@@ -45,8 +45,17 @@
 		describeBus,
 		treeWalk,
 		type WalkKey,
+		areaBox,
+		areaState,
+		lvAreas,
+		outsideAreas,
+		type AreaState,
+		type LvArea,
 		conductorSet,
 		conductorTicks,
+		elementPowers,
+		flowArrows,
+		formatPower,
 		energisation,
 		shortNames,
 		branchGlyph,
@@ -114,21 +123,123 @@
 			: null
 	);
 	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	const snapshot = $derived(
+		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
+	);
 	/** Equipment symbols on the shown layout: branch symbols interrupt their line. */
 	const equipment = $derived(shown ? schematicEquipment(graph, shown) : null);
 	/** Symbols draw once they are legible (a glyph about 6 px across); below that the plain lines
 	 * and their kind colours carry the topology. */
 	const symbolsOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 3);
-	/** The branch geometry as drawn, interrupted under symbols when they show. */
-	const drawn = $derived<SchematicGeometry>(symbolsOn && equipment ? equipment.cut : geometry);
+	/** LV areas (innermost transformer subtrees). Zoomed out, each collapses to one box showing
+	 * its worst state; zooming in, or clicking a box, opens it again. */
+	const areas = $derived(lvAreas(graph, tree));
+	const collapsed = $derived(!!shown && !symbolsOn && areas.areas.length > 0);
+	const outside = $derived(outsideAreas(geometry, areas.edgeArea));
+	const visibleBuses = $derived(
+		collapsed
+			? graph.buses.flatMap((_, i) => (areas.busArea[i] < 0 ? [i] : []))
+			: graph.buses.map((_, i) => i)
+	);
+	const areaStates = $derived(areas.areas.map((a) => areaState(a, snapshot)));
+	/** The branch geometry as drawn: interrupted under symbols when they show, without the
+	 * insides of collapsed areas when zoomed out. */
+	const drawn = $derived<SchematicGeometry>(
+		symbolsOn && equipment ? equipment.cut : collapsed ? outside : geometry
+	);
+	const AREA_COLOURS: Record<AreaState, [RGBA, RGBA]> = {
+		missing: [
+			[120, 114, 102, 28],
+			[120, 114, 102, 160]
+		],
+		normal: [
+			[120, 114, 102, 28],
+			[120, 114, 102, 160]
+		],
+		warning: [
+			[178, 94, 0, 50],
+			[178, 94, 0, 220]
+		],
+		violation: [
+			[184, 50, 42, 60],
+			[184, 50, 42, 230]
+		]
+	};
+	function areaLabel(a: number): string {
+		const area = areas.areas[a];
+		const t = graph.edges[area.transformer];
+		const state = areaStates[a];
+		const verdict =
+			state === 'violation'
+				? 'a limit is violated'
+				: state === 'warning'
+					? 'a branch is near its rating'
+					: state === 'normal'
+						? 'within limits'
+						: 'no result';
+		return `Area below ${t.kind} ${t.id}: ${area.buses.length} buses, ${verdict}. Click to open.`;
+	}
 	/** Conductor marks need a closer view than symbols; bus names closer still. */
 	const ticksOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 6);
 	const namesOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 9);
+	/** Solved values beside symbols and flow arrows on branches, once there is room for them. */
+	const valuesOn = $derived(!!snapshot && ticksOn);
+	const powers = $derived(mc.overviewResult ? elementPowers(mc.overviewResult) : null);
+	const arrows = $derived(
+		equipment && snapshot
+			? flowArrows(
+					equipment,
+					snapshot.branches.map((b) => b.ends),
+					graph.edges.map((e) => e.closed)
+				)
+			: null
+	);
+	/** An attachment's text: its count when several, and its solved P and Q when values show.
+	 * Generators, IBRs and sources read as output; loads and shunts as consumption. */
+	function itemText(d: EquipmentItem): string {
+		const parts = d.ids.length > 1 ? [`×${d.ids.length}`] : [];
+		if (valuesOn && powers) {
+			let p = 0;
+			let q = 0;
+			let found = false;
+			for (const id of d.ids) {
+				const row = powers.get(id);
+				if (!row) continue;
+				p += row.p;
+				q += row.q;
+				found = true;
+			}
+			const output = d.kind === 'generator' || d.kind === 'ibr' || d.kind === 'source';
+			// Below 1 VA (an earthing shunt, say) the value is noise, not information.
+			if (found && Math.hypot(p, q) >= 1)
+				parts.push(output ? formatPower(-p, -q) : formatPower(p, q));
+		}
+		return parts.join(' ');
+	}
 	const SYMBOL_INK: RGBA = [52, 56, 62, 255];
 	/** Not connected to any source through closed branches: drawn faint in every colour mode. */
 	const DEAD: RGBA = [196, 191, 182, 110];
 	const live = $derived(energisation(graph));
 	const names = $derived(shortNames(graph.buses.map((b) => b.id)));
+	/** Whether the symbol key is expanded; remembered per viewer. */
+	const KEY_STORAGE = 'tellegen.schematic.key';
+	let keyOpen = $state(
+		(() => {
+			try {
+				return localStorage.getItem(KEY_STORAGE) !== 'closed';
+			} catch {
+				return true;
+			}
+		})()
+	);
+	function rememberKey(open: boolean) {
+		keyOpen = open;
+		try {
+			localStorage.setItem(KEY_STORAGE, open ? 'open' : 'closed');
+		} catch {
+			// Storage can be unavailable (private windows); the key still toggles.
+		}
+	}
 	/** Keyboard cursor: the bus the arrow keys walk from, distinct from the selection. */
 	let cursor = $state(-1);
 	let announcement = $state('');
@@ -208,9 +319,6 @@
 	};
 	/** Toolbar and legend start right of the left dock, so no panel covers them. */
 	const toolLeft = $derived(panels.compact ? 12 : panels.dockWidth('left') + 24);
-	const snapshot = $derived(
-		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
-	);
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
 	const selectedBus = $derived(
 		mc.selectedBusId === null ? -1 : (busIndex.get(mc.selectedBusId) ?? -1)
@@ -220,6 +328,17 @@
 			mc.selectedEdgeId === null
 				? []
 				: graph.edges.flatMap((e, k) => (e.id === mc.selectedEdgeId ? [k] : []))
+		)
+	);
+
+	const hoveredBus = $derived(
+		mc.hovered?.kind === 'bus' ? (busIndex.get(mc.hovered.id) ?? -1) : -1
+	);
+	const hoveredEdges = $derived(
+		new Set(
+			mc.hovered?.kind === 'branch'
+				? graph.edges.flatMap((e, k) => (e.id === mc.hovered!.id ? [k] : []))
+				: []
 		)
 	);
 
@@ -333,6 +452,7 @@
 			for (let s = 0; s < d.segmentEdge.length; s++)
 				if (selectedEdges.has(d.segmentEdge[s])) selectedSegments.push(s);
 		const point = (i: number): [number, number] => [g.positions[i * 3], g.positions[i * 3 + 1]];
+		// Bus ids index `graph.buses`, so picks map back whatever subset is drawn.
 		const base = {
 			length: d.segmentEdge.length,
 			attributes: {
@@ -341,6 +461,11 @@
 			}
 		};
 		const symbols = symbolsOn && equipment ? equipment : null;
+		const pad = equipment ? equipment.unit * 1.5 : 0;
+		const hoveredSegments: number[] = [];
+		if (hoveredEdges.size)
+			for (let s = 0; s < d.segmentEdge.length; s++)
+				if (hoveredEdges.has(d.segmentEdge[s])) hoveredSegments.push(s);
 		return [
 			// Result colours are quiet for normal values; a faint underlay keeps the topology legible.
 			...(colour === 'none'
@@ -396,6 +521,24 @@
 							getWidth: 1.25,
 							widthUnits: 'pixels'
 						}),
+						...(valuesOn && arrows
+							? [
+									new LineLayer({
+										...common,
+										id: 'flow-arrows',
+										data: {
+											length: arrows.edge.length,
+											attributes: {
+												getSourcePosition: { value: arrows.sources, size: 3 },
+												getTargetPosition: { value: arrows.targets, size: 3 }
+											}
+										},
+										getColor: ACCENT,
+										getWidth: 1.5,
+										widthUnits: 'pixels'
+									})
+								]
+							: []),
 						...(ticksOn
 							? [
 									new LineLayer({
@@ -431,10 +574,11 @@
 						}),
 						new TextLayer({
 							...common,
-							id: 'equipment-counts',
-							data: symbols.items.filter((d) => d.bus >= 0 && d.ids.length > 1),
+							id: 'equipment-text',
+							data: symbols.items.filter((d) => d.bus >= 0 && itemText(d)),
 							getPosition: (d: EquipmentItem) => [d.x + symbols.unit * 1.1, d.y, 0],
-							getText: (d: EquipmentItem) => `×${d.ids.length}`,
+							getText: itemText,
+							updateTriggers: { getText: [valuesOn, powers] },
 							getColor: SYMBOL_INK,
 							getSize: 10,
 							getTextAnchor: 'start',
@@ -447,14 +591,19 @@
 			new ScatterplotLayer({
 				...common,
 				id: `buses-${layout}`,
-				data: graph.buses.map((_, i) => i),
+				data: visibleBuses,
 				getPosition: (i: number) => [...point(i), 0],
 				getFillColor: (i: number) => busColours[i],
-				getRadius: 2.6,
+				// Zoomed out, small dots keep dense chains from merging into bars.
+				getRadius: symbolsOn ? 2.6 : 1.4,
 				radiusUnits: 'pixels',
-				radiusMinPixels: 2,
+				radiusMinPixels: 1,
 				pickable: true,
-				updateTriggers: { getFillColor: [colour, snapshot], getPosition: layout }
+				updateTriggers: {
+					getFillColor: [colour, snapshot],
+					getPosition: layout,
+					getRadius: symbolsOn
+				}
 			}),
 			new ScatterplotLayer({
 				...common,
@@ -469,6 +618,51 @@
 				radiusUnits: 'pixels',
 				lineWidthUnits: 'pixels',
 				getLineWidth: 2.5
+			}),
+			...(collapsed
+				? [
+						new modules.layers.PolygonLayer({
+							...common,
+							id: 'lv-areas',
+							data: areas.areas.map((area, a) => ({ a, box: areaBox(area, g.positions, pad) })),
+							getPolygon: (d: { box: [number, number, number, number] }) => {
+								const [x0, y0, x1, y1] = d.box;
+								return [
+									[x0, y0],
+									[x1, y0],
+									[x1, y1],
+									[x0, y1]
+								];
+							},
+							getFillColor: (d: { a: number }) => AREA_COLOURS[areaStates[d.a]][0],
+							getLineColor: (d: { a: number }) => AREA_COLOURS[areaStates[d.a]][1],
+							getLineWidth: 1,
+							lineWidthUnits: 'pixels',
+							lineWidthMinPixels: 1,
+							pickable: true,
+							updateTriggers: { getFillColor: areaStates, getLineColor: areaStates }
+						})
+					]
+				: []),
+			// Hovered in a linked view (profile, table) or here: a soft halo.
+			new ScatterplotLayer({
+				...common,
+				id: 'hovered-bus',
+				data: hoveredBus >= 0 ? [hoveredBus] : [],
+				getPosition: (i: number) => [...point(i), 0],
+				getFillColor: [...ACCENT.slice(0, 3), 60] as RGBA,
+				getRadius: 9,
+				radiusUnits: 'pixels'
+			}),
+			new LineLayer({
+				...common,
+				id: 'hovered-branch',
+				data: hoveredSegments,
+				getSourcePosition: (s: number) => [d.sources[s * 3], d.sources[s * 3 + 1], 0],
+				getTargetPosition: (s: number) => [d.targets[s * 3], d.targets[s * 3 + 1], 0],
+				getColor: [...ACCENT.slice(0, 3), 110] as RGBA,
+				getWidth: 7,
+				widthUnits: 'pixels'
 			}),
 			new ScatterplotLayer({
 				...common,
@@ -613,13 +807,36 @@
 						const v = viewState as OrthographicViewState;
 						camera = { target: v.target as [number, number, number], zoom: v.zoom as number };
 					},
+					onHover: (info: PickingInfo) => {
+						const id = info.layer?.id ?? '';
+						let next: { kind: 'bus' | 'branch'; id: string } | null = null;
+						if (info.index >= 0 && id.startsWith('buses-'))
+							next = { kind: 'bus', id: graph.buses[info.object as number].id };
+						else if (info.index >= 0 && id.startsWith('branches-'))
+							next = { kind: 'branch', id: graph.edges[drawn.segmentEdge[info.index]].id };
+						else if (info.index >= 0 && id === 'equipment-hits') {
+							const item = info.object as EquipmentItem;
+							next =
+								item.edge >= 0
+									? { kind: 'branch', id: graph.edges[item.edge].id }
+									: { kind: 'bus', id: graph.buses[item.bus].id };
+						}
+						if (next?.kind !== mc.hovered?.kind || next?.id !== mc.hovered?.id) mc.hovered = next;
+					},
 					onClick: (info: PickingInfo) => {
 						if (info.index < 0 || !info.layer) return;
 						// Skip the fly-to for this selection; cleared after effects run, as a click on the
 						// already-selected item changes nothing.
 						pickedHere = true;
 						setTimeout(() => (pickedHere = false));
-						if (info.layer.id.startsWith('buses-')) onselectbus(graph.buses[info.index].id);
+						if (info.layer.id === 'lv-areas') {
+							// Open the area: zoom to it, far enough in for its symbols.
+							const { a } = info.object as { a: number };
+							openArea(areas.areas[a]);
+							return;
+						}
+						if (info.layer.id.startsWith('buses-'))
+							onselectbus(graph.buses[info.object as number].id);
 						else if (info.layer.id.startsWith('branches-'))
 							onselectedge(graph.edges[drawn.segmentEdge[info.index]].id);
 						else if (info.layer.id === 'equipment-hits') {
@@ -629,13 +846,15 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						info.index >= 0 && info.layer?.id.startsWith('buses-')
-							? `${graph.buses[info.index].id}`
-							: info.index >= 0 && info.layer?.id.startsWith('branches-')
-								? branchTip(drawn.segmentEdge[info.index])
-								: info.index >= 0 && info.layer?.id === 'equipment-hits'
-									? itemLabel(info.object as EquipmentItem)
-									: null
+						info.index >= 0 && info.layer?.id === 'lv-areas'
+							? areaLabel((info.object as { a: number }).a)
+							: info.index >= 0 && info.layer?.id.startsWith('buses-')
+								? `${graph.buses[info.object as number].id}`
+								: info.index >= 0 && info.layer?.id.startsWith('branches-')
+									? branchTip(drawn.segmentEdge[info.index])
+									: info.index >= 0 && info.layer?.id === 'equipment-hits'
+										? itemLabel(info.object as EquipmentItem)
+										: null
 				});
 				void show('schematic', strategy);
 			})
@@ -654,7 +873,20 @@
 
 	// Redraw when the data, colours or selection change; relabel when the camera moves.
 	$effect(() => {
-		void [geometry, drawn, edgeColours, busColours, selectedBus, selectedEdges, labels, cursor];
+		void [
+			geometry,
+			drawn,
+			edgeColours,
+			busColours,
+			selectedBus,
+			selectedEdges,
+			labels,
+			cursor,
+			valuesOn,
+			arrows,
+			hoveredBus,
+			hoveredEdges
+		];
 		if (!morph) render();
 	});
 	let labelFrame = 0;
@@ -710,6 +942,14 @@
 			if (p) bringIntoView(p);
 		});
 	});
+
+	function openArea(area: LvArea) {
+		const pad = (equipment?.unit ?? 1) * 1.5;
+		const [x0, y0, x1, y1] = areaBox(area, geometry.positions, pad);
+		const fit = fitCamera({ ...geometry, bounds: [x0, y0, x1, y1] });
+		const legible = equipment ? Math.log2(8 / equipment.unit) : fit.zoom;
+		setCamera({ target: fit.target, zoom: Math.max(fit.zoom, legible) }, true);
+	}
 
 	/** Centre `p` in the uncovered view when it is outside it or drawn too small to read. */
 	function bringIntoView(p: [number, number]) {
@@ -1118,34 +1358,48 @@
 		</div>
 	{/if}
 	{#if colour === 'none' && symbolsOn && legendGlyphs.length}
-		<ul
-			class="legend symbols"
-			style:top="{panels.top + 50}px"
+		<details
+			class="key"
+			style:bottom="{panels.compact ? app.sheetInset + 12 : 24}px"
 			style:left="{toolLeft}px"
-			aria-label="Symbols"
+			open={keyOpen}
+			ontoggle={(e) => rememberKey(e.currentTarget.open)}
 		>
-			{#if ticksOn && equipment?.ticks.edge.length}
-				<li>
-					<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
-						><path class="wire" d="M-2 0H26" /><path
-							d={glyphPath(conductorTicks(3, true), 8, 12, 0)}
-						/></svg
-					>phases, ○ neutral
-				</li>
-			{/if}
-			{#each legendGlyphs as [kind, glyph, label], i (i)}
-				<li>
-					<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
-						><path
-							d={glyphPath(glyph!, 8, kind === 'transformer' || kind === 'switch' ? 12 : 2, 0)}
-						/>{#if kind === 'transformer' || kind === 'switch'}<path
-								class="wire"
-								d="M-2 0H0.8M23.2 0H26"
-							/>{:else}<path class="wire" d="M-2 -10V0H2" />{/if}</svg
-					>{label}
-				</li>
-			{/each}
-		</ul>
+			<summary>Key</summary>
+			<ul class="symbols" aria-label="Symbols">
+				{#if ticksOn && equipment?.ticks.edge.length}
+					<li>
+						<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+							><path class="wire" d="M-2 0H26" /><path
+								d={glyphPath(conductorTicks(3, true), 8, 12, 0)}
+							/></svg
+						>phases, ○ neutral
+					</li>
+				{/if}
+				{#if valuesOn && arrows?.edge.length}
+					<li>
+						<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+							><path class="wire" d="M-2 0H26" /><path
+								class="flow"
+								d="M9.6 -3.2L14.4 0L9.6 3.2"
+							/></svg
+						>active power flow
+					</li>
+				{/if}
+				{#each legendGlyphs as [kind, glyph, label], i (i)}
+					<li>
+						<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+							><path
+								d={glyphPath(glyph!, 8, kind === 'transformer' || kind === 'switch' ? 12 : 2, 0)}
+							/>{#if kind === 'transformer' || kind === 'switch'}<path
+									class="wire"
+									d="M-2 0H0.8M23.2 0H26"
+								/>{:else}<path class="wire" d="M-2 -10V0H2" />{/if}</svg
+						>{label}
+					</li>
+				{/each}
+			</ul>
+		</details>
 	{/if}
 	{#if status}<p class="status" role="status">{status}</p>{/if}
 </div>
@@ -1230,24 +1484,40 @@
 		border: 1px solid var(--line);
 		border-radius: 3px;
 	}
-	.legend.symbols {
-		flex-wrap: wrap;
-		max-width: min(560px, calc(100% - 24px));
-		margin: 0;
-		padding: 2px 8px;
+	.key {
+		position: absolute;
+		padding: 4px 8px;
+		font: 10px var(--font-mono);
+		color: var(--text-secondary);
+		background: var(--paper);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		box-shadow: var(--elev-1);
+	}
+	.key summary {
+		cursor: pointer;
+		color: var(--ink);
+	}
+	.symbols {
+		margin: 4px 0 0;
+		padding: 0;
 		list-style: none;
 	}
-	.legend.symbols li {
+	.symbols li {
 		display: flex;
-		gap: 2px;
+		gap: 4px;
 		align-items: center;
 	}
-	.legend.symbols path {
+	.symbols path {
 		fill: none;
 		stroke: var(--ink);
 		stroke-width: 1.1;
 	}
-	.legend.symbols path.wire {
+	.symbols path.flow {
+		stroke: var(--accent);
+		stroke-width: 1.5;
+	}
+	.symbols path.wire {
 		stroke: var(--text-secondary);
 	}
 	.legend i {

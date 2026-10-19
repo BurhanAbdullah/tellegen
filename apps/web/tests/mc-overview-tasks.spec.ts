@@ -98,6 +98,7 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	await expect(legend).toBeVisible();
 	await expect(legend.getByRole('listitem')).toHaveText([
 		'phases, ○ neutral',
+		'active power flow',
 		'source',
 		'load',
 		'shunt'
@@ -131,6 +132,16 @@ test('the schematic can be walked bus by bus from the keyboard', async ({ page }
 	await expect(spoken).toHaveText(/^src: /);
 	await page.keyboard.press('Escape');
 	await expect(spoken).toHaveText('');
+});
+
+test('hovering a table row highlights the bus in the voltage profile', async ({ page }) => {
+	const overview = await solvedOverview(page);
+	await overview.locator('.issues button').first().click();
+	await overview.getByText('Results table').click();
+	await overview.getByRole('row').filter({ hasText: /^src/ }).first().hover();
+	await expect(overview.locator('circle.point.hovered').first()).toBeAttached();
+	await overview.getByRole('heading', { name: 'Phases at lb' }).hover();
+	await expect(overview.locator('circle.point.hovered')).toHaveCount(0);
 });
 
 test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {

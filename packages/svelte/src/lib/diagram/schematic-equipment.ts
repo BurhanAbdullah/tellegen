@@ -202,6 +202,10 @@ export interface EquipmentSymbols {
 	ticks: { sources: Float32Array; targets: Float32Array; edge: Int32Array };
 	/** Per edge: `x, y` where its symbol or conductor marks sit (NaN when not drawn). */
 	anchors: Float32Array;
+	/** Per edge: unit direction of the segment carrying the anchor, pointing from the edge's
+	 * `from` bus towards its `to` bus, and the free length upstream of the anchor on it. */
+	flowDir: Float32Array;
+	room: Float32Array;
 }
 
 function medianEdgeLength(geometry: SchematicGeometry): number {
@@ -237,6 +241,9 @@ export function schematicEquipment(
 	const items: EquipmentItem[] = [];
 	const kinds = new Set<EquipmentItem['kind']>();
 	const anchors = new Float32Array(graph.edges.length * 2).fill(NaN);
+	const flowDir = new Float32Array(graph.edges.length * 2);
+	const room = new Float32Array(graph.edges.length);
+	const busIndex = new Map(graph.buses.map((b, i) => [b.id.toLowerCase(), i]));
 	const stroke = (
 		glyph: Glyph,
 		x: number,
@@ -280,20 +287,37 @@ export function schematicEquipment(
 			geometry.targets[s * 3 + 1]
 		];
 		const len = Math.hypot(x1 - x0, y1 - y0);
+		if (!(len > 0)) return;
+		const cos = (x1 - x0) / len;
+		const sin = (y1 - y0) / len;
+		// Routes run either way between the ends; orient by which end the route starts nearer.
+		const from = busIndex.get(edge.from.toLowerCase()) ?? -1;
+		const to = busIndex.get(edge.to.toLowerCase()) ?? -1;
+		const first = list[0];
+		const near = (i: number) =>
+			i < 0
+				? Infinity
+				: Math.hypot(
+						geometry.sources[first * 3] - geometry.positions[i * 3],
+						geometry.sources[first * 3 + 1] - geometry.positions[i * 3 + 1]
+					);
+		const forward = near(from) <= near(to) ? 1 : -1;
+		flowDir[k * 2] = cos * forward;
+		flowDir[k * 2 + 1] = sin * forward;
 		if (len < 2.4 * half) {
 			// Too short for a symbol: anchor at the middle so the branch can still be found.
 			anchors[k * 2] = (x0 + x1) / 2;
 			anchors[k * 2 + 1] = (y0 + y1) / 2;
+			room[k] = len / 2;
 			return;
 		}
-		const cos = (x1 - x0) / len;
-		const sin = (y1 - y0) / len;
 		// From the child end: centre 2.5 half-widths back, clamped to the segment's middle.
 		const along = childEnd ? Math.max(len / 2, len - 2.5 * half) : len / 2;
 		const x = x0 + cos * along;
 		const y = y0 + sin * along;
 		anchors[k * 2] = x;
 		anchors[k * 2 + 1] = y;
+		room[k] = along - half;
 		if (!glyph) {
 			const { phases, neutral } = conductorSet(graph, k);
 			if (phases + (neutral ? 1 : 0) > 0)
@@ -360,7 +384,9 @@ export function schematicEquipment(
 			targets: Float32Array.from(tick.dst),
 			edge: Int32Array.from(tick.edge)
 		},
-		anchors
+		anchors,
+		flowDir,
+		room
 	};
 }
 
@@ -404,4 +430,78 @@ export function glyphPath(glyph: Glyph, scale: number, dx = 0, dy = 0): string {
 			line.map(([x, y], i) => `${i ? 'L' : 'M'}${f(dx + x * scale)} ${f(dy + y * scale)}`).join('')
 		)
 		.join(' ');
+}
+
+/** Power-flow chevrons: one per closed branch with a result, just upstream of its symbol or marks
+ * on the same segment, pointing the way active power flows (from the `from` end when the power
+ * into the branch there is positive). Branches carrying under `minWatts` get none. */
+export function flowArrows(
+	symbols: EquipmentSymbols,
+	ends: ({ p: number } | null)[][],
+	closed: boolean[],
+	minWatts = 1
+): { sources: Float32Array; targets: Float32Array; edge: Int32Array } {
+	const src: number[] = [];
+	const dst: number[] = [];
+	const owner: number[] = [];
+	const u = symbols.unit;
+	const chevron: [number, number][] = [
+		[-0.3, -0.4],
+		[0.3, 0],
+		[-0.3, 0.4]
+	];
+	ends.forEach(([a, b], k) => {
+		const ax = symbols.anchors[k * 2];
+		if (!closed[k] || !Number.isFinite(ax)) return;
+		const p = a ? a.p : b ? -b.p : null;
+		if (p === null || !(Math.abs(p) >= minWatts)) return;
+		const sign = p > 0 ? 1 : -1;
+		const cos = symbols.flowDir[k * 2] * sign;
+		const sin = symbols.flowDir[k * 2 + 1] * sign;
+		// Upstream along the segment's own direction, whichever way the power goes.
+		const back = Math.min(2 * INLINE_HALF * u, symbols.room[k] * 0.8);
+		const x = ax - symbols.flowDir[k * 2] * back;
+		const y = symbols.anchors[k * 2 + 1] - symbols.flowDir[k * 2 + 1] * back;
+		for (let i = 1; i < chevron.length; i++) {
+			const [px, py] = chevron[i - 1];
+			const [qx, qy] = chevron[i];
+			src.push(x + u * (px * cos - py * sin), y + u * (px * sin + py * cos), 0);
+			dst.push(x + u * (qx * cos - qy * sin), y + u * (qx * sin + qy * cos), 0);
+			owner.push(k);
+		}
+	});
+	return {
+		sources: Float32Array.from(src),
+		targets: Float32Array.from(dst),
+		edge: Int32Array.from(owner)
+	};
+}
+
+/** Complex power into each element (loads, generators, IBRs, shunts) by element id, and for
+ * sources the power they draw (the negative of what they inject), so every attachment reads with
+ * the same convention: positive is consumption. */
+export function elementPowers(result: {
+	element_ports: { element: string; power_into_element: { re: number; im: number } }[];
+	source_reactions: { source: string; power_into_network: { re: number; im: number } }[];
+}): Map<string, { p: number; q: number }> {
+	const out = new Map<string, { p: number; q: number }>();
+	const add = (id: string, p: number, q: number) => {
+		const row = out.get(id) ?? { p: 0, q: 0 };
+		row.p += p;
+		row.q += q;
+		out.set(id, row);
+	};
+	for (const port of result.element_ports)
+		add(port.element, port.power_into_element.re, port.power_into_element.im);
+	for (const r of result.source_reactions)
+		add(r.source, -r.power_into_network.re, -r.power_into_network.im);
+	return out;
+}
+
+/** `12.3 kW 4.1 kvar` for a power in W and var. */
+export function formatPower(p: number, q: number): string {
+	const scale = Math.max(Math.abs(p), Math.abs(q));
+	const [k, unit] = scale >= 1e6 ? [1e6, 'M'] : scale >= 1e3 ? [1e3, 'k'] : [1, ''];
+	const f = (v: number) => (v / k).toFixed(Math.abs(v / k) >= 100 ? 0 : 1);
+	return `${f(p)} ${unit}W ${f(q)} ${unit}var`;
 }

@@ -28,7 +28,9 @@ equipment. The schematic draws transformer, switch (open or closed) and attachme
 symbols (load, generator, inverter-based resource, source, shunt) with a legend.
 Lines show their conductors at close zoom; buses are named with short ids; parts not
 energised from any source are drawn faint; and outside selections fly into view.
-The schematic can be walked bus by bus from the keyboard, with a spoken description. The schematic can be downloaded as a PowerIO
+The schematic can be walked bus by bus from the keyboard, with a spoken description.
+Solved P/Q and power-flow arrows show at close zoom, hover is linked across the
+schematic, profile and tables, and LV areas collapse to status boxes when zoomed out. The schematic can be downloaded as a PowerIO
 diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.

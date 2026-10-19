@@ -30,6 +30,10 @@ Closer in, each line carries its conductors across it: one slash per phase, and 
 
 The schematic can be walked from the keyboard. Focus it, then use Left to go to the feeding bus, Right to go onward, and Up and Down to move between buses fed from the same place, in drawing order. Home returns to the source, Enter selects the bus, and Escape stops. A ring and the bus name mark the cursor, the view follows it, and a screen reader hears where the bus sits, what feeds it, what is attached, and its worst voltage against the declared band. Shift with the arrow keys pans.
 
+Once the power flow is solved, the close-up schematic shows values. Each load, generator, inverter-based resource, source and shunt carries its P and Q beside its symbol: consumption for loads and shunts, output for the others. Each branch has an arrow showing which way active power flows. The symbol key in the lower left can be collapsed. Hovering a bus or branch highlights it in the schematic, the voltage profile and the results table together.
+
+Zoomed out, each LV area is drawn as a single box: the part of the network below a transformer that contains no further transformer. The box is outlined orange when a branch inside, or the transformer, is near its rating, and red when a voltage is outside its band or a branch is over its rating. Hover a box for its size and state; click it to zoom in, and it opens again.
+
 For a selected branch, a multi-wire view draws every conductor between the two buses' terminal rails, so a crossed terminal map shows as crossing wires, with grounded terminals, terminal attachments and each conductor's current. A transformer is drawn as a winding box with wires meeting it from each side: its windings couple magnetically, with no conductor continuity across them.
 
 Once a study is saved, the address bar records it with the selection and view (`?study=…&sel=bus:…&view=schematic`), and *Copy link* copies that address. The link reopens the study in a browser that holds it, saved there or imported from an export; it does not carry the data itself.

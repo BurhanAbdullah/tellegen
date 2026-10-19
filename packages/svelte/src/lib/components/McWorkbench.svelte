@@ -38,7 +38,9 @@
 		label = 'Multiconductor power flow',
 		onanalyse,
 		schematic = false,
-		onschematic
+		onschematic,
+		hovered = null,
+		onhover
 	}: {
 		/** The full operating point; `null` while it is being fetched. */
 		result: McPfResult | null;
@@ -55,6 +57,9 @@
 		/** Whether the case is shown as a schematic, and how to toggle it. */
 		schematic?: boolean;
 		onschematic?: (show: boolean) => void;
+		/** Bus or branch under the pointer in any linked view. */
+		hovered?: { kind: 'bus' | 'branch'; id: string } | null;
+		onhover?: (h: { kind: 'bus' | 'branch'; id: string } | null) => void;
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
@@ -106,6 +111,11 @@
 			: selectedEdge !== null
 				? (edgeIndex.get(selectedEdge) ?? -1)
 				: -1
+	);
+	const tableHovered = $derived(
+		hovered?.kind === tableKind
+			? ((tableKind === 'bus' ? busIndex : edgeIndex).get(hovered.id) ?? -1)
+			: -1
 	);
 	/** Search results show the bus voltage nearest a limit, or the branch loading. */
 	function searchHint(m: SearchMatch) {
@@ -399,6 +409,8 @@
 				onselectbus={(id) => {
 					if (id !== selectedBus) onselectbus(id);
 				}}
+				hoveredBus={hovered?.kind === 'bus' ? hovered.id : null}
+				onhoverbus={(id) => onhover?.(id === null ? null : { kind: 'bus', id })}
 			/>
 		{/if}
 
@@ -417,6 +429,16 @@
 						model={tables[tableKind]}
 						selected={tableSelected}
 						onselect={(i) => selectOnce(tableKind, i)}
+						hovered={tableHovered}
+						onhover={(i) =>
+							onhover?.(
+								i < 0
+									? null
+									: {
+											kind: tableKind,
+											id: tableKind === 'bus' ? graph.buses[i].id : graph.edges[i].id
+										}
+							)}
 					/>
 				{/key}
 			</details>

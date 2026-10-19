@@ -7,13 +7,18 @@
 		profile,
 		busIds,
 		selectedBus,
-		onselectbus
+		onselectbus,
+		hoveredBus = null,
+		onhoverbus
 	}: {
 		profile: VoltageProfile;
 		/** Bus ids in graph order, for labels and selection. */
 		busIds: string[];
 		selectedBus: string | null;
 		onselectbus: (id: string) => void;
+		/** Bus under the pointer in a linked view, and the pointer's own hover here. */
+		hoveredBus?: string | null;
+		onhoverbus?: (id: string | null) => void;
 	} = $props();
 
 	let showEnvelope = $state(true);
@@ -151,6 +156,7 @@
 							class="point"
 							class:bad
 							class:current={busIds[row.bus] === selectedBus}
+							class:hovered={busIds[row.bus] === hoveredBus}
 							cx={c.x(i)}
 							cy={c.y(p.volts)}
 							r={bad ? 3.6 : 2.6}
@@ -163,6 +169,8 @@
 								? ', violation'
 								: ''}"
 							onclick={() => onselectbus(busIds[row.bus])}
+							onpointerenter={() => onhoverbus?.(busIds[row.bus])}
+							onpointerleave={() => onhoverbus?.(null)}
 							onkeydown={(e) => move(e, g, k)}
 							><title>{busIds[row.bus]} · {p.pair.join('–')} · {fmt(p.volts)} V</title></circle
 						>
@@ -238,6 +246,10 @@
 	}
 	.point.current {
 		stroke-width: 2.4;
+	}
+	.point.hovered {
+		stroke: var(--accent);
+		stroke-width: 2;
 	}
 	.point:focus-visible {
 		outline: none;

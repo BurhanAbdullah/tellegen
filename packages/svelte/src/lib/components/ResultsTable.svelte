@@ -4,12 +4,17 @@
 	let {
 		model,
 		selected,
-		onselect
+		onselect,
+		hovered = -1,
+		onhover
 	}: {
 		model: TableModel;
 		/** Row index (network order) of the current selection, or −1. */
 		selected: number;
 		onselect: (index: number) => void;
+		/** Row under the pointer here or in a linked view (−1 for none). */
+		hovered?: number;
+		onhover?: (index: number) => void;
 	} = $props();
 
 	const ROW = 22;
@@ -123,9 +128,12 @@
 					role="row"
 					tabindex="-1"
 					aria-selected={i === selected}
+					class:hovered={i === hovered}
 					style:top="{(first + n) * ROW}px"
 					style:grid-template-columns={template}
 					onclick={() => onselect(i)}
+					onpointerenter={() => onhover?.(i)}
+					onpointerleave={() => onhover?.(-1)}
 				>
 					{#each model.columns as c (c.key)}
 						<span role="gridcell" class:num={c.numeric}>{format(row[c.key], c.digits)}</span>
@@ -226,6 +234,9 @@
 	}
 	.num {
 		text-align: right;
+	}
+	.row.hovered {
+		box-shadow: inset 3px 0 var(--line-strong, var(--text-secondary));
 	}
 	.row[aria-selected='true'] {
 		background: var(--accent-soft);

@@ -14,7 +14,13 @@ import {
 	energisation,
 	shortNames,
 	treeWalk,
-	describeBus
+	describeBus,
+	flowArrows,
+	elementPowers,
+	formatPower,
+	lvAreas,
+	areaState,
+	outsideAreas
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -241,5 +247,118 @@ describe('keyboard walk', () => {
 		expect(describeBus(graph, tree, walk, X)).toBe(
 			'X: not reached from a source. 0 branches onward'
 		);
+	});
+});
+
+describe('solved values on the drawing', () => {
+	const eq = schematicEquipment(graph, fromEngineLayout(layout));
+
+	it('points flow arrows the way active power goes, upstream of each symbol', () => {
+		// t1 carries power from S to M; l1 carries it back from L to M; the open switch none.
+		const a = flowArrows(
+			eq,
+			[
+				[{ p: 1000 }, null],
+				[{ p: -500 }, null],
+				[{ p: 10 }, null]
+			],
+			[true, true, false]
+		);
+		expect(Array.from(a.edge)).toEqual([0, 0, 1, 1]);
+		const tipDx = (s: number) => a.targets[s * 3] - a.sources[s * 3];
+		expect(tipDx(0)).toBeGreaterThan(0);
+		expect(tipDx(2)).toBeLessThan(0);
+		// The chevron sits before the transformer symbol, not on it.
+		expect(a.targets[0]).toBeLessThan(eq.anchors[0] - INLINE_HALF * eq.unit);
+		// A missing from end falls back to the to end with the sign flipped.
+		const back = flowArrows(
+			eq,
+			[
+				[null, { p: 1000 }],
+				[null, null],
+				[null, null]
+			],
+			[true, true, true]
+		);
+		expect(back.targets[0] - back.sources[0]).toBeLessThan(0);
+	});
+
+	it('sums element powers and reads sources as consumption', () => {
+		const powers = elementPowers({
+			element_ports: [
+				{ element: 'ld1', power_into_element: { re: 100, im: 10 } },
+				{ element: 'ld1', power_into_element: { re: 50, im: 5 } }
+			],
+			source_reactions: [{ source: 'grid', power_into_network: { re: 160, im: 20 } }]
+		});
+		expect(powers.get('ld1')).toEqual({ p: 150, q: 15 });
+		expect(powers.get('grid')).toEqual({ p: -160, q: -20 });
+		expect(formatPower(15_000, 5_000)).toBe('15.0 kW 5.0 kvar');
+		expect(formatPower(2.5e6, -1e5)).toBe('2.5 MW -0.1 Mvar');
+		expect(formatPower(160, 20)).toBe('160 W 20.0 var');
+	});
+});
+
+describe('LV areas', () => {
+	// src —t0→ mv —l→ mv2; mv —t2→ a1 — a2 — a3; mv2 —t3→ b1 — b2 (too small to collapse).
+	const g: DistGraph = {
+		buses: ['src', 'mv', 'mv2', 'a1', 'a2', 'a3', 'b1', 'b2'].map((id) =>
+			bus(id, [], id === 'src')
+		),
+		edges: [
+			edge('transformer', 't0', 'src', 'mv'),
+			edge('line', 'm', 'mv', 'mv2'),
+			edge('transformer', 't2', 'mv', 'a1'),
+			edge('line', 'a12', 'a1', 'a2'),
+			edge('line', 'a23', 'a2', 'a3'),
+			edge('transformer', 't3', 'mv2', 'b1'),
+			edge('line', 'b12', 'b1', 'b2')
+		]
+	};
+	const found = lvAreas(g, displayTree(g));
+
+	it('collapses only innermost transformer subtrees of a useful size', () => {
+		expect(found.areas).toHaveLength(1);
+		const [area] = found.areas;
+		expect(g.edges[area.transformer].id).toBe('t2');
+		expect(area.buses.map((i) => g.buses[i].id).sort()).toEqual(['a1', 'a2', 'a3']);
+		expect(area.edges.map((k) => g.edges[k].id).sort()).toEqual(['a12', 'a23']);
+		expect(Array.from(found.edgeArea)).toEqual([-1, -1, -1, 0, 0, -1, -1]);
+	});
+
+	it('reports the worst state inside, including the feeding transformer', () => {
+		const pair = (volts: number) => ({
+			pair: ['a', 'n'] as [string, string],
+			volts,
+			min: 207,
+			max: 253
+		});
+		const snap = (volts: number, tLoading: number) => ({
+			kind: 'solved' as const,
+			label: '',
+			iterations: 1,
+			buses: g.buses.map((_, i) => ({ pairs: [pair(i === 4 ? volts : 230)], unbalance: null })),
+			branches: g.edges.map((_, k) => ({
+				ends: [null, null] as [null, null],
+				loading: k === 2 ? tLoading : 10,
+				basis: null
+			}))
+		});
+		const [area] = found.areas;
+		expect(areaState(area, null)).toBe('missing');
+		expect(areaState(area, snap(230, 50))).toBe('normal');
+		expect(areaState(area, snap(230, 95))).toBe('warning');
+		expect(areaState(area, snap(200, 50))).toBe('violation');
+	});
+
+	it('drops the inside segments from the collapsed drawing', () => {
+		const geometry = sourceLayout(
+			g,
+			g.buses.map((b, i) => ({ id: b.id, lon: i * 10, lat: 0 })),
+			false,
+			displayTree(g)
+		);
+		const outside = outsideAreas(geometry, found.edgeArea);
+		expect(Array.from(outside.segmentEdge)).toEqual([0, 1, 2, 5, 6]);
 	});
 });
