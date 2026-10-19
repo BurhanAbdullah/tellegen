@@ -330,7 +330,7 @@
 			<h4>Phases at {selectedBus}</h4>
 			{#if busSelection.pairs.length}
 				<div class="bars" role="list" aria-label="Pair voltages against declared limits">
-					{#each busSelection.pairs.map(pairBar) as bar (bar.pair.join('-'))}
+					{#each busSelection.pairs.map(pairBar) as bar, k (k)}
 						<div class="bar {bar.state}" role="listitem">
 							<span class="mono">{bar.pair.join('–')}</span>
 							<span class="track">
@@ -368,7 +368,7 @@
 						role="list"
 						aria-label={`${side ? 'To' : 'From'} end conductor currents`}
 					>
-						{#each end.bars as bar (bar.terminal)}
+						{#each end.bars as bar, k (k)}
 							<div class="bar" class:neutral={bar.neutral} role="listitem">
 								<span class="mono">{bar.terminal}</span>
 								<span class="track"><i class="fill" style:width="{bar.fill}%"></i></span>

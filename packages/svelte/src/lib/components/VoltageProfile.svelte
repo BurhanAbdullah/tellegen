@@ -117,14 +117,14 @@
 				{zone.reason} · {zone.rows[0].pairs.map((p) => p.pair.join('–')).join(' / ') || 'no pairs'}
 			</figcaption>
 			<svg viewBox="0 0 {W} {H}" role="group" aria-label="Volts versus branch steps, zone {z + 1}">
-				{#each c.ticks as v (v)}
+				{#each c.ticks as v, t (t)}
 					<line class="grid" x1={left} x2={W - right} y1={c.y(v)} y2={c.y(v)} />
 					<text x={left - 4} y={c.y(v) + 3} text-anchor="end">{fmt(v)}</text>
 				{/each}
 				{#if c.band}<polygon class="envelope" points={c.band}
 						><title>Min–max of all buses at the same depth and reference</title></polygon
 					>{/if}
-				{#each c.pairs as p (p.pair.join('-'))}
+				{#each c.pairs as p, k (k)}
 					{#if p.min !== null}<line
 							class="limit"
 							x1={left}
@@ -144,7 +144,7 @@
 					<polyline points={p.line} stroke={p.color} />
 				{/each}
 				{#each zone.rows as row, i (row.bus)}
-					{#each row.pairs as p, k (p.pair.join('-'))}
+					{#each row.pairs as p, k (k)}
 						{@const bad = pairState(p) === 'violation'}
 						{@const g = rowOffset(z) + i}
 						<circle

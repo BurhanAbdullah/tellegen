@@ -17,9 +17,9 @@
 		aria-label="Multi-wire view of {view.kind} {view.id}: {view.wires
 			.length} conductor segments between {view.buses[0].id} and {view.buses[1].id}"
 	>
-		{#each view.buses as bus (bus.id)}
+		{#each view.buses as bus, side (side)}
 			<text class="bus" x={bus.x} y="12" text-anchor="middle">{bus.id}</text>
-			{#each bus.terminals as t (t.name)}
+			{#each bus.terminals as t, r (r)}
 				<g>
 					{#if t.attachments.length}<title>{t.name}: {t.attachments.join(', ')}</title>{/if}
 					<line

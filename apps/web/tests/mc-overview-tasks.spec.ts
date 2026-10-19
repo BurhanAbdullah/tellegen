@@ -213,3 +213,30 @@ test('a selected line shows every conductor in the multi-wire view', async ({ pa
 		overview.getByRole('img', { name: /line l1: 4 conductor segments between src and lb/ })
 	).toBeVisible();
 });
+
+test('a flat voltage profile and a case without limits do not break the overview', async ({
+	page
+}) => {
+	// Regression: the shipped example declares no bus voltage limits and its source bus is balanced, so the
+	// profile's axis ticks were equal and a value-keyed list threw `each_key_duplicate` (a 500 page).
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await page.locator('input[type=file]').setInputFiles({
+		name: 'four-wire.bmopf.json',
+		mimeType: 'application/json',
+		buffer: await readFile(new URL('../static/examples/four-wire.bmopf.json', import.meta.url))
+	});
+	const solve = page.getByRole('button', { name: 'Solve AC power flow', exact: true });
+	await expect(solve).toBeEnabled({ timeout: 60_000 });
+	await solve.click();
+	const overview = page.getByRole('region', { name: 'Operating point overview' });
+	await expect(overview.getByRole('heading', { name: /^Issues/ })).toBeVisible({ timeout: 60_000 });
+	for (const id of ['src', 'lb', 'l1']) {
+		await overview.getByRole('combobox', { name: 'Find a bus or branch' }).fill(id);
+		await page.keyboard.press('Enter');
+		await expect(overview.getByRole('heading', { name: 'Voltage profile' })).toBeVisible();
+	}
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
+	await expect(page.getByText('Internal Error')).toHaveCount(0);
+});
