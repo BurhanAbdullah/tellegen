@@ -1,4 +1,4 @@
-/** Engineering diagram workbench logic, ported from the docs/drafts/diagram-projection POC (#177).
+/** Engineering diagram workbench logic, ported from the diagram-projection prototype in PR #177.
  * Pure and renderer-independent: components and the deck.gl canvas build on these. */
 export * from './snapshot.js';
 export * from './summary.js';
