@@ -18,9 +18,10 @@ import {
 	flowArrows,
 	elementPowers,
 	formatPower,
-	lvAreas,
-	areaState,
-	outsideAreas
+	galvanicZones,
+	zoneState,
+	zoneOutline,
+	zoneHull
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -299,14 +300,15 @@ describe('solved values on the drawing', () => {
 	});
 });
 
-describe('LV areas', () => {
-	// src —t0→ mv —l→ mv2; mv —t2→ a1 — a2 — a3; mv2 —t3→ b1 — b2 (too small to collapse).
+describe('galvanic zones', () => {
+	// src —t0→ mv —l→ mv2; mv —t2→ a1 — a2 — a3; mv2 —t3→ b1 — b2.
 	const g: DistGraph = {
-		buses: ['src', 'mv', 'mv2', 'a1', 'a2', 'a3', 'b1', 'b2'].map((id) =>
+		buses: ['src', 'hv', 'mv', 'mv2', 'a1', 'a2', 'a3', 'b1', 'b2'].map((id) =>
 			bus(id, [], id === 'src')
 		),
 		edges: [
-			edge('transformer', 't0', 'src', 'mv'),
+			edge('line', 's', 'src', 'hv'),
+			edge('transformer', 't0', 'hv', 'mv'),
 			edge('line', 'm', 'mv', 'mv2'),
 			edge('transformer', 't2', 'mv', 'a1'),
 			edge('line', 'a12', 'a1', 'a2'),
@@ -315,18 +317,25 @@ describe('LV areas', () => {
 			edge('line', 'b12', 'b1', 'b2')
 		]
 	};
-	const found = lvAreas(g, displayTree(g));
+	const tree = displayTree(g);
+	const found = galvanicZones(g, tree);
+	const ids = (z: { buses: number[] }) => z.buses.map((i) => g.buses[i].id);
 
-	it('collapses only innermost transformer subtrees of a useful size', () => {
-		expect(found.areas).toHaveLength(1);
-		const [area] = found.areas;
-		expect(g.edges[area.transformer].id).toBe('t2');
-		expect(area.buses.map((i) => g.buses[i].id).sort()).toEqual(['a1', 'a2', 'a3']);
-		expect(area.edges.map((k) => g.edges[k].id).sort()).toEqual(['a12', 'a23']);
-		expect(Array.from(found.edgeArea)).toEqual([-1, -1, -1, 0, 0, -1, -1]);
+	it('splits the network at transformers and names each zone’s feeding transformer', () => {
+		expect(found.zones.map(ids)).toEqual([
+			['src', 'hv'],
+			['mv', 'mv2'],
+			['a1', 'a2', 'a3'],
+			['b1', 'b2']
+		]);
+		expect(found.zones.map((z) => z.hasSource)).toEqual([true, false, false, false]);
+		expect(found.zones.map((z) => g.edges[z.transformers[0]].id)).toEqual(['t0', 't0', 't2', 't3']);
+		// The MV zone has three transformer windings in it, fed through t0.
+		expect(found.zones[1].transformers.map((k) => g.edges[k].id)).toEqual(['t0', 't2', 't3']);
+		expect(found.zones[2].edges.map((k) => g.edges[k].id)).toEqual(['a12', 'a23']);
 	});
 
-	it('reports the worst state inside, including the feeding transformer', () => {
+	it('reports the worst state inside, including the transformers', () => {
 		const pair = (volts: number) => ({
 			pair: ['a', 'n'] as [string, string],
 			volts,
@@ -337,28 +346,47 @@ describe('LV areas', () => {
 			kind: 'solved' as const,
 			label: '',
 			iterations: 1,
-			buses: g.buses.map((_, i) => ({ pairs: [pair(i === 4 ? volts : 230)], unbalance: null })),
+			buses: g.buses.map((_, i) => ({ pairs: [pair(i === 5 ? volts : 230)], unbalance: null })),
 			branches: g.edges.map((_, k) => ({
 				ends: [null, null] as [null, null],
-				loading: k === 2 ? tLoading : 10,
+				loading: k === 3 ? tLoading : 10,
 				basis: null
 			}))
 		});
-		const [area] = found.areas;
-		expect(areaState(area, null)).toBe('missing');
-		expect(areaState(area, snap(230, 50))).toBe('normal');
-		expect(areaState(area, snap(230, 95))).toBe('warning');
-		expect(areaState(area, snap(200, 50))).toBe('violation');
+		const a = found.zones[2];
+		expect(zoneState(a, null)).toBe('missing');
+		expect(zoneState(a, snap(230, 50))).toBe('normal');
+		expect(zoneState(a, snap(230, 95))).toBe('warning');
+		expect(zoneState(a, snap(200, 50))).toBe('violation');
 	});
 
-	it('drops the inside segments from the collapsed drawing', () => {
-		const geometry = sourceLayout(
-			g,
-			g.buses.map((b, i) => ({ id: b.id, lon: i * 10, lat: 0 })),
-			false,
-			displayTree(g)
+	it('outlines a zone as a staircase over its drawing columns', () => {
+		// Two columns at x = 100 (rows 0–20) and x = 200 (row 40, with one symbol slot below).
+		const positions = [100, 0, 0, 100, 20, 0, 200, 40, 0];
+		const outline = zoneOutline(
+			{ buses: [0, 1, 2], edges: [], transformers: [], hasSource: false },
+			positions,
+			[0, 0, 10],
+			{
+				dx: 100,
+				pad: 5
+			}
 		);
-		const outside = outsideAreas(geometry, found.edgeArea);
-		expect(Array.from(outside.segmentEdge)).toEqual([0, 1, 2, 5, 6]);
+		expect(outline).toEqual([
+			[85, -5],
+			[150, -5],
+			[150, 35],
+			[240, 35],
+			[240, 55],
+			[150, 55],
+			[150, 25],
+			[85, 25]
+		]);
+		expect(
+			zoneHull(
+				{ buses: [0, 1, 2, 3], edges: [], transformers: [], hasSource: false },
+				[0, 0, 0, 10, 0, 0, 10, 10, 0, 5, 5, 0]
+			)
+		).toHaveLength(3);
 	});
 });

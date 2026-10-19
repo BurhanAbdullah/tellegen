@@ -45,12 +45,12 @@
 		describeBus,
 		treeWalk,
 		type WalkKey,
-		areaBox,
-		areaState,
-		lvAreas,
-		outsideAreas,
-		type AreaState,
-		type LvArea,
+		galvanicZones,
+		zoneHull,
+		zoneOutline,
+		zoneState,
+		type GalvanicZone,
+		type ZoneState,
 		conductorSet,
 		conductorTicks,
 		elementPowers,
@@ -131,44 +131,58 @@
 	/** Symbols draw once they are legible (a glyph about 6 px across); below that the plain lines
 	 * and their kind colours carry the topology. */
 	const symbolsOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 3);
-	/** LV areas (innermost transformer subtrees). Zoomed out, each collapses to one box showing
-	 * its worst state; zooming in, or clicking a box, opens it again. */
-	const areas = $derived(lvAreas(graph, tree));
-	const collapsed = $derived(!!shown && !symbolsOn && areas.areas.length > 0);
-	const outside = $derived(outsideAreas(geometry, areas.edgeArea));
-	const visibleBuses = $derived(
-		collapsed
-			? graph.buses.flatMap((_, i) => (areas.busArea[i] < 0 ? [i] : []))
-			: graph.buses.map((_, i) => i)
-	);
-	const areaStates = $derived(areas.areas.map((a) => areaState(a, snapshot)));
-	/** The branch geometry as drawn: interrupted under symbols when they show, without the
-	 * insides of collapsed areas when zoomed out. */
-	const drawn = $derived<SchematicGeometry>(
-		symbolsOn && equipment ? equipment.cut : collapsed ? outside : geometry
-	);
-	const AREA_COLOURS: Record<AreaState, [RGBA, RGBA]> = {
+	/** The branch geometry as drawn, interrupted under symbols when they show. */
+	const drawn = $derived<SchematicGeometry>(symbolsOn && equipment ? equipment.cut : geometry);
+	/** Galvanic zones: buses joined without passing a transformer. Those without a source (the LV
+	 * networks of a feeder) get a translucent outline tinted by their worst state. */
+	const zones = $derived(galvanicZones(graph, tree));
+	const zoneStates = $derived(zones.zones.map((z) => zoneState(z, snapshot)));
+	const zoneShapes = $derived.by(() => {
+		if (!shown) return [];
+		const g = shown;
+		const engine = !!g.attachmentGap;
+		// Column spacing of the engine layout: any tree edge spans exactly one column.
+		let dx = 0;
+		for (let i = 0; i < graph.buses.length && !dx; i++)
+			if (tree.parent[i] !== i) dx = Math.abs(g.positions[i * 3] - g.positions[tree.parent[i] * 3]);
+		const gap = g.attachmentGap ?? 0;
+		const below = graph.buses.map((b) => {
+			const kinds = new Set(
+				Object.values(b.terminal_attachments ?? {}).flatMap((list) => list.map((a) => a.kind))
+			);
+			return kinds.size * gap;
+		});
+		return zones.zones.flatMap((zone, z) => {
+			if (zone.hasSource || zone.buses.length < 2) return [];
+			const polygon =
+				engine && dx > 0
+					? zoneOutline(zone, g.positions, below, { dx, pad: gap * 0.5 })
+					: zoneHull(zone, g.positions);
+			return polygon.length >= 3 ? [{ z, polygon }] : [];
+		});
+	});
+	const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {
 		missing: [
-			[120, 114, 102, 28],
-			[120, 114, 102, 160]
+			[70, 110, 150, 16],
+			[70, 110, 150, 90]
 		],
 		normal: [
-			[120, 114, 102, 28],
-			[120, 114, 102, 160]
+			[70, 110, 150, 16],
+			[70, 110, 150, 90]
 		],
 		warning: [
-			[178, 94, 0, 50],
-			[178, 94, 0, 220]
+			[178, 94, 0, 30],
+			[178, 94, 0, 170]
 		],
 		violation: [
-			[184, 50, 42, 60],
-			[184, 50, 42, 230]
+			[184, 50, 42, 34],
+			[184, 50, 42, 190]
 		]
 	};
-	function areaLabel(a: number): string {
-		const area = areas.areas[a];
-		const t = graph.edges[area.transformer];
-		const state = areaStates[a];
+	function zoneLabel(z: number): string {
+		const zone = zones.zones[z];
+		const t = zone.transformers[0];
+		const state = zoneStates[z];
 		const verdict =
 			state === 'violation'
 				? 'a limit is violated'
@@ -177,7 +191,9 @@
 					: state === 'normal'
 						? 'within limits'
 						: 'no result';
-		return `Area below ${t.kind} ${t.id}: ${area.buses.length} buses, ${verdict}. Click to open.`;
+		const fed =
+			t === undefined ? 'Network' : `Network fed by ${graph.edges[t].kind} ${graph.edges[t].id}`;
+		return `${fed}: ${zone.buses.length} buses, ${verdict}`;
 	}
 	/** Conductor marks need a closer view than symbols; bus names closer still. */
 	const ticksOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 6);
@@ -461,12 +477,25 @@
 			}
 		};
 		const symbols = symbolsOn && equipment ? equipment : null;
-		const pad = equipment ? equipment.unit * 1.5 : 0;
 		const hoveredSegments: number[] = [];
 		if (hoveredEdges.size)
 			for (let s = 0; s < d.segmentEdge.length; s++)
 				if (hoveredEdges.has(d.segmentEdge[s])) hoveredSegments.push(s);
 		return [
+			// Zone outlines sit beneath everything; they pick only where nothing else is.
+			new modules.layers.PolygonLayer({
+				...common,
+				id: 'zones',
+				data: zoneShapes,
+				getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
+				getFillColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][0],
+				getLineColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][1],
+				getLineWidth: 1,
+				lineWidthUnits: 'pixels',
+				lineWidthMinPixels: 1,
+				pickable: true,
+				updateTriggers: { getFillColor: zoneStates, getLineColor: zoneStates }
+			}),
 			// Result colours are quiet for normal values; a faint underlay keeps the topology legible.
 			...(colour === 'none'
 				? []
@@ -591,7 +620,7 @@
 			new ScatterplotLayer({
 				...common,
 				id: `buses-${layout}`,
-				data: visibleBuses,
+				data: graph.buses.map((_, i) => i),
 				getPosition: (i: number) => [...point(i), 0],
 				getFillColor: (i: number) => busColours[i],
 				// Zoomed out, small dots keep dense chains from merging into bars.
@@ -619,31 +648,6 @@
 				lineWidthUnits: 'pixels',
 				getLineWidth: 2.5
 			}),
-			...(collapsed
-				? [
-						new modules.layers.PolygonLayer({
-							...common,
-							id: 'lv-areas',
-							data: areas.areas.map((area, a) => ({ a, box: areaBox(area, g.positions, pad) })),
-							getPolygon: (d: { box: [number, number, number, number] }) => {
-								const [x0, y0, x1, y1] = d.box;
-								return [
-									[x0, y0],
-									[x1, y0],
-									[x1, y1],
-									[x0, y1]
-								];
-							},
-							getFillColor: (d: { a: number }) => AREA_COLOURS[areaStates[d.a]][0],
-							getLineColor: (d: { a: number }) => AREA_COLOURS[areaStates[d.a]][1],
-							getLineWidth: 1,
-							lineWidthUnits: 'pixels',
-							lineWidthMinPixels: 1,
-							pickable: true,
-							updateTriggers: { getFillColor: areaStates, getLineColor: areaStates }
-						})
-					]
-				: []),
 			// Hovered in a linked view (profile, table) or here: a soft halo.
 			new ScatterplotLayer({
 				...common,
@@ -829,10 +833,8 @@
 						// already-selected item changes nothing.
 						pickedHere = true;
 						setTimeout(() => (pickedHere = false));
-						if (info.layer.id === 'lv-areas') {
-							// Open the area: zoom to it, far enough in for its symbols.
-							const { a } = info.object as { a: number };
-							openArea(areas.areas[a]);
+						if (info.layer.id === 'zones') {
+							fitZone(zones.zones[(info.object as { z: number }).z]);
 							return;
 						}
 						if (info.layer.id.startsWith('buses-'))
@@ -846,8 +848,8 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						info.index >= 0 && info.layer?.id === 'lv-areas'
-							? areaLabel((info.object as { a: number }).a)
+						info.index >= 0 && info.layer?.id === 'zones'
+							? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
 							: info.index >= 0 && info.layer?.id.startsWith('buses-')
 								? `${graph.buses[info.object as number].id}`
 								: info.index >= 0 && info.layer?.id.startsWith('branches-')
@@ -943,12 +945,15 @@
 		});
 	});
 
-	function openArea(area: LvArea) {
-		const pad = (equipment?.unit ?? 1) * 1.5;
-		const [x0, y0, x1, y1] = areaBox(area, geometry.positions, pad);
-		const fit = fitCamera({ ...geometry, bounds: [x0, y0, x1, y1] });
-		const legible = equipment ? Math.log2(8 / equipment.unit) : fit.zoom;
-		setCamera({ target: fit.target, zoom: Math.max(fit.zoom, legible) }, true);
+	/** Fit the view to a zone. */
+	function fitZone(zone: GalvanicZone) {
+		let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+		for (const i of zone.buses) {
+			const [x, y] = [geometry.positions[i * 3], geometry.positions[i * 3 + 1]];
+			[x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
+		}
+		const pad = (equipment?.unit ?? 1) * 3;
+		setCamera(fitCamera({ ...geometry, bounds: [x0 - pad, y0 - pad, x1 + pad, y1 + pad] }), true);
 	}
 
 	/** Centre `p` in the uncovered view when it is outside it or drawn too small to read. */

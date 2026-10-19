@@ -20,4 +20,4 @@ export * from './schematic-equipment.js';
 export * from './energisation.js';
 export * from './short-names.js';
 export * from './tree-walk.js';
-export * from './lv-areas.js';
+export * from './galvanic-zones.js';
