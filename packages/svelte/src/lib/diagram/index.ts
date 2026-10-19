@@ -19,3 +19,4 @@ export * from './multi-wire.js';
 export * from './schematic-equipment.js';
 export * from './energisation.js';
 export * from './short-names.js';
+export * from './tree-walk.js';

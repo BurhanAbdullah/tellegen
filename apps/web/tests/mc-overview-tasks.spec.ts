@@ -112,6 +112,27 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	await expect(legend).toBeVisible();
 });
 
+test('the schematic can be walked bus by bus from the keyboard', async ({ page }) => {
+	const overview = await solvedOverview(page);
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
+	await expect(page.getByRole('list', { name: 'Symbols' })).toBeVisible();
+	await schematic.focus();
+	const spoken = schematic.locator('[aria-live]');
+	await page.keyboard.press('ArrowRight');
+	await expect(spoken).toHaveText(/^src: source bus\. 1 branch onward\. 1 source, 1 shunt/);
+	await page.keyboard.press('ArrowRight');
+	await expect(spoken).toHaveText(
+		/^lb: 1 step from src, fed by line l1\. 0 branches onward\. 3 loads\. Worst voltage c–n 203\.4 V, outside 207\.0 V to 253\.0 V/
+	);
+	await page.keyboard.press('Enter');
+	await expect(overview.getByRole('heading', { name: 'Phases at lb' })).toBeVisible();
+	await page.keyboard.press('ArrowLeft');
+	await expect(spoken).toHaveText(/^src: /);
+	await page.keyboard.press('Escape');
+	await expect(spoken).toHaveText('');
+});
+
 test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {
 	const overview = await solvedOverview(page);
 	await overview.locator('.issues button').first().click();

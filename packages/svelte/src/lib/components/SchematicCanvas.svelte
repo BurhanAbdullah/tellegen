@@ -41,6 +41,10 @@
 		worstBand,
 		attachmentGlyph,
 		ATTACHMENT_NAMES,
+		bandPosition,
+		describeBus,
+		treeWalk,
+		type WalkKey,
 		conductorSet,
 		conductorTicks,
 		energisation,
@@ -125,6 +129,38 @@
 	const DEAD: RGBA = [196, 191, 182, 110];
 	const live = $derived(energisation(graph));
 	const names = $derived(shortNames(graph.buses.map((b) => b.id)));
+	/** Keyboard cursor: the bus the arrow keys walk from, distinct from the selection. */
+	let cursor = $state(-1);
+	let announcement = $state('');
+	const walk = $derived(treeWalk(tree, geometry.positions));
+	function voltageNote(i: number): string | null {
+		const pairs = snapshot?.buses[i]?.pairs ?? [];
+		if (!pairs.length) return null;
+		const worst = pairs.reduce((a, b) =>
+			Math.abs(bandPosition(b) ?? 0) > Math.abs(bandPosition(a) ?? 0) ? b : a
+		);
+		const t = bandPosition(worst);
+		const v = (x: number) => (x >= 1000 ? `${(x / 1000).toFixed(3)} kV` : `${x.toFixed(1)} V`);
+		const band =
+			worst.min !== null && worst.max !== null
+				? `, ${t !== null && Math.abs(t) > 1 ? 'outside' : 'within'} ${v(worst.min)} to ${v(worst.max)}`
+				: '';
+		return `Worst voltage ${worst.pair.join('–')} ${v(worst.volts)}${band}`;
+	}
+	// A new graph invalidates the cursor's bus index.
+	$effect(() => {
+		void graph;
+		untrack(() => {
+			cursor = -1;
+			announcement = '';
+		});
+	});
+	function moveCursor(to: number) {
+		if (to < 0) return;
+		cursor = to;
+		announcement = describeBus(graph, tree, walk, to, voltageNote(to));
+		bringIntoView([geometry.positions[to * 3], geometry.positions[to * 3 + 1]]);
+	}
 	/** Per symbol stroke: ink, or faint when its bus or branch is not energised. */
 	function strokeColours(owner: Int32Array): Uint8Array {
 		const out = new Uint8Array(owner.length * 4);
@@ -434,6 +470,19 @@
 				lineWidthUnits: 'pixels',
 				getLineWidth: 2.5
 			}),
+			new ScatterplotLayer({
+				...common,
+				id: 'keyboard-cursor',
+				data: cursor >= 0 ? [cursor] : [],
+				getPosition: (i: number) => [...point(i), 0],
+				getLineColor: INK,
+				stroked: true,
+				filled: false,
+				getRadius: 11,
+				radiusUnits: 'pixels',
+				lineWidthUnits: 'pixels',
+				getLineWidth: 1.5
+			}),
 			new TextLayer({
 				...common,
 				id: 'labels',
@@ -508,6 +557,17 @@
 						});
 				}
 			}
+		}
+		if (cursor >= 0 && cursor !== selectedBus) {
+			const [x, y] = [g.positions[cursor * 3], g.positions[cursor * 3 + 1]];
+			candidates.push({
+				text: names[cursor],
+				state: 'normal',
+				priority: Infinity,
+				selected: true,
+				screen: screen(x, y),
+				position: [x, y]
+			});
 		}
 		// Close in, with no result values to show, name the buses (short names; hover for the full id).
 		if (namesOn && (colour === 'none' || !snapshot))
@@ -594,12 +654,23 @@
 
 	// Redraw when the data, colours or selection change; relabel when the camera moves.
 	$effect(() => {
-		void [geometry, drawn, edgeColours, busColours, selectedBus, selectedEdges, labels];
+		void [geometry, drawn, edgeColours, busColours, selectedBus, selectedEdges, labels, cursor];
 		if (!morph) render();
 	});
 	let labelFrame = 0;
 	$effect(() => {
-		void [camera, colour, snapshot, selectedBus, selectedEdges, geometry, width, height, namesOn];
+		void [
+			camera,
+			colour,
+			snapshot,
+			selectedBus,
+			selectedEdges,
+			geometry,
+			width,
+			height,
+			namesOn,
+			cursor
+		];
 		if (!deck) return;
 		cancelAnimationFrame(labelFrame);
 		labelFrame = requestAnimationFrame(updateLabels);
@@ -636,25 +707,30 @@
 				return;
 			}
 			const p = selectionPoint();
-			if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
-			const legible = equipment ? Math.log2(8 / equipment.unit) : camera.zoom;
-			const zoom = Math.min(8, Math.max(camera.zoom, legible));
-			const { left, right, top, bottom } = freeArea();
-			const scale = 2 ** camera.zoom;
-			const sx = (p[0] - camera.target[0]) * scale + width / 2;
-			const sy = (p[1] - camera.target[1]) * scale + height / 2;
-			const visible = sx > left && sx < width - right && sy > top && sy < height - bottom;
-			if (visible && zoom === camera.zoom) return;
-			// Centre it in the free area, not behind a docked panel.
-			const k = 2 ** zoom;
-			const target: [number, number, number] = [
-				p[0] - (left - right) / 2 / k,
-				p[1] - (top - bottom) / 2 / k,
-				0
-			];
-			setCamera({ target, zoom }, true);
+			if (p) bringIntoView(p);
 		});
 	});
+
+	/** Centre `p` in the uncovered view when it is outside it or drawn too small to read. */
+	function bringIntoView(p: [number, number]) {
+		if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
+		const legible = equipment ? Math.log2(8 / equipment.unit) : camera.zoom;
+		const zoom = Math.min(8, Math.max(camera.zoom, legible));
+		const { left, right, top, bottom } = freeArea();
+		const scale = 2 ** camera.zoom;
+		const sx = (p[0] - camera.target[0]) * scale + width / 2;
+		const sy = (p[1] - camera.target[1]) * scale + height / 2;
+		const visible = sx > left && sx < width - right && sy > top && sy < height - bottom;
+		if (visible && zoom === camera.zoom) return;
+		// Centre it in the free area, not behind a docked panel.
+		const k = 2 ** zoom;
+		const target: [number, number, number] = [
+			p[0] - (left - right) / 2 / k,
+			p[1] - (top - bottom) / 2 / k,
+			0
+		];
+		setCamera({ target, zoom }, true);
+	}
 
 	function setCamera(next: { target: [number, number, number]; zoom: number }, fly = false) {
 		camera = next;
@@ -762,6 +838,13 @@
 	function zoomBy(delta: number) {
 		setCamera({ target: camera.target, zoom: Math.max(-24, Math.min(8, camera.zoom + delta)) });
 	}
+	const WALK: Record<string, WalkKey> = {
+		ArrowLeft: 'parent',
+		ArrowRight: 'child',
+		ArrowUp: 'previous',
+		ArrowDown: 'next',
+		Home: 'root'
+	};
 	function onkeydown(e: KeyboardEvent) {
 		const step = 80 / 2 ** camera.zoom;
 		const pan: Record<string, [number, number]> = {
@@ -770,7 +853,23 @@
 			ArrowUp: [0, -step],
 			ArrowDown: [0, step]
 		};
-		if (pan[e.key]) {
+		if (WALK[e.key] && !e.shiftKey && shown && !morph) {
+			// Walk the tree; the first key starts at the selection, or at the first source.
+			e.preventDefault();
+			moveCursor(
+				cursor < 0
+					? selectedBus >= 0
+						? selectedBus
+						: walk.step(-1, 'root')
+					: walk.step(cursor, WALK[e.key])
+			);
+		} else if (e.key === 'Enter' && cursor >= 0) {
+			e.preventDefault();
+			onselectbus(graph.buses[cursor].id);
+		} else if (e.key === 'Escape' && cursor >= 0) {
+			cursor = -1;
+			announcement = '';
+		} else if (pan[e.key]) {
 			e.preventDefault();
 			setCamera({
 				target: [camera.target[0] + pan[e.key][0], camera.target[1] + pan[e.key][1], 0],
@@ -930,8 +1029,9 @@
 
 <div class="schematic-stage" bind:clientWidth={width} bind:clientHeight={height}>
 	<p id="schematic-keys" class="sr-only">
-		Arrow keys pan; plus and minus zoom; F fits the drawing. Select buses and branches from the
-		overview, search or table, or click them here.
+		Arrow keys walk the network from bus to bus: left to the feeding bus, right onward, up and down
+		between neighbours; Home returns to the source; Enter selects; Escape stops. Shift with the
+		arrow keys pans; plus and minus zoom; F fits the drawing.
 	</p>
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (The canvas supports keyboard panning and zooming; selection is also available from the overview.) -->
 	<div
@@ -943,6 +1043,7 @@
 		{onkeydown}
 	>
 		<canvas bind:this={canvas}></canvas>
+		<p class="sr-only" aria-live="polite">{announcement}</p>
 	</div>
 	<div
 		class="toolbar"

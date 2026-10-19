@@ -12,7 +12,9 @@ import {
 	conductorSet,
 	conductorTicks,
 	energisation,
-	shortNames
+	shortNames,
+	treeWalk,
+	describeBus
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -211,5 +213,33 @@ describe('short names', () => {
 		expect(names[3]).toBe('lv_extension_0…c11d5');
 		expect(names[1].length).toBeLessThan(ids[1].length);
 		for (const n of names.slice(1)) expect(n).toContain('…');
+	});
+});
+
+describe('keyboard walk', () => {
+	const tree = displayTree(graph);
+	const walk = treeWalk(tree, layout.positions, 2);
+	const [S, M, L, X] = [0, 1, 2, 3];
+
+	it('moves to the feeding bus, onward, and between drawn neighbours', () => {
+		expect(walk.step(M, 'parent')).toBe(S);
+		expect(walk.step(S, 'parent')).toBe(S);
+		expect(walk.step(S, 'child')).toBe(M);
+		expect(walk.step(M, 'child')).toBe(L);
+		expect(walk.step(L, 'child')).toBe(L);
+		// X is beyond the open switch, so it roots its own component below S.
+		expect(walk.step(S, 'next')).toBe(X);
+		expect(walk.step(X, 'previous')).toBe(S);
+		expect(walk.step(L, 'root')).toBe(S);
+		expect(walk.step(-1, 'child')).toBe(S);
+	});
+
+	it('describes where a bus sits and what hangs off it', () => {
+		expect(describeBus(graph, tree, walk, M, 'Worst voltage a–n 230.0 V')).toBe(
+			'M: 1 step from S, fed by transformer t1. 1 branch onward. 1 generator, 2 loads. Worst voltage a–n 230.0 V'
+		);
+		expect(describeBus(graph, tree, walk, X)).toBe(
+			'X: not reached from a source. 0 branches onward'
+		);
 	});
 });
