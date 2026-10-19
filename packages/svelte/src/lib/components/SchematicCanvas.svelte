@@ -1075,7 +1075,7 @@
 	// Build the renderer once the canvas exists.
 	$effect(() => {
 		if (!canvas || deck) return;
-		const target = canvas;
+		const element = canvas;
 		let cancelled = false;
 		Promise.all([import('@deck.gl/core'), import('@deck.gl/layers')])
 			.then(([core, layers]) => {
@@ -1083,7 +1083,7 @@
 				modules = { core, layers };
 				camera = fitCamera(geometry);
 				deck = new core.Deck({
-					canvas: target,
+					canvas: element,
 					width: '100%',
 					height: '100%',
 					views: new core.OrthographicView({ id: 'schematic', flipY: true }),
@@ -1152,7 +1152,12 @@
 											? itemLabel(info.object as EquipmentItem)
 											: null
 				});
-				void show('schematic', strategy);
+				// Open where the user just was: the case's own positions (the map they were looking at),
+				// when it has them. The schematic is laid out meanwhile, so switching to it is quick.
+				if (source) {
+					void show('source', strategy);
+					void target('schematic', strategy).catch(() => {});
+				} else void show('schematic', strategy);
 			})
 			.catch(
 				(e: unknown) =>
@@ -1600,15 +1605,15 @@
 		aria-label="Schematic"
 	>
 		<div class="segmented" role="group" aria-label="Layout">
-			<button aria-pressed={layout === 'schematic'} onclick={() => show('schematic', strategy)}
-				>Schematic</button
-			>
 			<button
 				aria-pressed={layout === 'source'}
 				disabled={!source}
 				title={source ? 'Positions from the case data' : 'This case has no source positions'}
 				onclick={() => show('source', strategy)}
 				>{mc.coordsKind === 'geographic' ? 'Geographic' : 'Source positions'}</button
+			>
+			<button aria-pressed={layout === 'schematic'} onclick={() => show('schematic', strategy)}
+				>Schematic</button
 			>
 		</div>
 		{#if layout === 'source' && mc.coordsKind === 'geographic'}

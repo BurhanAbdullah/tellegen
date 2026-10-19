@@ -71,14 +71,16 @@ test('7. switch to the schematic and between layouts, keeping the selection', as
 	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
 	await expect(schematic).toBeVisible();
 	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	// It opens where the user was: the case's own positions, then switches to the schematic.
+	const own = toolbar.getByRole('button', { name: /Geographic|Source positions/ });
+	await expect(own).toHaveAttribute('aria-pressed', 'true');
+	await toolbar.getByRole('button', { name: 'Schematic', exact: true }).click();
 	await toolbar.getByRole('combobox', { name: 'Schematic arrangement' }).selectOption('leaf-order');
 	await toolbar.getByRole('combobox', { name: 'Schematic arrangement' }).selectOption('tidy');
 	await toolbar.getByRole('combobox', { name: 'Colour by' }).selectOption('loading-heat');
 	await expect(page.getByText('≥ 100 %')).toBeVisible();
-	await toolbar.getByRole('button', { name: /Geographic|Source positions/ }).click();
-	await expect(
-		toolbar.getByRole('button', { name: /Geographic|Source positions/ })
-	).toHaveAttribute('aria-pressed', 'true');
+	await own.click();
+	await expect(own).toHaveAttribute('aria-pressed', 'true');
 	await expect(overview.getByRole('heading', { name: 'Phases at lb' })).toBeVisible();
 	for (const [name, extension] of [
 		['PNG', 'png'],
@@ -230,6 +232,7 @@ test('the schematic layout file loads back with the case as its diagram', async 
 	const overview = await solvedOverview(page);
 	await overview.getByRole('button', { name: 'Show schematic' }).click();
 	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	await toolbar.getByRole('button', { name: 'Schematic', exact: true }).click();
 	const download = page.waitForEvent('download');
 	await toolbar.getByRole('button', { name: 'Layout', exact: true }).click();
 	const file = await download;
