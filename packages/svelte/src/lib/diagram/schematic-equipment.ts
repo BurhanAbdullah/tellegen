@@ -132,6 +132,32 @@ export function attachmentGlyph(kind: DistAttachmentKind): Glyph {
 	}
 }
 
+/** Conductor marks across a line, centred on it: one slash per phase conductor and a slash ending
+ * in a small circle for the neutral (the IEC 60617 convention). */
+export function conductorTicks(phases: number, neutral: boolean): Glyph {
+	const n = phases + (neutral ? 1 : 0);
+	const out: Glyph = [];
+	for (let i = 0; i < n; i++) {
+		const x = (i - (n - 1) / 2) * 0.4;
+		out.push([
+			[x - 0.25, 0.45],
+			[x + 0.25, -0.45]
+		]);
+		if (neutral && i === n - 1) out.push(circle(x + 0.33, -0.6, 0.13, 0, 360, 8));
+	}
+	return out;
+}
+
+/** Phase conductors and whether a neutral runs, from a branch's conductor pairs: a conductor whose
+ * from terminal is the from bus's neutral is the neutral. */
+export function conductorSet(graph: DistGraph, k: number): { phases: number; neutral: boolean } {
+	const edge = graph.edges[k];
+	const from = graph.buses.find((b) => b.id.toLowerCase() === edge.from.toLowerCase());
+	const n = from?.neutral_terminal ?? null;
+	const neutral = n !== null && edge.conductors.some(([a]) => a === n);
+	return { phases: edge.conductors.length - (neutral ? 1 : 0), neutral };
+}
+
 /** Drawing order of attachment kinds below a bus. */
 export const ATTACHMENT_ORDER: DistAttachmentKind[] = [
 	'source',
@@ -170,6 +196,12 @@ export interface EquipmentSymbols {
 	unit: number;
 	/** Kinds drawn, for the legend. */
 	kinds: Set<EquipmentItem['kind']>;
+	/** Owner of each glyph stroke: an edge index, or `-(bus + 1)` for attachment strokes. */
+	owner: Int32Array;
+	/** Conductor marks on lines (drawn only when zoomed further in), with their edge per stroke. */
+	ticks: { sources: Float32Array; targets: Float32Array; edge: Int32Array };
+	/** Per edge: `x, y` where its symbol or conductor marks sit (NaN when not drawn). */
+	anchors: Float32Array;
 }
 
 function medianEdgeLength(geometry: SchematicGeometry): number {
@@ -200,15 +232,27 @@ export function schematicEquipment(
 	const unit = gap * 0.4;
 	const src: number[] = [];
 	const dst: number[] = [];
+	const own: number[] = [];
+	const tick = { src: [] as number[], dst: [] as number[], edge: [] as number[] };
 	const items: EquipmentItem[] = [];
 	const kinds = new Set<EquipmentItem['kind']>();
-	const stroke = (glyph: Glyph, x: number, y: number, cos: number, sin: number) => {
+	const anchors = new Float32Array(graph.edges.length * 2).fill(NaN);
+	const stroke = (
+		glyph: Glyph,
+		x: number,
+		y: number,
+		cos: number,
+		sin: number,
+		owner: number,
+		out = { src, dst, edge: own }
+	) => {
 		for (const line of glyph)
 			for (let i = 1; i < line.length; i++) {
 				const [ax, ay] = line[i - 1];
 				const [bx, by] = line[i];
-				src.push(x + unit * (ax * cos - ay * sin), y + unit * (ax * sin + ay * cos), 0);
-				dst.push(x + unit * (bx * cos - by * sin), y + unit * (bx * sin + by * cos), 0);
+				out.src.push(x + unit * (ax * cos - ay * sin), y + unit * (ax * sin + ay * cos), 0);
+				out.dst.push(x + unit * (bx * cos - by * sin), y + unit * (bx * sin + by * cos), 0);
+				out.edge.push(owner);
 			}
 	};
 
@@ -226,7 +270,7 @@ export function schematicEquipment(
 	graph.edges.forEach((edge, k) => {
 		const glyph = branchGlyph(edge.kind, edge.closed);
 		const list = segs.get(k);
-		if (!glyph || !list) return;
+		if (!list) return;
 		const childEnd = engine && geometry.role[k] === 0;
 		const s = childEnd ? list[list.length - 1] : list[list.length >> 1];
 		const [x0, y0, x1, y1] = [
@@ -236,14 +280,27 @@ export function schematicEquipment(
 			geometry.targets[s * 3 + 1]
 		];
 		const len = Math.hypot(x1 - x0, y1 - y0);
-		if (len < 2.4 * half) return;
+		if (len < 2.4 * half) {
+			// Too short for a symbol: anchor at the middle so the branch can still be found.
+			anchors[k * 2] = (x0 + x1) / 2;
+			anchors[k * 2 + 1] = (y0 + y1) / 2;
+			return;
+		}
 		const cos = (x1 - x0) / len;
 		const sin = (y1 - y0) / len;
 		// From the child end: centre 2.5 half-widths back, clamped to the segment's middle.
 		const along = childEnd ? Math.max(len / 2, len - 2.5 * half) : len / 2;
 		const x = x0 + cos * along;
 		const y = y0 + sin * along;
-		stroke(glyph, x, y, cos, sin);
+		anchors[k * 2] = x;
+		anchors[k * 2 + 1] = y;
+		if (!glyph) {
+			const { phases, neutral } = conductorSet(graph, k);
+			if (phases + (neutral ? 1 : 0) > 0)
+				stroke(conductorTicks(phases, neutral), x, y, cos, sin, k, tick);
+			return;
+		}
+		stroke(glyph, x, y, cos, sin, k);
 		cuts.set(s, [(along - half) / len, (along + half) / len]);
 		items.push({
 			kind: edge.kind as 'transformer' | 'switch',
@@ -267,14 +324,17 @@ export function schematicEquipment(
 		if (!byKind.size) return;
 		const [bx, by] = [geometry.positions[i * 3], geometry.positions[i * 3 + 1]];
 		const present = ATTACHMENT_ORDER.filter((kind) => byKind.has(kind));
+		const owner = -(i + 1);
 		// Riser from the bus down to the last slot.
 		src.push(bx, by, 0);
 		dst.push(bx, by + present.length * gap, 0);
+		own.push(owner);
 		present.forEach((kind, slot) => {
 			const y = by + (slot + 1) * gap;
 			src.push(bx, y, 0);
 			dst.push(bx + unit * 0.6, y, 0);
-			stroke(attachmentGlyph(kind), bx + unit * 0.6, y, 1, 0);
+			own.push(owner);
+			stroke(attachmentGlyph(kind), bx + unit * 0.6, y, 1, 0, owner);
 			items.push({
 				kind,
 				edge: -1,
@@ -293,7 +353,14 @@ export function schematicEquipment(
 		items,
 		cut: cuts.size ? interrupt(geometry, cuts) : geometry,
 		unit,
-		kinds
+		kinds,
+		owner: Int32Array.from(own),
+		ticks: {
+			sources: Float32Array.from(tick.src),
+			targets: Float32Array.from(tick.dst),
+			edge: Int32Array.from(tick.edge)
+		},
+		anchors
 	};
 }
 

@@ -8,7 +8,11 @@ import {
 	INLINE_HALF,
 	schematicEquipment,
 	sourceLayout,
-	displayTree
+	displayTree,
+	conductorSet,
+	conductorTicks,
+	energisation,
+	shortNames
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -143,5 +147,69 @@ describe('schematic equipment symbols', () => {
 		const symbols = schematicEquipment(graph, src);
 		expect(symbols.unit).toBeCloseTo(400 * 0.25 * 0.4);
 		expect(symbols.items.find((d) => d.kind === 'transformer')!.x).toBeCloseTo(-200);
+	});
+});
+
+describe('energisation', () => {
+	it('dims what no source reaches through closed branches', () => {
+		const g: DistGraph = {
+			buses: [...graph.buses, bus('Y')],
+			edges: [...graph.edges, edge('line', 'xy', 'X', 'Y')]
+		};
+		const e = energisation(g);
+		expect(Array.from(e.buses)).toEqual([1, 1, 1, 0, 0]);
+		// The open switch is live on its source side; the line beyond it is not.
+		expect(Array.from(e.edges)).toEqual([1, 1, 1, 0]);
+		expect(e.deadBuses).toBe(2);
+	});
+});
+
+describe('conductor marks', () => {
+	it('count phases and recognise the neutral from the bus', () => {
+		const g: DistGraph = {
+			buses: [
+				{ ...bus('A', [], true), neutral_terminal: 'n' },
+				{ ...bus('B'), neutral_terminal: 'n' }
+			],
+			edges: [
+				{
+					...edge('line', 'ab', 'A', 'B'),
+					conductors: [
+						['2', '2'],
+						['n', 'n']
+					]
+				}
+			]
+		};
+		expect(conductorSet(g, 0)).toEqual({ phases: 1, neutral: true });
+		// One slash per conductor, and the neutral's slash carries a circle.
+		expect(conductorTicks(1, true)).toHaveLength(3);
+		expect(conductorTicks(3, false)).toHaveLength(3);
+	});
+
+	it('anchor every branch, and own every symbol stroke', () => {
+		const eq = schematicEquipment(graph, fromEngineLayout(layout));
+		for (let k = 0; k < graph.edges.length; k++)
+			expect(Number.isFinite(eq.anchors[k * 2])).toBe(true);
+		expect(eq.owner.length).toBe(eq.sources.length / 3);
+		// The bare line l1 has no neutral terminal declared here, so no marks; others own symbols.
+		expect(new Set(eq.owner)).toEqual(new Set([0, 2, -1, -2]));
+	});
+});
+
+describe('short names', () => {
+	it('keep short ids and shorten long ones uniquely', () => {
+		const ids = [
+			'lb',
+			'lv_extension_02ad4cfa5ebe_0062383670bceb3c28d5',
+			'lv_extension_02ad4cfa5ebe_9962383670bceb3c28d5',
+			'lv_extension_02ad4cfa5ebe_0062383670bceb3c11d5'
+		];
+		const names = shortNames(ids);
+		expect(names[0]).toBe('lb');
+		expect(new Set(names).size).toBe(ids.length);
+		expect(names[3]).toBe('lv_extension_0…c11d5');
+		expect(names[1].length).toBeLessThan(ids[1].length);
+		for (const n of names.slice(1)) expect(n).toContain('…');
 	});
 });

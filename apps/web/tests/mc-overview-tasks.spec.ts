@@ -96,11 +96,20 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	await overview.getByRole('button', { name: 'Show schematic' }).click();
 	const legend = page.getByRole('list', { name: 'Symbols' });
 	await expect(legend).toBeVisible();
-	await expect(legend.getByRole('listitem')).toHaveText(['source', 'load', 'shunt']);
+	await expect(legend.getByRole('listitem')).toHaveText([
+		'phases, ○ neutral',
+		'source',
+		'load',
+		'shunt'
+	]);
 	// Zoomed far out, symbols would be specks: the plain lines carry the drawing instead.
 	await page.getByRole('application', { name: 'Schematic diagram' }).focus();
 	for (let i = 0; i < 8; i++) await page.keyboard.press('-');
 	await expect(legend).toHaveCount(0);
+
+	// Selecting from the overview flies to the selection and zooms until symbols are legible.
+	await overview.locator('.issues button', { hasText: 'l1' }).click();
+	await expect(legend).toBeVisible();
 });
 
 test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {

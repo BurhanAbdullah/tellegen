@@ -6,6 +6,7 @@
 		OrthographicViewState,
 		PickingInfo
 	} from '@deck.gl/core';
+	import { untrack } from 'svelte';
 	import { mcSchematicLayout, type SchematicStrategy } from '@tellegen/engine';
 	import type { MulticonductorCase } from '../state.svelte.js';
 	import type { RGBA } from '../colors.js';
@@ -40,6 +41,10 @@
 		worstBand,
 		attachmentGlyph,
 		ATTACHMENT_NAMES,
+		conductorSet,
+		conductorTicks,
+		energisation,
+		shortNames,
 		branchGlyph,
 		glyphPath,
 		schematicEquipment,
@@ -112,7 +117,24 @@
 	const symbolsOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 3);
 	/** The branch geometry as drawn, interrupted under symbols when they show. */
 	const drawn = $derived<SchematicGeometry>(symbolsOn && equipment ? equipment.cut : geometry);
+	/** Conductor marks need a closer view than symbols; bus names closer still. */
+	const ticksOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 6);
+	const namesOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 9);
 	const SYMBOL_INK: RGBA = [52, 56, 62, 255];
+	/** Not connected to any source through closed branches: drawn faint in every colour mode. */
+	const DEAD: RGBA = [196, 191, 182, 110];
+	const live = $derived(energisation(graph));
+	const names = $derived(shortNames(graph.buses.map((b) => b.id)));
+	/** Per symbol stroke: ink, or faint when its bus or branch is not energised. */
+	function strokeColours(owner: Int32Array): Uint8Array {
+		const out = new Uint8Array(owner.length * 4);
+		for (let s = 0; s < owner.length; s++) {
+			const o = owner[s];
+			const on = o >= 0 ? live.edges[o] : live.buses[-o - 1];
+			out.set(on ? SYMBOL_INK : DEAD, s * 4);
+		}
+		return out;
+	}
 	const legendGlyphs = $derived(
 		equipment
 			? (
@@ -135,6 +157,12 @@
 				)
 			: []
 	);
+	const branchTip = (k: number) => {
+		const e = graph.edges[k];
+		const { phases, neutral } = conductorSet(graph, k);
+		const wires = `${phases} phase${phases === 1 ? '' : 's'}${neutral ? ' + neutral' : ''}`;
+		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}`;
+	};
 	const itemLabel = (d: EquipmentItem) => {
 		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;
 		const ids = d.ids.slice(0, 4).join(', ') + (d.ids.length > 4 ? ` +${d.ids.length - 4}` : '');
@@ -162,6 +190,7 @@
 	/** Per-edge and per-bus colours for the active mode; results never recolour inactive branches. */
 	const edgeColours = $derived(
 		graph.edges.map((e, k): RGBA => {
+			if (!live.edges[k]) return DEAD;
 			if (!e.closed || colour === 'none' || !snapshot) return edgeColor(e.kind, e.closed);
 			if (colour === 'loading-heat') {
 				const loading = snapshot.branches[k].loading;
@@ -175,18 +204,26 @@
 	);
 	const busColours = $derived(
 		graph.buses.map((_, i): RGBA => {
+			if (!live.buses[i]) return DEAD;
 			if (colour !== 'voltage-band' || !snapshot) return INK;
 			const t = worstBand(snapshot.buses[i].pairs);
 			return t === null ? MISSING_COLOUR : bandColour(t);
 		})
 	);
 
+	/** Screen insets of the area no panel or toolbar covers. */
+	function freeArea() {
+		return {
+			left: panels.compact ? 28 : panels.dockWidth('left') + 44,
+			right: panels.compact ? 28 : panels.dockWidth('right') + 44,
+			top: panels.top + 64,
+			bottom: panels.compact ? app.sheetInset + 24 : 88
+		};
+	}
+
 	function fitCamera(g: SchematicGeometry) {
 		const [x0, y0, x1, y1] = g.bounds;
-		const left = panels.compact ? 28 : panels.dockWidth('left') + 44;
-		const right = panels.compact ? 28 : panels.dockWidth('right') + 44;
-		const top = panels.top + 64;
-		const bottom = panels.compact ? app.sheetInset + 24 : 88;
+		const { left, right, top, bottom } = freeArea();
 		const w = Math.max(80, width - left - right);
 		const h = Math.max(80, height - top - bottom);
 		const zoom = Math.log2(Math.min(w / Math.max(1, x1 - x0), h / Math.max(1, y1 - y0)));
@@ -204,7 +241,7 @@
 		for (let s = 0; s < g.segmentEdge.length; s++) {
 			const k = g.segmentEdge[s];
 			const c = edgeColours[k];
-			out.set([c[0], c[1], c[2], g.role[k] === 2 ? 110 : c[3]], s * 4);
+			out.set([c[0], c[1], c[2], g.role[k] === 2 ? Math.min(110, c[3]) : c[3]], s * 4);
 		}
 		return out;
 	}
@@ -316,13 +353,35 @@
 								length: symbols.sources.length / 3,
 								attributes: {
 									getSourcePosition: { value: symbols.sources, size: 3 },
-									getTargetPosition: { value: symbols.targets, size: 3 }
+									getTargetPosition: { value: symbols.targets, size: 3 },
+									getColor: { value: strokeColours(symbols.owner), size: 4, normalized: true }
 								}
 							},
-							getColor: SYMBOL_INK,
 							getWidth: 1.25,
 							widthUnits: 'pixels'
 						}),
+						...(ticksOn
+							? [
+									new LineLayer({
+										...common,
+										id: 'conductor-ticks',
+										data: {
+											length: symbols.ticks.edge.length,
+											attributes: {
+												getSourcePosition: { value: symbols.ticks.sources, size: 3 },
+												getTargetPosition: { value: symbols.ticks.targets, size: 3 },
+												getColor: {
+													value: strokeColours(symbols.ticks.edge),
+													size: 4,
+													normalized: true
+												}
+											}
+										},
+										getWidth: 1,
+										widthUnits: 'pixels'
+									})
+								]
+							: []),
 						// Invisible discs over each symbol make it clickable and give it a tooltip.
 						new ScatterplotLayer({
 							...common,
@@ -412,7 +471,7 @@
 		if (selectedBus >= 0) {
 			const [x, y] = [g.positions[selectedBus * 3], g.positions[selectedBus * 3 + 1]];
 			candidates.push({
-				text: graph.buses[selectedBus].id,
+				text: names[selectedBus],
 				state: 'normal',
 				priority: Infinity,
 				selected: true,
@@ -450,7 +509,20 @@
 				}
 			}
 		}
-		labels = placeLabels(candidates, { width, height, budget: 40 });
+		// Close in, with no result values to show, name the buses (short names; hover for the full id).
+		if (namesOn && (colour === 'none' || !snapshot))
+			for (let i = 0; i < graph.buses.length && candidates.length < 4000; i++) {
+				const [x, y] = [g.positions[i * 3], g.positions[i * 3 + 1]];
+				if (i === selectedBus || !inView(x, y)) continue;
+				candidates.push({
+					text: names[i],
+					state: 'normal',
+					priority: 0,
+					screen: screen(x, y),
+					position: [x, y]
+				});
+			}
+		labels = placeLabels(candidates, { width, height, budget: 60 });
 	}
 
 	function render() {
@@ -483,6 +555,10 @@
 					},
 					onClick: (info: PickingInfo) => {
 						if (info.index < 0 || !info.layer) return;
+						// Skip the fly-to for this selection; cleared after effects run, as a click on the
+						// already-selected item changes nothing.
+						pickedHere = true;
+						setTimeout(() => (pickedHere = false));
 						if (info.layer.id.startsWith('buses-')) onselectbus(graph.buses[info.index].id);
 						else if (info.layer.id.startsWith('branches-'))
 							onselectedge(graph.edges[drawn.segmentEdge[info.index]].id);
@@ -496,7 +572,7 @@
 						info.index >= 0 && info.layer?.id.startsWith('buses-')
 							? `${graph.buses[info.index].id}`
 							: info.index >= 0 && info.layer?.id.startsWith('branches-')
-								? `${graph.edges[drawn.segmentEdge[info.index]].kind} ${graph.edges[drawn.segmentEdge[info.index]].id}`
+								? branchTip(drawn.segmentEdge[info.index])
 								: info.index >= 0 && info.layer?.id === 'equipment-hits'
 									? itemLabel(info.object as EquipmentItem)
 									: null
@@ -523,30 +599,79 @@
 	});
 	let labelFrame = 0;
 	$effect(() => {
-		void [camera, colour, snapshot, selectedBus, selectedEdges, geometry, width, height];
+		void [camera, colour, snapshot, selectedBus, selectedEdges, geometry, width, height, namesOn];
 		if (!deck) return;
 		cancelAnimationFrame(labelFrame);
 		labelFrame = requestAnimationFrame(updateLabels);
 	});
 
-	// Bring an outside selection (overview, table, search) into view when it is off screen.
-	$effect(() => {
-		const i = selectedBus;
-		// Until the first layout arrives there are no positions; a NaN camera would re-run this forever.
-		if (i < 0 || !deck || morph || !shown) return;
+	/** Set while a click in the canvas changes the selection: that selection is already in view. */
+	let pickedHere = false;
+	const ready = $derived(!!deck && !!shown);
+	/** Where the selection is drawn: its bus, or its branch's symbol or conductor marks. */
+	function selectionPoint(): [number, number] | null {
 		const g = geometry;
-		const scale = 2 ** camera.zoom;
-		const [x, y] = [g.positions[i * 3], g.positions[i * 3 + 1]];
-		if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-		const sx = (x - camera.target[0]) * scale + width / 2;
-		const sy = (y - camera.target[1]) * scale + height / 2;
-		if (sx > 40 && sx < width - 40 && sy > 40 && sy < height - 40) return;
-		setCamera({ target: [x, y, 0], zoom: camera.zoom });
+		if (selectedBus >= 0) return [g.positions[selectedBus * 3], g.positions[selectedBus * 3 + 1]];
+		for (const k of selectedEdges) {
+			const a = equipment?.anchors;
+			if (a && Number.isFinite(a[k * 2])) return [a[k * 2], a[k * 2 + 1]];
+			const { from, to } = inputs.names.branches[k];
+			if (from >= 0 && to >= 0)
+				return [
+					(g.positions[from * 3] + g.positions[to * 3]) / 2,
+					(g.positions[from * 3 + 1] + g.positions[to * 3 + 1]) / 2
+				];
+		}
+		return null;
+	}
+
+	// Fly to a selection made outside the canvas (issues, search, tables, profile) when it is off
+	// screen or drawn too small to read, zooming in until symbols show. Panning afterwards is free.
+	$effect(() => {
+		void [selectedBus, selectedEdges];
+		if (!ready) return;
+		untrack(() => {
+			if (pickedHere || morph) {
+				pickedHere = false;
+				return;
+			}
+			const p = selectionPoint();
+			if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
+			const legible = equipment ? Math.log2(8 / equipment.unit) : camera.zoom;
+			const zoom = Math.min(8, Math.max(camera.zoom, legible));
+			const { left, right, top, bottom } = freeArea();
+			const scale = 2 ** camera.zoom;
+			const sx = (p[0] - camera.target[0]) * scale + width / 2;
+			const sy = (p[1] - camera.target[1]) * scale + height / 2;
+			const visible = sx > left && sx < width - right && sy > top && sy < height - bottom;
+			if (visible && zoom === camera.zoom) return;
+			// Centre it in the free area, not behind a docked panel.
+			const k = 2 ** zoom;
+			const target: [number, number, number] = [
+				p[0] - (left - right) / 2 / k,
+				p[1] - (top - bottom) / 2 / k,
+				0
+			];
+			setCamera({ target, zoom }, true);
+		});
 	});
 
-	function setCamera(next: { target: [number, number, number]; zoom: number }) {
+	function setCamera(next: { target: [number, number, number]; zoom: number }, fly = false) {
 		camera = next;
-		deck?.setProps({ initialViewState: { ...next, minZoom: -24, maxZoom: 8 } });
+		const animate = fly && modules && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+		deck?.setProps({
+			initialViewState: {
+				...next,
+				minZoom: -24,
+				maxZoom: 8,
+				...(animate
+					? {
+							transitionDuration: 450,
+							transitionInterpolator: new modules!.core.LinearInterpolator(['target', 'zoom'])
+						}
+					: {})
+			}
+		});
 	}
 
 	// The schematic is laid out in the engine (Rust); each strategy is computed once per graph.
@@ -752,12 +877,21 @@
 								{
 									sources: equipment.sources,
 									targets: equipment.targets,
-									colors: new Uint8Array((equipment.sources.length / 3) * 4).map(
-										(_, i) => SYMBOL_INK[i % 4]
-									),
+									colors: strokeColours(equipment.owner),
 									count: equipment.sources.length / 3,
 									width: 1.25
-								}
+								},
+								...(ticksOn
+									? [
+											{
+												sources: equipment.ticks.sources,
+												targets: equipment.ticks.targets,
+												colors: strokeColours(equipment.ticks.edge),
+												count: equipment.ticks.edge.length,
+												width: 1
+											}
+										]
+									: [])
 							]
 						: [])
 				],
@@ -854,6 +988,12 @@
 			</select>
 		</label>
 		<button onclick={() => setCamera(fitCamera(geometry))} title="Fit the drawing (F)">Fit</button>
+		{#if live.deadBuses}<span
+				class="note"
+				role="status"
+				title="Buses with no path to a source through closed branches are drawn faint"
+				>{live.deadBuses.toLocaleString()} bus{live.deadBuses === 1 ? '' : 'es'} not energised</span
+			>{/if}
 		<button onclick={exportPng} title="PNG of this view with a title block">PNG</button>
 		<button onclick={exportSvg} title="Vector SVG of the visible region with a title block"
 			>SVG</button
@@ -873,7 +1013,7 @@
 				Voltage <span>min</span><i style:background={sensGradient}></i><span>max</span> of each declared
 				band, worst pair
 			{/if}
-			· grey: no limit or rating
+			· grey: no limit or rating{live.deadBuses ? ' · faint: not energised' : ''}
 		</div>
 	{/if}
 	{#if colour === 'none' && symbolsOn && legendGlyphs.length}
@@ -883,6 +1023,15 @@
 			style:left="{toolLeft}px"
 			aria-label="Symbols"
 		>
+			{#if ticksOn && equipment?.ticks.edge.length}
+				<li>
+					<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+						><path class="wire" d="M-2 0H26" /><path
+							d={glyphPath(conductorTicks(3, true), 8, 12, 0)}
+						/></svg
+					>phases, ○ neutral
+				</li>
+			{/if}
 			{#each legendGlyphs as [kind, glyph, label], i (i)}
 				<li>
 					<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
@@ -946,6 +1095,10 @@
 	.toolbar select:disabled {
 		opacity: 0.45;
 		cursor: default;
+	}
+	.note {
+		color: var(--text-secondary);
+		padding: 0 4px;
 	}
 	.segmented {
 		display: flex;
