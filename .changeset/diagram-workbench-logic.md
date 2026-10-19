@@ -31,7 +31,8 @@ energised from any source are drawn faint; and outside selections fly into view.
 The schematic can be walked bus by bus from the keyboard, with a spoken description.
 Solved P/Q and power-flow arrows show at close zoom, hover is linked across the
 schematic, profile and tables, and each LV network (galvanic zone) is outlined and
-tinted by its worst state. The schematic can be downloaded as a PowerIO
+tinted by its worst state, with a summary tag. MV lines draw heavier than LV, and LV
+detail fades when zoomed out. The schematic can be downloaded as a PowerIO
 diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.

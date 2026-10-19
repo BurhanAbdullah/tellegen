@@ -151,3 +151,66 @@ export function zoneHull(zone: GalvanicZone, positions: ArrayLike<number>): [num
 	};
 	return [...half(points), ...half([...points].reverse())];
 }
+
+/** A zone's phase–phase voltage level in volts: from declared limits (midpoint of the band; a
+ * phase–neutral band times √3), else from solved voltages; the median over its buses. Null when
+ * neither is known. */
+export function zoneVoltage(
+	zone: GalvanicZone,
+	graph: DistGraph,
+	snapshot: ResultSnapshot | null
+): number | null {
+	const levels: number[] = [];
+	const mid = (lo?: number[], hi?: number[]) =>
+		lo?.length && hi?.length ? (Math.min(...lo) + Math.max(...hi)) / 2 : null;
+	for (const i of zone.buses) {
+		const l = graph.buses[i].voltage_limits;
+		const pp = mid(l?.vpp_min, l?.vpp_max);
+		const pn = mid(l?.vpn_min, l?.vpn_max);
+		let v = pp ?? (pn === null ? null : pn * Math.sqrt(3));
+		if (v === null && snapshot) {
+			const pairs = snapshot.buses[i]?.pairs ?? [];
+			const phase = pairs.filter((p) => p.pair[0] !== 'n' && p.pair[1] !== 'n');
+			const neutral = pairs.filter((p) => p.pair[1] === 'n' && p.pair[0] !== 'n');
+			if (phase.length) v = Math.max(...phase.map((p) => p.volts));
+			else if (neutral.length) v = Math.max(...neutral.map((p) => p.volts)) * Math.sqrt(3);
+		}
+		if (v !== null && Number.isFinite(v) && v > 0) levels.push(v);
+	}
+	if (!levels.length) return null;
+	levels.sort((a, b) => a - b);
+	return levels[levels.length >> 1];
+}
+
+/** `mv` from 1 kV phase–phase up (drawn heavier), else `lv`. Without a known voltage the source
+ * zone counts as `mv`, others as `lv`. */
+export function zoneLevel(zone: GalvanicZone, volts: number | null): 'mv' | 'lv' {
+	if (volts === null) return zone.hasSource ? 'mv' : 'lv';
+	return volts >= 1000 ? 'mv' : 'lv';
+}
+
+/** One-line zone summary for its label: lowest phase–neutral (else phase–phase) voltage and
+ * highest loading among its branches and transformers, when solved. */
+export function zoneSummary(
+	zone: GalvanicZone,
+	snapshot: ResultSnapshot | null
+): { minVolts: number | null; maxLoading: number | null } {
+	if (!snapshot) return { minVolts: null, maxLoading: null };
+	let pn = Infinity;
+	let pp = Infinity;
+	for (const i of zone.buses)
+		for (const p of snapshot.buses[i]?.pairs ?? []) {
+			if (!Number.isFinite(p.volts)) continue;
+			if (p.pair[1] === 'n' && p.pair[0] !== 'n') pn = Math.min(pn, p.volts);
+			else if (p.pair[0] !== 'n') pp = Math.min(pp, p.volts);
+		}
+	let loading = -Infinity;
+	for (const k of [...zone.transformers, ...zone.edges]) {
+		const l = snapshot.branches[k]?.loading;
+		if (l !== null && l !== undefined && Number.isFinite(l)) loading = Math.max(loading, l);
+	}
+	return {
+		minVolts: Number.isFinite(pn) ? pn : Number.isFinite(pp) ? pp : null,
+		maxLoading: Number.isFinite(loading) ? loading : null
+	};
+}

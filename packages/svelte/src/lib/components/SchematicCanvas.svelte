@@ -46,6 +46,9 @@
 		treeWalk,
 		type WalkKey,
 		galvanicZones,
+		zoneLevel,
+		zoneSummary,
+		zoneVoltage,
 		zoneHull,
 		zoneOutline,
 		zoneState,
@@ -179,6 +182,60 @@
 			[184, 50, 42, 190]
 		]
 	};
+	/** MV (from 1 kV phase–phase) is drawn heavier than LV, as on a paper single-line diagram; a
+	 * transformer takes its higher side. */
+	const zoneMv = $derived(
+		zones.zones.map((z) => zoneLevel(z, zoneVoltage(z, graph, snapshot)) === 'mv')
+	);
+	const edgeMv = $derived(
+		Uint8Array.from(graph.edges, (e, k) => {
+			const { from, to } = inputs.names.branches[k];
+			const mv = (i: number) => (i >= 0 ? zoneMv[zones.busZone[i]] : false);
+			return mv(from) || (e.kind === 'transformer' && mv(to)) ? 1 : 0;
+		})
+	);
+	/** Zoomed out, LV detail fades so the MV backbone, zone outlines and states read first. */
+	const zoomedOut = $derived(!symbolsOn);
+	const mvBuses = $derived(graph.buses.flatMap((_, i) => (zoneMv[zones.busZone[i]] ? [i] : [])));
+	const allBuses = $derived(graph.buses.map((_, i) => i));
+	function segmentWidths(g: SchematicGeometry): Float32Array {
+		const [mv, lv] = colour === 'none' ? [2.4, 1.1] : [3, 1.8];
+		return Float32Array.from(g.segmentEdge, (k) => (edgeMv[k] ? mv : lv));
+	}
+	const transformerNames = $derived.by(() => {
+		const ks = graph.edges.flatMap((e, k) => (e.kind === 'transformer' ? [k] : []));
+		const short = shortNames(
+			ks.map((k) => graph.edges[k].id),
+			16
+		);
+		return new Map(ks.map((k, j) => [k, short[j]]));
+	});
+	/** Zone tags at each outline's top-left: feeding transformer, size, and when solved the
+	 * lowest voltage and highest loading. Drawn once the outline is wide enough on screen. */
+	const zoneTags = $derived(
+		zoneShapes.map(({ z, polygon }) => {
+			const zone = zones.zones[z];
+			const t = zone.transformers[0];
+			const { minVolts, maxLoading } = zoneSummary(zone, snapshot);
+			const xs = polygon.map((p) => p[0]);
+			const ys = polygon.map((p) => p[1]);
+			const v = (x: number) => (x >= 1000 ? `${(x / 1000).toFixed(2)} kV` : `${x.toFixed(1)} V`);
+			const text = [
+				t === undefined ? 'network' : (transformerNames.get(t) ?? graph.edges[t].id),
+				`${zone.buses.length} buses`,
+				...(minVolts === null ? [] : [`min ${v(minVolts)}`]),
+				...(maxLoading === null ? [] : [`${maxLoading.toFixed(0)} %`])
+			].join(' · ');
+			return {
+				z,
+				text,
+				position: [Math.min(...xs), Math.min(...ys)] as [number, number],
+				width: Math.max(...xs) - Math.min(...xs)
+			};
+		})
+	);
+	/** Zoom in quarter steps: zone tags appear and go only when this changes, not on every pan. */
+	const tagZoom = $derived(Math.floor(camera.zoom * 4) / 4);
 	function zoneLabel(z: number): string {
 		const zone = zones.zones[z];
 		const t = zone.transformers[0];
@@ -412,7 +469,9 @@
 		for (let s = 0; s < g.segmentEdge.length; s++) {
 			const k = g.segmentEdge[s];
 			const c = edgeColours[k];
-			out.set([c[0], c[1], c[2], g.role[k] === 2 ? Math.min(110, c[3]) : c[3]], s * 4);
+			let alpha = g.role[k] === 2 ? Math.min(110, c[3]) : c[3];
+			if (zoomedOut && !edgeMv[k]) alpha *= 0.45;
+			out.set([c[0], c[1], c[2], alpha], s * 4);
 		}
 		return out;
 	}
@@ -496,6 +555,27 @@
 				pickable: true,
 				updateTriggers: { getFillColor: zoneStates, getLineColor: zoneStates }
 			}),
+			new TextLayer({
+				...common,
+				id: 'zone-tags',
+				data: zoneTags.filter((t) => t.width * 2 ** tagZoom >= 150),
+				getPosition: (t: { position: [number, number] }) => [...t.position, 0],
+				getText: (t: { text: string }) => t.text,
+				getColor: (t: { z: number }) => {
+					const s = zoneStates[t.z];
+					return s === 'violation' ? DANGER : s === 'warning' ? WARNING : [70, 110, 150, 255];
+				},
+				getSize: 10,
+				getTextAnchor: 'start',
+				getAlignmentBaseline: 'bottom',
+				getPixelOffset: [2, -2],
+				background: true,
+				getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
+				backgroundPadding: [3, 1],
+				fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+				characterSet: 'auto',
+				updateTriggers: { getColor: zoneStates }
+			}),
 			// Result colours are quiet for normal values; a faint underlay keeps the topology legible.
 			...(colour === 'none'
 				? []
@@ -517,10 +597,10 @@
 					attributes: {
 						getSourcePosition: { value: d.sources, size: 3 },
 						getTargetPosition: { value: d.targets, size: 3 },
-						getColor: { value: segmentColours(d), size: 4, normalized: true }
+						getColor: { value: segmentColours(d), size: 4, normalized: true },
+						getWidth: { value: segmentWidths(d), size: 1 }
 					}
 				},
-				getWidth: colour === 'none' ? 1.6 : 2.2,
 				widthUnits: 'pixels',
 				pickable: true
 			}),
@@ -620,7 +700,8 @@
 			new ScatterplotLayer({
 				...common,
 				id: `buses-${layout}`,
-				data: graph.buses.map((_, i) => i),
+				// Zoomed out, LV bus dots are noise unless they carry the voltage colouring.
+				data: zoomedOut && colour !== 'voltage-band' ? mvBuses : allBuses,
 				getPosition: (i: number) => [...point(i), 0],
 				getFillColor: (i: number) => busColours[i],
 				// Zoomed out, small dots keep dense chains from merging into bars.
@@ -887,7 +968,10 @@
 			valuesOn,
 			arrows,
 			hoveredBus,
-			hoveredEdges
+			hoveredEdges,
+			zoomedOut,
+			zoneTags,
+			tagZoom
 		];
 		if (!morph) render();
 	});
@@ -1214,7 +1298,7 @@
 						targets: drawn.targets,
 						colors: segmentColours(drawn),
 						count: drawn.segmentEdge.length,
-						width: 1.6
+						widths: segmentWidths(drawn)
 					},
 					...(symbolsOn && equipment
 						? [

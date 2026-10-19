@@ -21,7 +21,10 @@ import {
 	galvanicZones,
 	zoneState,
 	zoneOutline,
-	zoneHull
+	zoneHull,
+	zoneVoltage,
+	zoneLevel,
+	zoneSummary
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -358,6 +361,49 @@ describe('galvanic zones', () => {
 		expect(zoneState(a, snap(230, 50))).toBe('normal');
 		expect(zoneState(a, snap(230, 95))).toBe('warning');
 		expect(zoneState(a, snap(200, 50))).toBe('violation');
+	});
+
+	it('tells MV from LV by declared limits, then by solved voltages, then by the source', () => {
+		const limited: DistGraph = {
+			...g,
+			buses: g.buses.map((b) =>
+				b.id === 'mv' || b.id === 'mv2'
+					? { ...b, voltage_limits: { vpp_min: [10_000], vpp_max: [12_000] } }
+					: b.id.startsWith('a')
+						? { ...b, voltage_limits: { vpn_min: [207], vpn_max: [253] } }
+						: b
+			)
+		};
+		expect(zoneVoltage(found.zones[1], limited, null)).toBe(11_000);
+		expect(zoneVoltage(found.zones[2], limited, null)).toBeCloseTo(230 * Math.sqrt(3));
+		expect(zoneVoltage(found.zones[3], limited, null)).toBeNull();
+		expect(zoneLevel(found.zones[1], 11_000)).toBe('mv');
+		expect(zoneLevel(found.zones[2], 398)).toBe('lv');
+		expect(zoneLevel(found.zones[0], null)).toBe('mv');
+		expect(zoneLevel(found.zones[3], null)).toBe('lv');
+	});
+
+	it('summarises a zone by its lowest phase–neutral voltage and highest loading', () => {
+		const snap = {
+			kind: 'solved' as const,
+			label: '',
+			iterations: 1,
+			buses: g.buses.map((_, i) => ({
+				pairs: [
+					{ pair: ['a', 'b'] as [string, string], volts: 400, min: null, max: null },
+					{ pair: ['a', 'n'] as [string, string], volts: 230 - i, min: null, max: null }
+				],
+				unbalance: null
+			})),
+			branches: g.edges.map((_, k) => ({
+				ends: [null, null] as [null, null],
+				loading: k * 10,
+				basis: null
+			}))
+		};
+		// Zone a: buses 4–6 (a3 lowest at 224 V); branches a12, a23 and transformer t2.
+		expect(zoneSummary(found.zones[2], snap)).toEqual({ minVolts: 224, maxLoading: 50 });
+		expect(zoneSummary(found.zones[2], null)).toEqual({ minVolts: null, maxLoading: null });
 	});
 
 	it('outlines a zone as a staircase over its drawing columns', () => {
