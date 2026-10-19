@@ -275,6 +275,9 @@ export class MulticonductorCase {
 	/** What the pointer is over in any linked view (schematic, profile, tables); highlighted in
 	 * the others. Transient: never saved or put in links. */
 	hovered = $state<{ kind: 'bus' | 'branch'; id: string } | null>(null);
+	/** Bumped to ask the views to bring the current selection into view again (an issue clicked
+	 * that is already selected). */
+	revealSeq = $state(0);
 	/** The full operating point read for whole-network views (overview, schematic); null until read,
 	 * and cleared when a large case's operating point changes. */
 	overviewResult: McPfResult | null = $state.raw<McPfResult | null>(null);

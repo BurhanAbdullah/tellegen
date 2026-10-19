@@ -40,7 +40,8 @@
 		schematic = false,
 		onschematic,
 		hovered = null,
-		onhover
+		onhover,
+		onreveal
 	}: {
 		/** The full operating point; `null` while it is being fetched. */
 		result: McPfResult | null;
@@ -60,6 +61,8 @@
 		/** Bus or branch under the pointer in any linked view. */
 		hovered?: { kind: 'bus' | 'branch'; id: string } | null;
 		onhover?: (h: { kind: 'bus' | 'branch'; id: string } | null) => void;
+		/** Bring the current selection into view again, for an issue clicked while selected. */
+		onreveal?: () => void;
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
@@ -150,6 +153,12 @@
 				? 'V phase–phase'
 				: `V ${zone}`;
 
+	/** An issue click selects it; clicking the selected issue again shows it rather than clearing it. */
+	function revealOrSelect(kind: 'bus' | 'branch', index: number) {
+		const id = kind === 'bus' ? graph.buses[index].id : graph.edges[index].id;
+		if (id === (kind === 'bus' ? selectedBus : selectedEdge)) onreveal?.();
+		else select(kind, index);
+	}
 	function select(kind: 'bus' | 'branch', index: number) {
 		if (kind === 'bus') onselectbus(graph.buses[index].id);
 		else onselectedge(graph.edges[index].id);
@@ -318,7 +327,7 @@
 					<li class={issue.severity}>
 						<button
 							aria-current={isSelected(issue)}
-							onclick={() => select(issue.target.kind, issue.target.index)}
+							onclick={() => revealOrSelect(issue.target.kind, issue.target.index)}
 							title={`${t.id} · ${t.detail}`}
 						>
 							<span class="sev" aria-label={issue.severity}

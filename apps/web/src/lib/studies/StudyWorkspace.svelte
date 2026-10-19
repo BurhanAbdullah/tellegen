@@ -583,6 +583,7 @@
 						onschematic={(show) => (multi.schematic = show)}
 						hovered={multi.hovered}
 						onhover={(h) => (multi.hovered = h)}
+						onreveal={() => multi.revealSeq++}
 						onanalyse={(multi.graph.buses.length ?? 0) > AUTO_OVERVIEW_MAX_BUSES
 							? analyseOperatingPoint
 							: undefined}

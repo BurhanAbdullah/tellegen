@@ -122,6 +122,13 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	// Selecting from the overview flies to the selection and zooms until symbols are legible.
 	await overview.locator('.issues button', { hasText: 'l1' }).click();
 	await expect(legend).toBeVisible();
+	// Clicking the selected issue again brings it back into view rather than clearing it.
+	await page.getByRole('application', { name: 'Schematic diagram' }).focus();
+	for (let i = 0; i < 8; i++) await page.keyboard.press('-');
+	await expect(legend).toHaveCount(0);
+	await overview.locator('.issues button', { hasText: 'l1' }).click();
+	await expect(legend).toBeVisible();
+	await expect(overview.getByText(/Conductors on l1/)).toBeVisible();
 });
 
 test('the schematic can be walked bus by bus from the keyboard', async ({ page }) => {

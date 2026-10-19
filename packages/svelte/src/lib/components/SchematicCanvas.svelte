@@ -718,7 +718,8 @@
 			new modules.layers.PolygonLayer({
 				...common,
 				id: 'zones',
-				data: zoneShapes,
+				// On geographic positions, outlines (convex hulls) overlap; close in they only cloud the map.
+				data: layout === 'source' && symbolsOn ? [] : zoneShapes,
 				getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
 				getFillColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][0],
 				getLineColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][1],
@@ -731,7 +732,10 @@
 			new TextLayer({
 				...common,
 				id: 'zone-tags',
-				data: zoneTags.filter((t) => t.width * 2 ** tagZoom >= 150),
+				data:
+					layout === 'source' && symbolsOn
+						? []
+						: zoneTags.filter((t) => t.width * 2 ** tagZoom >= 150),
 				getPosition: (t: { position: [number, number] }) => [...t.position, 0],
 				getText: (t: { text: string }) => t.text,
 				getColor: (t: { z: number }) => {
@@ -1265,8 +1269,11 @@
 
 	// Fly to a selection made outside the canvas (issues, search, tables, profile) when it is off
 	// screen or drawn too small to read, zooming in until symbols show. Panning afterwards is free.
+	// On opening, the view continues from the map: an existing selection is centred if it is off
+	// screen, but not zoomed into.
+	let opened = false;
 	$effect(() => {
-		void [selectedBus, selectedEdges];
+		void [selectedBus, selectedEdges, mc.revealSeq];
 		if (!ready) return;
 		untrack(() => {
 			if (pickedHere || morph) {
@@ -1274,7 +1281,8 @@
 				return;
 			}
 			const p = selectionPoint();
-			if (p) bringIntoView(p);
+			if (p) bringIntoView(p, opened);
+			opened = true;
 		});
 	});
 
@@ -1290,9 +1298,9 @@
 	}
 
 	/** Centre `p` in the uncovered view when it is outside it or drawn too small to read. */
-	function bringIntoView(p: [number, number]) {
+	function bringIntoView(p: [number, number], zoomIn = true) {
 		if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
-		const legible = equipment ? Math.log2(8 / equipment.unit) : camera.zoom;
+		const legible = equipment && zoomIn ? Math.log2(8 / equipment.unit) : camera.zoom;
 		const zoom = Math.min(8, Math.max(camera.zoom, legible));
 		const { left, right, top, bottom } = freeArea();
 		const scale = 2 ** camera.zoom;
