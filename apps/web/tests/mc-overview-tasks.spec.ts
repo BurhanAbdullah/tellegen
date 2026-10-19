@@ -10,6 +10,9 @@ const fixture = new URL('./fixtures/four-wire-limits.bmopf.json', import.meta.ur
 async function solvedOverview(page: Page) {
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
+	// The prerendered input exists before hydration attaches its listener; a file set earlier is
+	// lost. The empty-cases panel renders only after load.
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
 	await page.locator('input[type=file]').setInputFiles({
 		name: 'four-wire-limits.bmopf.json',
 		mimeType: 'application/json',
@@ -236,6 +239,9 @@ test('the schematic layout file loads back with the case as its diagram', async 
 	const fresh = await context.newPage();
 	await fresh.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await fresh.goto('/');
+	// The prerendered input exists before hydration attaches its listener; a file set earlier is
+	// lost. The empty-cases panel renders only after load.
+	await expect(fresh.getByText('no default cases loaded')).toBeVisible();
 	await fresh.locator('input[type=file]').setInputFiles([
 		{
 			name: 'four-wire-limits.bmopf.json',
@@ -276,6 +282,9 @@ test('a flat voltage profile and a case without limits do not break the overview
 	// profile's axis ticks were equal and a value-keyed list threw `each_key_duplicate` (a 500 page).
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
+	// The prerendered input exists before hydration attaches its listener; a file set earlier is
+	// lost. The empty-cases panel renders only after load.
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
 	await page.locator('input[type=file]').setInputFiles({
 		name: 'four-wire.bmopf.json',
 		mimeType: 'application/json',

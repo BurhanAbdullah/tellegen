@@ -10,6 +10,9 @@ test('multiconductor overview ranks declared-limit issues and links them to the 
 }) => {
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
+	// The prerendered input exists before hydration attaches its listener; a file set earlier is
+	// lost. The empty-cases panel renders only after load.
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
 	await page.locator('input[type=file]').setInputFiles({
 		name: 'four-wire-limits.bmopf.json',
 		mimeType: 'application/json',
