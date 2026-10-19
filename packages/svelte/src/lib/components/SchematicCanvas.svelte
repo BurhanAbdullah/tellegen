@@ -385,8 +385,9 @@
 					d.state === 'violation' ? DANGER : d.state === 'warning' ? WARNING : INK,
 				getSize: 11,
 				getTextAnchor: 'start',
-				getAlignmentBaseline: 'top',
-				getPixelOffset: [6, 6],
+				// Above-right of the point: attachment symbols hang below buses.
+				getAlignmentBaseline: 'bottom',
+				getPixelOffset: [6, -5],
 				background: true,
 				getBackgroundColor: [...PAPER.slice(0, 3), 230] as RGBA,
 				backgroundPadding: [3, 1],
@@ -780,7 +781,7 @@
 					position: l.position,
 					text: l.text,
 					dx: 6,
-					dy: 16,
+					dy: -8,
 					color: css(l.state === 'violation' ? DANGER : l.state === 'warning' ? WARNING : INK)
 				})),
 				title: exportTitle()
