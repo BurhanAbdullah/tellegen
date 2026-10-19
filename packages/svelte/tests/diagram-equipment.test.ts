@@ -13,6 +13,7 @@ import {
 	conductorTicks,
 	energisation,
 	shortNames,
+	distinctiveCores,
 	treeWalk,
 	describeBus,
 	flowArrows,
@@ -210,6 +211,18 @@ describe('conductor marks', () => {
 });
 
 describe('short names', () => {
+	it('drop the parts every id shares at its start or end', () => {
+		expect(
+			shortNames(['75_MVLV060_Transformer', '75_MVLV160_Transformer', '75_MVLV207_Transformer'], 16)
+		).toEqual(['MVLV060', 'MVLV160', 'MVLV207']);
+		expect(distinctiveCores(['energex:ne_29311', 'energex:ne_40112'])).toEqual(['29311', '40112']);
+		// Nothing shared, a single id, or stripping that would empty or merge ids: kept whole.
+		expect(distinctiveCores(['src', 'lb'])).toEqual(['src', 'lb']);
+		expect(distinctiveCores(['75_MVLV060_Transformer'])).toEqual(['75_MVLV060_Transformer']);
+		expect(distinctiveCores(['a_x', 'a'])).toEqual(['a_x', 'a']);
+		expect(distinctiveCores(['t_a', 't-a'])).toEqual(['t_a', 't-a']);
+	});
+
 	it('keep short ids and shorten long ones uniquely', () => {
 		const ids = [
 			'lb',
