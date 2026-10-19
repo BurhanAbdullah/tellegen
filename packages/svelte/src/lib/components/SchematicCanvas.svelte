@@ -46,6 +46,11 @@
 		treeWalk,
 		type WalkKey,
 		galvanicZones,
+		landmarkCandidates,
+		landmarkGlyph,
+		landmarkStrokes,
+		placeLandmarks,
+		type Landmark,
 		zoneLevel,
 		zoneSummary,
 		zoneVoltage,
@@ -115,6 +120,11 @@
 		zoom: 0
 	});
 	let labels = $state.raw<(LabelCandidate & { position: [number, number] })[]>([]);
+	/** Landmarks placed for the current view, with their fixed-pixel glyph strokes. */
+	let marks = $state.raw<{
+		placed: Landmark[];
+		strokes: { sources: Float32Array; targets: Float32Array; owner: Int32Array };
+	} | null>(null);
 	let status = $state<string | null>('Loading the schematic renderer…');
 
 	const graph = $derived(mc.graph!);
@@ -126,6 +136,7 @@
 			: null
 	);
 	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	const powers = $derived(mc.overviewResult ? elementPowers(mc.overviewResult) : null);
 	const snapshot = $derived(
 		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
 	);
@@ -198,6 +209,15 @@
 	const zoomedOut = $derived(!symbolsOn);
 	const mvBuses = $derived(graph.buses.flatMap((_, i) => (zoneMv[zones.busZone[i]] ? [i] : [])));
 	const allBuses = $derived(graph.buses.map((_, i) => i));
+	/** Landmark strokes in ink; a transformer whose network has a problem takes that state's colour. */
+	function landmarkColours(m: { placed: Landmark[]; strokes: { owner: Int32Array } }): Uint8Array {
+		const out = new Uint8Array(m.strokes.owner.length * 4);
+		for (let s = 0; s < m.strokes.owner.length; s++) {
+			const l = m.placed[m.strokes.owner[s]];
+			out.set(l.state === 'violation' ? DANGER : l.state === 'warning' ? WARNING : INK, s * 4);
+		}
+		return out;
+	}
 	function segmentWidths(g: SchematicGeometry): Float32Array {
 		const [mv, lv] = colour === 'none' ? [2.4, 1.1] : [3, 1.8];
 		return Float32Array.from(g.segmentEdge, (k) => (edgeMv[k] ? mv : lv));
@@ -234,6 +254,46 @@
 			};
 		})
 	);
+	/** Sources, generators, IBRs and transformers stay findable when zoomed out: drawn at a fixed
+	 * screen size and placed by priority (see `landmarks.ts`), handing over to the full symbols as
+	 * the drawing grows. */
+	const LANDMARKS_STORAGE = 'tellegen.schematic.landmarks';
+	let landmarksOn = $state(
+		(() => {
+			try {
+				return localStorage.getItem(LANDMARKS_STORAGE) !== 'off';
+			} catch {
+				return true;
+			}
+		})()
+	);
+	function rememberLandmarks(on: boolean) {
+		landmarksOn = on;
+		try {
+			localStorage.setItem(LANDMARKS_STORAGE, on ? 'on' : 'off');
+		} catch {
+			// Storage can be unavailable; the toggle still works for this view.
+		}
+	}
+	const landmarkPool = $derived(
+		shown ? landmarkCandidates(graph, shown, equipment, zones, zoneStates, powers) : []
+	);
+	const markName = $derived.by(() => {
+		const ids = [...new Set(landmarkPool.flatMap((l) => (l.kind === 'transformer' ? [] : l.ids)))];
+		const short = shortNames(ids, 16);
+		return new Map(ids.map((id, j) => [id, short[j]]));
+	});
+	function landmarkTip(l: Landmark): string {
+		const name = {
+			source: 'source',
+			generator: 'generator',
+			ibr: 'inverter-based resource',
+			transformer: 'transformer'
+		}[l.kind];
+		const ids = l.ids.slice(0, 4).join(', ') + (l.ids.length > 4 ? ` +${l.ids.length - 4}` : '');
+		const where = l.bus >= 0 ? ` at ${graph.buses[l.bus].id}` : '';
+		return `${l.ids.length > 1 ? `${l.ids.length} ${name}s` : name} ${ids}${where}`;
+	}
 	/** Zoom in quarter steps: zone tags appear and go only when this changes, not on every pan. */
 	const tagZoom = $derived(Math.floor(camera.zoom * 4) / 4);
 	function zoneLabel(z: number): string {
@@ -257,7 +317,6 @@
 	const namesOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 9);
 	/** Solved values beside symbols and flow arrows on branches, once there is room for them. */
 	const valuesOn = $derived(!!snapshot && ticksOn);
-	const powers = $derived(mc.overviewResult ? elementPowers(mc.overviewResult) : null);
 	const arrows = $derived(
 		equipment && snapshot
 			? flowArrows(
@@ -749,6 +808,58 @@
 				getWidth: 7,
 				widthUnits: 'pixels'
 			}),
+			...(marks && marks.placed.length
+				? [
+						// A paper halo lifts each marker off the faded drawing; it is also the pick target.
+						new ScatterplotLayer({
+							...common,
+							id: 'landmark-halos',
+							data: marks.placed,
+							getPosition: (l: Landmark) => [l.x, l.y, 0],
+							getFillColor: [...PAPER.slice(0, 3), 235] as RGBA,
+							getRadius: 12,
+							radiusUnits: 'pixels',
+							pickable: true
+						}),
+						new LineLayer({
+							...common,
+							id: 'landmarks',
+							data: {
+								length: marks.strokes.owner.length,
+								attributes: {
+									getSourcePosition: { value: marks.strokes.sources, size: 3 },
+									getTargetPosition: { value: marks.strokes.targets, size: 3 },
+									getColor: {
+										value: landmarkColours(marks),
+										size: 4,
+										normalized: true
+									}
+								}
+							},
+							getWidth: 1.6,
+							widthUnits: 'pixels'
+						}),
+						new TextLayer({
+							...common,
+							id: 'landmark-names',
+							data: marks.placed.filter((l) => l.kind === 'source' || l.kind === 'generator'),
+							getPosition: (l: Landmark) => [l.x, l.y, 0],
+							getText: (l: Landmark) =>
+								(markName.get(l.ids[0]) ?? l.ids[0]) +
+								(l.ids.length > 1 ? ` +${l.ids.length - 1}` : ''),
+							getColor: INK,
+							getSize: 10,
+							getTextAnchor: 'middle',
+							getAlignmentBaseline: 'top',
+							getPixelOffset: [0, 14],
+							background: true,
+							getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
+							backgroundPadding: [2, 1],
+							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+							characterSet: 'auto'
+						})
+					]
+				: []),
 			new ScatterplotLayer({
 				...common,
 				id: 'keyboard-cursor',
@@ -862,6 +973,10 @@
 				});
 			}
 		labels = placeLabels(candidates, { width, height, budget: 60 });
+		if (zoomedOut && landmarksOn && landmarkPool.length) {
+			const placed = placeLandmarks(landmarkPool, screen, { width, height });
+			marks = { placed, strokes: landmarkStrokes(placed, 8 / scale) };
+		} else marks = null;
 	}
 
 	function render() {
@@ -914,6 +1029,13 @@
 						// already-selected item changes nothing.
 						pickedHere = true;
 						setTimeout(() => (pickedHere = false));
+						if (info.layer.id === 'landmark-halos') {
+							const l = info.object as Landmark;
+							if (l.edge >= 0) onselectedge(graph.edges[l.edge].id);
+							else onselectbus(graph.buses[l.bus].id);
+							bringIntoView([l.x, l.y]);
+							return;
+						}
 						if (info.layer.id === 'zones') {
 							fitZone(zones.zones[(info.object as { z: number }).z]);
 							return;
@@ -929,15 +1051,17 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						info.index >= 0 && info.layer?.id === 'zones'
-							? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
-							: info.index >= 0 && info.layer?.id.startsWith('buses-')
-								? `${graph.buses[info.object as number].id}`
-								: info.index >= 0 && info.layer?.id.startsWith('branches-')
-									? branchTip(drawn.segmentEdge[info.index])
-									: info.index >= 0 && info.layer?.id === 'equipment-hits'
-										? itemLabel(info.object as EquipmentItem)
-										: null
+						info.index >= 0 && info.layer?.id === 'landmark-halos'
+							? landmarkTip(info.object as Landmark)
+							: info.index >= 0 && info.layer?.id === 'zones'
+								? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
+								: info.index >= 0 && info.layer?.id.startsWith('buses-')
+									? `${graph.buses[info.object as number].id}`
+									: info.index >= 0 && info.layer?.id.startsWith('branches-')
+										? branchTip(drawn.segmentEdge[info.index])
+										: info.index >= 0 && info.layer?.id === 'equipment-hits'
+											? itemLabel(info.object as EquipmentItem)
+											: null
 				});
 				void show('schematic', strategy);
 			})
@@ -971,7 +1095,8 @@
 			hoveredEdges,
 			zoomedOut,
 			zoneTags,
-			tagZoom
+			tagZoom,
+			marks
 		];
 		if (!morph) render();
 	});
@@ -979,6 +1104,9 @@
 	$effect(() => {
 		void [
 			camera,
+			landmarksOn,
+			landmarkPool,
+			zoomedOut,
 			colour,
 			snapshot,
 			selectedBus,
@@ -1446,6 +1574,38 @@
 			· grey: no limit or rating{live.deadBuses ? ' · faint: not energised' : ''}
 		</div>
 	{/if}
+	{#if colour === 'none' && zoomedOut && landmarkPool.length}
+		<details
+			class="key"
+			style:bottom="{panels.compact ? app.sheetInset + 12 : 24}px"
+			style:left="{toolLeft}px"
+			open={keyOpen}
+			ontoggle={(e) => rememberKey(e.currentTarget.open)}
+		>
+			<summary>Key</summary>
+			<label class="toggle"
+				><input
+					type="checkbox"
+					checked={landmarksOn}
+					onchange={(e) => rememberLandmarks(e.currentTarget.checked)}
+				/> Landmarks</label
+			>
+			{#if landmarksOn}
+				<ul class="symbols" aria-label="Landmarks">
+					{#each [['source', 'source, always shown'], ['generator', 'generator'], ['ibr', 'large inverter-based resource'], ['transformer', 'transformer']] as [kind, label] (kind)}
+						{#if landmarkPool.some((l) => l.kind === kind)}
+							<li>
+								<svg viewBox="-14 -12 28 24" width="28" height="24" aria-hidden="true"
+									><path d={glyphPath(landmarkGlyph(kind as Landmark['kind']), 7)} /></svg
+								>{label}
+							</li>
+						{/if}
+					{/each}
+				</ul>
+				<p class="hint">More appear as you zoom in.</p>
+			{/if}
+		</details>
+	{/if}
 	{#if colour === 'none' && symbolsOn && legendGlyphs.length}
 		<details
 			class="key"
@@ -1582,6 +1742,16 @@
 		border: 1px solid var(--line);
 		border-radius: 3px;
 		box-shadow: var(--elev-1);
+	}
+	.key .toggle {
+		display: flex;
+		gap: 4px;
+		align-items: center;
+		margin-top: 4px;
+		color: var(--ink);
+	}
+	.key .hint {
+		margin: 2px 0 0;
 	}
 	.key summary {
 		cursor: pointer;

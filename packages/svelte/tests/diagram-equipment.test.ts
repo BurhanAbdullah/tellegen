@@ -25,7 +25,10 @@ import {
 	zoneHull,
 	zoneVoltage,
 	zoneLevel,
-	zoneSummary
+	zoneSummary,
+	landmarkCandidates,
+	placeLandmarks,
+	landmarkGlyph
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -447,5 +450,100 @@ describe('galvanic zones', () => {
 				[0, 0, 0, 10, 0, 0, 10, 10, 0, 5, 5, 0]
 			)
 		).toHaveLength(3);
+	});
+});
+
+describe('landmarks', () => {
+	// S (source) —t1→ M —l1→ L; M has a generator; L has a large and two small IBRs.
+	const g: DistGraph = {
+		buses: [
+			bus('S', [['1', 'source', 'grid']], true),
+			bus('M', [['1', 'generator', 'g1']]),
+			bus('L', [
+				['1', 'ibr', 'farm'],
+				['2', 'ibr', 'pv1']
+			]),
+			bus('R', [['1', 'ibr', 'pv2']])
+		],
+		edges: [
+			edge('transformer', 't1', 'S', 'M'),
+			edge('line', 'l1', 'M', 'L'),
+			edge('line', 'l2', 'M', 'R')
+		]
+	};
+	const geometry = sourceLayout(
+		g,
+		[
+			{ id: 'S', lon: 0, lat: 0 },
+			{ id: 'M', lon: 100, lat: 0 },
+			{ id: 'L', lon: 200, lat: 0 },
+			{ id: 'R', lon: 200, lat: 100 }
+		],
+		false,
+		displayTree(g)
+	);
+	const zones = galvanicZones(g, displayTree(g));
+	const powers = new Map([
+		['g1', { p: -50_000, q: 0 }],
+		['farm', { p: -40_000, q: 0 }],
+		['pv1', { p: -300, q: 0 }],
+		['pv2', { p: -200, q: 0 }]
+	]);
+
+	it('ranks sources, problem transformers, machines and large IBRs, then the rest', () => {
+		const states = zones.zones.map((z) =>
+			z.hasSource ? ('normal' as const) : ('violation' as const)
+		);
+		const c = landmarkCandidates(g, geometry, null, zones, states, powers);
+		expect(c.map((l) => [l.kind, l.tier, l.ids.join('+')])).toEqual([
+			['source', 0, 'grid'],
+			['transformer', 1, 't1'],
+			['generator', 2, 'g1'],
+			// L's IBRs group to 40.3 kW, over 1 % of all generation; R's 0.2 kW is not.
+			['ibr', 2, 'farm+pv1'],
+			['ibr', 4, 'pv2']
+		]);
+		const calm = landmarkCandidates(
+			g,
+			geometry,
+			null,
+			zones,
+			states.map(() => 'normal' as const),
+			powers
+		);
+		expect(calm.find((l) => l.kind === 'transformer')!.tier).toBe(3);
+	});
+
+	it('places by priority on a coarse grid, sources regardless, within a budget', () => {
+		const c = landmarkCandidates(
+			g,
+			geometry,
+			null,
+			zones,
+			zones.zones.map(() => 'normal' as const),
+			powers
+		);
+		// Squeezed so every marker shares one cell: the source takes it and nothing else fits.
+		const tight = placeLandmarks(c, (x, y) => [100 + x * 0.01, 100 + y * 0.01], {
+			width: 400,
+			height: 400
+		});
+		expect(tight.map((l) => l.kind)).toEqual(['source']);
+		const roomy = placeLandmarks(c, (x, y) => [200 + x, 200 + y], {
+			width: 800,
+			height: 800,
+			budget: 2
+		});
+		// The budget counts every marker, the source included.
+		expect(roomy.map((l) => l.kind)).toEqual(['source', 'generator']);
+		expect(placeLandmarks(c, () => [-10, -10], { width: 100, height: 100 })).toEqual([]);
+	});
+
+	it('draws markers centred on their point, without the symbol lead', () => {
+		const xs = landmarkGlyph('source')
+			.flat()
+			.map(([x]) => x);
+		expect(Math.min(...xs) + Math.max(...xs)).toBeCloseTo(0, 5);
+		expect(landmarkGlyph('transformer')).toHaveLength(2);
 	});
 });

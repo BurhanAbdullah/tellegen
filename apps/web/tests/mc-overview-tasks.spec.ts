@@ -110,6 +110,12 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	await page.getByRole('application', { name: 'Schematic diagram' }).focus();
 	for (let i = 0; i < 8; i++) await page.keyboard.press('-');
 	await expect(legend).toHaveCount(0);
+	// Zoomed out, the source stays findable as a fixed-size landmark, and landmarks can be turned off.
+	const landmarks = page.getByRole('list', { name: 'Landmarks' });
+	await expect(landmarks.getByRole('listitem').first()).toHaveText('source, always shown');
+	await page.getByRole('checkbox', { name: 'Landmarks' }).uncheck();
+	await expect(landmarks).toHaveCount(0);
+	await page.getByRole('checkbox', { name: 'Landmarks' }).check();
 
 	// Selecting from the overview flies to the selection and zooms until symbols are legible.
 	await overview.locator('.issues button', { hasText: 'l1' }).click();
