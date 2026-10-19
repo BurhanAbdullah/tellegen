@@ -13,13 +13,11 @@ import {
 	ease,
 	encodeCamera,
 	entityKey,
-	feederEnvelope,
 	lerpInto,
 	loadingColour,
 	pairBar,
 	placeLabels,
 	queryTable,
-	rowEnvelopes,
 	screenAnchored,
 	search,
 	tableCsv,
@@ -298,29 +296,7 @@ describe('svg export', () => {
 	});
 });
 
-describe('feeder envelope, phase bars and morph', () => {
-	it('groups the envelope by component, depth and reference', () => {
-		const tree = { depth: [0, 1, 1, 1], component: [0, 0, 0, 1] };
-		const s: ResultSnapshot = {
-			...snapshot,
-			buses: [
-				{ pairs: [{ pair: ['1', '2'], volts: 20000, min: 1, max: 2e4 }], unbalance: null },
-				{ pairs: [pn('1', 230)], unbalance: null },
-				{ pairs: [pn('1', 220)], unbalance: null },
-				{ pairs: [pn('1', 100)], unbalance: null }
-			]
-		};
-		const bands = feederEnvelope(tree, s);
-		expect(bands.get('0|1|phase–neutral')).toEqual({ min: 220, max: 230, count: 2 });
-		expect(bands.get('1|1|phase–neutral')).toEqual({ min: 100, max: 100, count: 1 });
-		expect(
-			rowEnvelopes(bands, tree, [
-				{ bus: 1, pairs: s.buses[1].pairs },
-				{ bus: 0, pairs: [] }
-			])
-		).toEqual([{ min: 220, max: 230, count: 2 }, null]);
-	});
-
+describe('phase bars and morph', () => {
 	it('draws pair bars on a band ±25 % track and conductor bars on one shared scale', () => {
 		const bar = pairBar(pn('1', 230));
 		expect(bar.band?.left).toBeCloseTo(100 / 6, 10);

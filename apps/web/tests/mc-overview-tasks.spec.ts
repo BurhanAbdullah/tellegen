@@ -37,10 +37,14 @@ test('protocol tasks stay within their interaction budgets', async ({ page }) =>
 	await test.step('2. its size and phase are visible without interaction', async () => {
 		await expect(issues.first()).toContainText('c–n below 207.00 V by 1.72 %');
 	});
-	await test.step('3. follow the voltage to it: one click', async () => {
+	await test.step('3. every phase at it against its band: one click', async () => {
 		await issues.first().click();
-		await expect(overview.getByRole('heading', { name: 'Voltage profile' })).toBeVisible();
-		await expect(overview).toContainText('src → lb · 2 buses');
+		await expect(overview.getByRole('heading', { name: 'Phases at lb' })).toBeVisible();
+		await expect(
+			overview
+				.getByRole('list', { name: 'Pair voltages against declared limits' })
+				.getByRole('listitem')
+		).toHaveCount(3);
 	});
 	await test.step('4. the most heavily loaded line: one click', async () => {
 		await overview.getByRole('button', { name: /Max loading/ }).click();
@@ -152,14 +156,16 @@ test('the schematic can be walked bus by bus from the keyboard', async ({ page }
 	await expect(spoken).toHaveText('');
 });
 
-test('hovering a table row highlights the bus in the voltage profile', async ({ page }) => {
+test('hovering a table row marks it as the linked hover, and leaving clears it', async ({
+	page
+}) => {
 	const overview = await solvedOverview(page);
-	await overview.locator('.issues button').first().click();
 	await overview.getByText('Results table').click();
-	await overview.getByRole('row').filter({ hasText: /^src/ }).first().hover();
-	await expect(overview.locator('circle.point.hovered').first()).toBeAttached();
-	await overview.getByRole('heading', { name: 'Phases at lb' }).hover();
-	await expect(overview.locator('circle.point.hovered')).toHaveCount(0);
+	const row = overview.getByRole('row').filter({ hasText: /^src/ }).first();
+	await row.hover();
+	await expect(row).toHaveClass(/hovered/);
+	await overview.getByRole('heading', { name: /^Issues/ }).hover();
+	await expect(overview.locator('[role=row].hovered')).toHaveCount(0);
 });
 
 test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {
@@ -189,16 +195,6 @@ test('the overview works from the keyboard alone', async ({ page }) => {
 	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('Enter');
 	await expect(overview.getByRole('heading', { name: 'Phases at lb' })).toBeVisible();
-
-	// The profile is one Tab stop; arrow keys walk the path and Enter selects.
-	const points = overview.locator('figure [role=button]');
-	await expect(points).toHaveCount(6);
-	await expect(overview.locator('figure [role=button][tabindex="0"]')).toHaveCount(1);
-	await overview.locator('figure [role=button][tabindex="0"]').focus();
-	await page.keyboard.press('ArrowLeft');
-	await expect(page.locator(':focus')).toHaveAttribute('aria-label', /^src /);
-	await page.keyboard.press('Enter');
-	await expect(overview.getByRole('heading', { name: 'Phases at src' })).toBeVisible();
 
 	// The table grid follows the shared selection and moves it with arrow keys.
 	await overview.getByText('Results table').click();
@@ -291,11 +287,9 @@ test('a selected line shows every conductor in the multi-wire view', async ({ pa
 	).toBeVisible();
 });
 
-test('a flat voltage profile and a case without limits do not break the overview', async ({
-	page
-}) => {
-	// Regression: the shipped example declares no bus voltage limits and its source bus is balanced, so the
-	// profile's axis ticks were equal and a value-keyed list threw `each_key_duplicate` (a 500 page).
+test('a balanced case without limits does not break the overview', async ({ page }) => {
+	// Regression: the shipped example declares no bus voltage limits and its source bus is balanced.
+	// Equal values once made a value-keyed list throw `each_key_duplicate` (a 500 page).
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
 	// The prerendered input exists before hydration attaches its listener; a file set earlier is
@@ -314,7 +308,9 @@ test('a flat voltage profile and a case without limits do not break the overview
 	for (const id of ['src', 'lb', 'l1']) {
 		await overview.getByRole('combobox', { name: 'Find a bus or branch' }).fill(id);
 		await page.keyboard.press('Enter');
-		await expect(overview.getByRole('heading', { name: 'Voltage profile' })).toBeVisible();
+		await expect(
+			overview.getByRole('heading', { name: new RegExp(`^(Phases at|Conductors on) ${id}$`) })
+		).toBeVisible();
 	}
 	await overview.getByRole('button', { name: 'Show schematic' }).click();
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();

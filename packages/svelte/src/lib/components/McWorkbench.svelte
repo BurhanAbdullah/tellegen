@@ -3,13 +3,10 @@
 	import MultiWire from './MultiWire.svelte';
 	import OmniSearch from './OmniSearch.svelte';
 	import ResultsTable from './ResultsTable.svelte';
-	import VoltageProfile from './VoltageProfile.svelte';
 	import {
 		buildSearchIndex,
 		busState,
 		conductorBars,
-		displayTree,
-		feederEnvelope,
 		graphInputs,
 		loadingState,
 		magnitudeUnbalance,
@@ -21,7 +18,6 @@
 		snapshotSummary,
 		tableCsv,
 		tableModel,
-		voltageProfile,
 		type Issue,
 		type SearchMatch,
 		type TableKind
@@ -78,25 +74,7 @@
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
 	const edgeIndex = $derived(new Map(graph.edges.map((e, i) => [e.id, i])));
 	// Network-only structures are rebuilt when the case changes, not after every solve.
-	const tree = $derived(displayTree(graph));
 	const searchIndex = $derived(buildSearchIndex(inputs.entities));
-	const busIds = $derived(graph.buses.map((b) => b.id));
-	const envelope = $derived(snapshot ? feederEnvelope(tree, snapshot) : null);
-	/** The selected bus, or the deeper end of the selected branch. */
-	const profileTarget = $derived.by(() => {
-		if (selectedBus !== null && busIndex.has(selectedBus))
-			return busIndex.get(selectedBus) as number;
-		const k = selectedEdge !== null ? edgeIndex.get(selectedEdge) : undefined;
-		if (k === undefined) return null;
-		const { from, to } = inputs.names.branches[k];
-		if (from < 0 || to < 0) return null;
-		return tree.depth[from] > tree.depth[to] ? from : to;
-	});
-	const profile = $derived(
-		snapshot && envelope && profileTarget !== null
-			? voltageProfile(graph, tree, snapshot, profileTarget, envelope)
-			: null
-	);
 	let tableKind = $state<TableKind>('bus');
 	const tables = $derived(
 		snapshot
@@ -407,20 +385,6 @@
 				<h4>Multi-wire view</h4>
 				<MultiWire view={multiWire} />
 			{/if}
-		{/if}
-
-		{#if profile}
-			<h4>Voltage profile</h4>
-			<VoltageProfile
-				{profile}
-				{busIds}
-				{selectedBus}
-				onselectbus={(id) => {
-					if (id !== selectedBus) onselectbus(id);
-				}}
-				hoveredBus={hovered?.kind === 'bus' ? hovered.id : null}
-				onhoverbus={(id) => onhover?.(id === null ? null : { kind: 'bus', id })}
-			/>
 		{/if}
 
 		{#if tables}

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildSearchIndex,
 	displayTree,
-	feederEnvelope,
 	graphInputs,
 	queryTable,
 	rankIssues,
@@ -11,8 +10,7 @@ import {
 	snapshotFromMcPf,
 	snapshotSummary,
 	tableCsv,
-	tableModel,
-	voltageProfile
+	tableModel
 } from '../src/lib/diagram/index.js';
 import { syntheticFeeder } from './diagram-fixtures.js';
 
@@ -23,9 +21,7 @@ function overviewSteps(n: number) {
 	let snapshot!: ReturnType<typeof snapshotFromMcPf>;
 	let issues!: ReturnType<typeof rankIssues>;
 	let tree!: ReturnType<typeof displayTree>;
-	let envelope!: ReturnType<typeof feederEnvelope>;
 	let index!: ReturnType<typeof buildSearchIndex>;
-	const deepest = () => tree.depth.reduce((best, d, i) => (d > tree.depth[best] ? i : best), 0);
 	const steps: [string, () => unknown][] = [
 		['graphInputs', () => (inputs = graphInputs(graph))],
 		[
@@ -35,11 +31,6 @@ function overviewSteps(n: number) {
 		['rankIssues', () => (issues = rankIssues(snapshot))],
 		['snapshotSummary', () => snapshotSummary(snapshot, issues)],
 		['displayTree', () => (tree = displayTree(graph))],
-		['feederEnvelope', () => (envelope = feederEnvelope(tree, snapshot))],
-		[
-			'voltageProfile (deepest bus)',
-			() => voltageProfile(graph, tree, snapshot, deepest(), envelope)
-		],
 		['buildSearchIndex', () => (index = buildSearchIndex(inputs.entities))],
 		['search', () => search(index, 'bus99')],
 		[

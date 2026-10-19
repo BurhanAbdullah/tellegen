@@ -43,8 +43,6 @@ test('multiconductor overview ranks declared-limit issues and links them to the 
 			.getByRole('listitem')
 	).toHaveCount(3);
 	await expect(overview).toContainText('(VUF)');
-	await expect(overview.getByRole('heading', { name: 'Voltage profile' })).toBeVisible();
-	await expect(overview.locator('figure')).toHaveCount(1);
 
 	const search = overview.getByRole('combobox', { name: 'Find a bus or branch' });
 	await search.fill('l1');

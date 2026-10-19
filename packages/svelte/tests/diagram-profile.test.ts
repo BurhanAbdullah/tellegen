@@ -7,8 +7,6 @@ import {
 	multiWireBranch,
 	sourceLayout,
 	treePath,
-	voltageProfile,
-	MAX_PROFILE_POINTS,
 	type PairVoltage,
 	type ResultSnapshot
 } from '../src/lib/diagram/index.js';
@@ -67,37 +65,6 @@ describe('displayTree', () => {
 		expect([...tree.parent]).toEqual([0, 0, 1, 2, 4, 5]);
 		expect([...tree.component]).toEqual([0, 0, 0, 0, 1, 2]);
 		expect(treePath(tree, 3)).toEqual({ buses: [0, 1, 2, 3], edges: [0, 1, 2] });
-	});
-});
-
-describe('voltageProfile', () => {
-	it('splits zones at transformers and attaches the same-depth envelope', () => {
-		const tree = displayTree(graph);
-		const p = voltageProfile(graph, tree, result, 3);
-		expect(p.pathBuses).toEqual([0, 1, 2, 3]);
-		expect(p.zones.map((z) => [z.reason, z.rows.map((r) => r.bus)])).toEqual([
-			['Root-side zone', [0, 1]],
-			['Transformer boundary', [2, 3]]
-		]);
-		expect(p.zones[1].rows[1].envelope).toEqual({ min: 231, max: 231, count: 1 });
-		expect(p.zones[1].rows[1].step).toBe(3);
-	});
-
-	it('shows only the last points of very deep paths and says so', () => {
-		const n = MAX_PROFILE_POINTS + 20;
-		const chain: DistGraph = {
-			buses: Array.from({ length: n }, (_, i) => bus(`b${i}`, i === 0)),
-			edges: Array.from({ length: n - 1 }, (_, i) => edge(`e${i}`, `b${i}`, `b${i + 1}`))
-		};
-		const snap: ResultSnapshot = {
-			...result,
-			buses: chain.buses.map(() => ({ pairs: [pn(230)], unbalance: null }))
-		};
-		const p = voltageProfile(chain, displayTree(chain), snap, n - 1);
-		expect(p.pathBuses).toHaveLength(n);
-		expect(p.zones[0].rows).toHaveLength(MAX_PROFILE_POINTS);
-		expect(p.zones[0].rows[0].step).toBe(20);
-		expect(p.notice).toContain(`last ${MAX_PROFILE_POINTS} of ${n}`);
 	});
 });
 

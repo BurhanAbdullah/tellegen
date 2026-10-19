@@ -20,8 +20,8 @@ Recorded on a MacBook Pro (Apple M4 Max, 48 GB) with Node 24:
 | 10,000  | 26 ms                       | `snapshotFromMcPf`, 23 ms        |
 | 100,000 | 219 ms                      | `snapshotFromMcPf`, about 190 ms |
 
-The per-solve figure is snapshot, issue ranking and summary. `graphInputs`, the display tree, the
-envelope and the search index depend only on the network and are built once per case.
+The per-solve figure is snapshot, issue ranking and summary. `graphInputs`, the display tree and
+the search index depend only on the network and are built once per case.
 
 At 100,000 buses the result is 400,000 terminals and 800,000 element ports. Indexing them costs
 about 60 ms and building the bus and branch views about 130 ms; a live session must also serialise

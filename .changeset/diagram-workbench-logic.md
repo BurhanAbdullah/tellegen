@@ -15,8 +15,7 @@ In `@tellegen/svelte`, `McWorkbench` summarises a multiconductor power-flow resu
 violations, losses, voltage ranges per declared reference, maximum loading and
 maximum unbalance; a ranked issue list that selects the bus or branch; search
 over buses and branches; per-phase voltage bars against declared limits and
-per-conductor currents at both ends; a voltage profile along the display tree with
-the same-depth envelope; sortable bus and branch tables; and CSV export. Cases
+per-conductor currents at both ends; sortable bus and branch tables; and CSV export. Cases
 larger than 25,000 buses compute the overview on request. Setting
 `MulticonductorCase.schematic` makes `TellegenMap` show the case as a deck.gl
 schematic or at its source positions, with an animated switch between them,
@@ -30,7 +29,7 @@ Lines show their conductors at close zoom; buses are named with short ids; parts
 energised from any source are drawn faint; and outside selections fly into view.
 The schematic can be walked bus by bus from the keyboard, with a spoken description.
 Solved P/Q and power-flow arrows show at close zoom, hover is linked across the
-schematic, profile and tables, and each LV network (galvanic zone) is outlined and
+schematic and tables, and each LV network (galvanic zone) is outlined and
 tinted by its worst state, with a summary tag. MV lines draw heavier than LV, and LV
 detail fades when zoomed out. Sources, generators, large IBRs and transformers stay
 visible as fixed-size landmarks, placed by priority. Geographic positions draw over the main
