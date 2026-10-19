@@ -16,6 +16,9 @@ export interface SchematicGeometry {
 	version?: number;
 	/** Room reserved below each bus per attachment kind (engine layouts only). */
 	attachmentGap?: number;
+	/** For geographic source positions: the Web Mercator point (metres, y down) the positions are
+	 * relative to, so map tiles can be placed under them. */
+	mercatorOrigin?: [number, number];
 }
 
 function segments(
@@ -174,7 +177,8 @@ export function sourceLayout(
 			});
 		}),
 		role,
-		bounds: bounds(positions)
+		bounds: bounds(positions),
+		...(geographic ? { mercatorOrigin: [cx, cy] as [number, number] } : {})
 	};
 }
 

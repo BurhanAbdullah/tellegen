@@ -28,7 +28,9 @@ import {
 	zoneSummary,
 	landmarkCandidates,
 	placeLandmarks,
-	landmarkGlyph
+	landmarkGlyph,
+	basemapCamera,
+	mercatorToLngLat
 } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
@@ -150,6 +152,22 @@ describe('schematic equipment symbols', () => {
 		const paths = kinds.map((k) => glyphPath(attachmentGlyph(k), 10));
 		expect(new Set(paths).size).toBe(kinds.length);
 		for (const k of kinds) expect(attachmentGlyph(k)[0][0]).toEqual([0, 0]);
+	});
+
+	it('still draws a transformer whose two buses share one location', () => {
+		const placed = [
+			{ id: 'S', lon: 0, lat: 0 },
+			{ id: 'M', lon: 0, lat: 0 },
+			{ id: 'L', lon: 400, lat: 0 },
+			{ id: 'X', lon: 400, lat: 300 }
+		];
+		const symbols = schematicEquipment(
+			graph,
+			sourceLayout(graph, placed, false, displayTree(graph))
+		);
+		const t = symbols.items.find((d) => d.kind === 'transformer')!;
+		expect([t.x, t.y]).toEqual([symbols.anchors[0], symbols.anchors[1]]);
+		expect(Array.from(symbols.owner)).toContain(0);
 	});
 
 	it('scales symbols to the drawing for source positions', () => {
@@ -545,5 +563,30 @@ describe('landmarks', () => {
 			.map(([x]) => x);
 		expect(Math.min(...xs) + Math.max(...xs)).toBeCloseTo(0, 5);
 		expect(landmarkGlyph('transformer')).toHaveLength(2);
+	});
+});
+
+describe('basemap camera', () => {
+	const WORLD = 2 * Math.PI * 6_378_137;
+
+	it('converts Web Mercator metres back to longitude and latitude', () => {
+		expect(mercatorToLngLat(0, 0)).toEqual([0, 0]);
+		const [lng, lat] = mercatorToLngLat(
+			WORLD / 4,
+			-6_378_137 * Math.log(Math.tan(Math.PI / 4 + Math.PI / 12))
+		);
+		expect(lng).toBeCloseTo(90, 9);
+		expect(lat).toBeCloseTo(30, 9);
+	});
+
+	it('matches the schematic camera: same centre, and one metre over the same pixels', () => {
+		// 512 px across the whole world is MapLibre zoom 0.
+		const view = basemapCamera(
+			{ target: [100, -200, 0], zoom: Math.log2(512 / WORLD) },
+			[-100, 200]
+		);
+		expect(view.center[0]).toBeCloseTo(0, 9);
+		expect(view.center[1]).toBeCloseTo(0, 9);
+		expect(view.zoom).toBeCloseTo(0, 9);
 	});
 });

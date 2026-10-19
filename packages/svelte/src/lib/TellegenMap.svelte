@@ -5,6 +5,7 @@
 	import type { IconLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 	import type { MapLibreOverlay } from '@deck.gl/maplibre';
 	import type { LngLatBoundsLike, Map as MapLibreMap } from 'maplibre-gl';
+	import { BASEMAP_STYLE } from './diagram/basemap.js';
 	import type { NetworkBranch, NetworkBus } from './api.js';
 	import {
 		branchColor,
@@ -109,7 +110,7 @@
 		else onbranchclick?.(diagramCaseId, branchId);
 	}
 
-	const STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
+	const STYLE = BASEMAP_STYLE;
 	const CUE_MARGIN_PX = 64;
 	const BRANCH_FOCUS_MS = 850;
 	const BRANCH_FOCUS_MAX_ZOOM = 9.5;

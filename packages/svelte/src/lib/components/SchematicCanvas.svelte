@@ -45,6 +45,9 @@
 		describeBus,
 		treeWalk,
 		type WalkKey,
+		BASEMAP_ATTRIBUTION,
+		BASEMAP_STYLE,
+		basemapCamera,
 		galvanicZones,
 		landmarkCandidates,
 		landmarkGlyph,
@@ -120,6 +123,31 @@
 		zoom: 0
 	});
 	let labels = $state.raw<(LabelCandidate & { position: [number, number] })[]>([]);
+	/** Map tiles under geographic positions, as for the main map; they fade in and out with the
+	 * layout switch. While fading out they stay pinned to the screen as the camera moves on. */
+	const BASEMAP_STORAGE = 'tellegen.schematic.basemap';
+	let basemapOn = $state(
+		(() => {
+			try {
+				return localStorage.getItem(BASEMAP_STORAGE) !== 'off';
+			} catch {
+				return true;
+			}
+		})()
+	);
+	function rememberBasemap(on: boolean) {
+		basemapOn = on;
+		try {
+			localStorage.setItem(BASEMAP_STORAGE, on ? 'on' : 'off');
+		} catch {
+			// Storage can be unavailable; the toggle still works for this view.
+		}
+	}
+	let basemapOpacity = $state(0);
+	const BASEMAP_FADE_MS = 700;
+	let mapBox = $state<HTMLDivElement>();
+	let basemap: import('maplibre-gl').Map | null = null;
+	let basemapLoading = false;
 	/** Landmarks placed for the current view, with their fixed-pixel glyph strokes. */
 	let marks = $state.raw<{
 		placed: Landmark[];
@@ -136,6 +164,66 @@
 			: null
 	);
 	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	const basemapWanted = $derived(
+		basemapOn && layout === 'source' && mc.coordsKind === 'geographic' && !!source?.mercatorOrigin
+	);
+	let fadeFrame = 0;
+	$effect(() => {
+		const target = basemapWanted ? 1 : 0;
+		untrack(() => {
+			cancelAnimationFrame(fadeFrame);
+			const start = basemapOpacity;
+			if (start === target) return;
+			if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+				basemapOpacity = target;
+				return;
+			}
+			const t0 = performance.now();
+			const step = (now: number) => {
+				const k = Math.min(1, (now - t0) / BASEMAP_FADE_MS);
+				basemapOpacity = start + (target - start) * ease(k);
+				if (k < 1) fadeFrame = requestAnimationFrame(step);
+			};
+			fadeFrame = requestAnimationFrame(step);
+		});
+	});
+
+	// The basemap map is created the first time it is wanted, and follows the schematic camera only
+	// while wanted: fading out, it stays where it was on screen as the drawing moves to its new layout.
+	$effect(() => {
+		if (!basemapWanted || !mapBox || basemap || basemapLoading) return;
+		basemapLoading = true;
+		const container = mapBox;
+		Promise.all([
+			import('maplibre-gl'),
+			import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')
+		])
+			.then(([maplibre, worker]) => {
+				maplibre.setWorkerUrl(worker.default);
+				const origin = source?.mercatorOrigin ?? [0, 0];
+				basemap = new maplibre.Map({
+					container,
+					style: BASEMAP_STYLE,
+					interactive: false,
+					attributionControl: false,
+					...basemapCamera(camera, origin)
+				});
+			})
+			.catch(() => {
+				basemapLoading = false;
+			});
+	});
+	$effect(() => {
+		const origin = source?.mercatorOrigin;
+		void [width, height];
+		if (!basemapWanted || !origin) return;
+		const view = basemapCamera(camera, origin);
+		untrack(() => {
+			basemap?.resize();
+			basemap?.jumpTo(view);
+		});
+	});
+	$effect(() => () => basemap?.remove());
 	const powers = $derived(mc.overviewResult ? elementPowers(mc.overviewResult) : null);
 	const snapshot = $derived(
 		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
@@ -816,8 +904,9 @@
 							id: 'landmark-halos',
 							data: marks.placed,
 							getPosition: (l: Landmark) => [l.x, l.y, 0],
-							getFillColor: [...PAPER.slice(0, 3), 235] as RGBA,
-							getRadius: 12,
+							// Semi-transparent: lifts the marker without blanking the drawing under it.
+							getFillColor: [...PAPER.slice(0, 3), 150] as RGBA,
+							getRadius: 11,
 							radiusUnits: 'pixels',
 							pickable: true
 						}),
@@ -1499,6 +1588,7 @@
 		tabindex="0"
 		{onkeydown}
 	>
+		<div class="basemap" bind:this={mapBox} style:opacity={basemapOpacity} aria-hidden="true"></div>
 		<canvas bind:this={canvas}></canvas>
 		<p class="sr-only" aria-live="polite">{announcement}</p>
 	</div>
@@ -1521,6 +1611,15 @@
 				>{mc.coordsKind === 'geographic' ? 'Geographic' : 'Source positions'}</button
 			>
 		</div>
+		{#if layout === 'source' && mc.coordsKind === 'geographic'}
+			<label class="check" title="Map tiles under the geographic positions, as on the main map"
+				><input
+					type="checkbox"
+					checked={basemapOn}
+					onchange={(e) => rememberBasemap(e.currentTarget.checked)}
+				/> Basemap</label
+			>
+		{/if}
 		{#if layout === 'schematic'}
 			<label>
 				<span class="sr-only">Schematic arrangement</span>
@@ -1650,6 +1749,16 @@
 			</ul>
 		</details>
 	{/if}
+	{#if basemapOpacity > 0}
+		<p
+			class="attribution"
+			style:opacity={basemapOpacity}
+			style:right="{panels.compact ? 12 : panels.dockWidth('right') + 24}px"
+			style:bottom="{panels.compact ? app.sheetInset + 8 : 8}px"
+		>
+			{BASEMAP_ATTRIBUTION}
+		</p>
+	{/if}
 	{#if status}<p class="status" role="status">{status}</p>{/if}
 </div>
 
@@ -1742,6 +1851,26 @@
 		border: 1px solid var(--line);
 		border-radius: 3px;
 		box-shadow: var(--elev-1);
+	}
+	.basemap {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.attribution {
+		position: absolute;
+		margin: 0;
+		padding: 1px 6px;
+		font: 10px var(--font-mono);
+		color: var(--text-secondary);
+		background: color-mix(in srgb, var(--paper) 80%, transparent);
+		border-radius: 2px;
+		pointer-events: none;
+	}
+	.toolbar .check {
+		display: flex;
+		gap: 4px;
+		align-items: center;
 	}
 	.key .toggle {
 		display: flex;

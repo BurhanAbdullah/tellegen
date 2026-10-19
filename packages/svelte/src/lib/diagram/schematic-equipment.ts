@@ -287,9 +287,9 @@ export function schematicEquipment(
 			geometry.targets[s * 3 + 1]
 		];
 		const len = Math.hypot(x1 - x0, y1 - y0);
-		if (!(len > 0)) return;
-		const cos = (x1 - x0) / len;
-		const sin = (y1 - y0) / len;
+		// Co-located ends (a transformer between buses at one site): draw along x.
+		const cos = len > 0 ? (x1 - x0) / len : 1;
+		const sin = len > 0 ? (y1 - y0) / len : 0;
 		// Routes run either way between the ends; orient by which end the route starts nearer.
 		const from = busIndex.get(edge.from.toLowerCase()) ?? -1;
 		const to = busIndex.get(edge.to.toLowerCase()) ?? -1;
@@ -305,10 +305,18 @@ export function schematicEquipment(
 		flowDir[k * 2] = cos * forward;
 		flowDir[k * 2 + 1] = sin * forward;
 		if (len < 2.4 * half) {
-			// Too short for a symbol: anchor at the middle so the branch can still be found.
-			anchors[k * 2] = (x0 + x1) / 2;
-			anchors[k * 2 + 1] = (y0 + y1) / 2;
+			// Too short to sit on: anchor at the middle. Transformers and switches still get their
+			// symbol there, over the branch rather than in a gap, so they stay visible.
+			const [mx, my] = [(x0 + x1) / 2, (y0 + y1) / 2];
+			anchors[k * 2] = mx;
+			anchors[k * 2 + 1] = my;
 			room[k] = len / 2;
+			if (glyph) {
+				stroke(glyph, mx, my, cos, sin, k);
+				const kind = edge.kind as 'transformer' | 'switch';
+				items.push({ kind, edge: k, bus: -1, ids: [edge.id], x: mx, y: my });
+				kinds.add(kind);
+			}
 			return;
 		}
 		// From the child end: centre 2.5 half-widths back, clamped to the segment's middle.

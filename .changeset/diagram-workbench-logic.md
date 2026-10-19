@@ -33,7 +33,8 @@ Solved P/Q and power-flow arrows show at close zoom, hover is linked across the
 schematic, profile and tables, and each LV network (galvanic zone) is outlined and
 tinted by its worst state, with a summary tag. MV lines draw heavier than LV, and LV
 detail fades when zoomed out. Sources, generators, large IBRs and transformers stay
-visible as fixed-size landmarks, placed by priority. The schematic can be downloaded as a PowerIO
+visible as fixed-size landmarks, placed by priority. Geographic positions draw over the main
+map's basemap, which fades in and out with the layout switch. The schematic can be downloaded as a PowerIO
 diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.

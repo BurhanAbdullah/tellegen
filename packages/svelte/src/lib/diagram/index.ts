@@ -22,3 +22,4 @@ export * from './short-names.js';
 export * from './tree-walk.js';
 export * from './galvanic-zones.js';
 export * from './landmarks.js';
+export * from './basemap.js';
