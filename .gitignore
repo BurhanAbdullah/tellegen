@@ -1,5 +1,6 @@
 # Node
-node_modules/
+# No trailing slash: also ignore node_modules symlinks (worktrees link to a shared install).
+node_modules
 docs/book/
 apps/web/build/
 apps/web/dist/
