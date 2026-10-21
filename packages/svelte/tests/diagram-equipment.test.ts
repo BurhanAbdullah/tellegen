@@ -171,6 +171,29 @@ describe('schematic equipment symbols', () => {
 		expect(Array.from(symbols.owner)).toContain(0);
 	});
 
+	it('spreads the marks of branches drawn on the same segment instead of stacking them', () => {
+		// An MV and an LV line between buses at the same two positions (shared poles).
+		const g: DistGraph = {
+			buses: [bus('A', [], true), bus('B'), bus('A2'), bus('B2'), bus('C')],
+			edges: [
+				edge('line', 'mv', 'A', 'B'),
+				edge('line', 'lv', 'A2', 'B2'),
+				edge('line', 'x', 'B', 'C')
+			]
+		};
+		const placed = [
+			{ id: 'A', lon: 0, lat: 0 },
+			{ id: 'B', lon: 300, lat: 0 },
+			{ id: 'A2', lon: 0, lat: 0 },
+			{ id: 'B2', lon: 300, lat: 0 },
+			{ id: 'C', lon: 300, lat: 200 }
+		];
+		const eq = schematicEquipment(g, sourceLayout(g, placed, false, displayTree(g)));
+		expect(Array.from(eq.sharedRoute)).toEqual([2, 2, 1]);
+		// The two lines' marks sit a third and two thirds of the way along, not both at the middle.
+		expect(Math.abs(eq.anchors[0] - eq.anchors[2])).toBeCloseTo(100, 3);
+	});
+
 	it('scales symbols to the drawing for source positions', () => {
 		const placed = [
 			{ id: 'S', lon: 0, lat: 0 },

@@ -529,7 +529,12 @@
 		const e = graph.edges[k];
 		const { phases, neutral } = conductorSet(graph, k);
 		const wires = `${phases} phase${phases === 1 ? '' : 's'}${neutral ? ' + neutral' : ''}`;
-		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}`;
+		const shared = equipment?.sharedRoute[k] ?? 1;
+		const route =
+			shared > 1
+				? ` · drawn on a route shared with ${shared - 1} other branch${shared > 2 ? 'es' : ''}`
+				: '';
+		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}${route}`;
 	};
 	const itemLabel = (d: EquipmentItem) => {
 		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;

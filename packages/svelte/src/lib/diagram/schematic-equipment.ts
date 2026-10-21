@@ -206,6 +206,9 @@ export interface EquipmentSymbols {
 	 * `from` bus towards its `to` bus, and the free length upstream of the anchor on it. */
 	flowDir: Float32Array;
 	room: Float32Array;
+	/** Per edge: how many branches are drawn along exactly the same segment (1 when alone), as
+	 * when an MV and an LV line hang between buses at the same positions. */
+	sharedRoute: Uint8Array;
 }
 
 function medianEdgeLength(geometry: SchematicGeometry): number {
@@ -274,12 +277,35 @@ export function schematicEquipment(
 	/** Per host segment: the interrupted interval as fractions along it. */
 	const cuts = new Map<number, [number, number]>();
 	const half = INLINE_HALF * unit;
+	// The segment each branch's symbol or marks sit on, and which branches share one exactly:
+	// their marks are spread along it instead of drawn on top of each other.
+	const host = new Int32Array(graph.edges.length).fill(-1);
+	const routes = new Map<string, number[]>();
+	graph.edges.forEach((_, k) => {
+		const list = segs.get(k);
+		if (!list) return;
+		const s = engine && geometry.role[k] === 0 ? list[list.length - 1] : list[list.length >> 1];
+		host[k] = s;
+		const a = `${geometry.sources[s * 3]},${geometry.sources[s * 3 + 1]}`;
+		const b = `${geometry.targets[s * 3]},${geometry.targets[s * 3 + 1]}`;
+		const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+		const group = routes.get(key);
+		if (group) group.push(k);
+		else routes.set(key, [k]);
+	});
+	const sharedRoute = new Uint8Array(graph.edges.length).fill(1);
+	const slot = new Int32Array(graph.edges.length);
+	for (const group of routes.values())
+		group.forEach((k, i) => {
+			sharedRoute[k] = Math.min(255, group.length);
+			slot[k] = i;
+		});
 	graph.edges.forEach((edge, k) => {
 		const glyph = branchGlyph(edge.kind, edge.closed);
 		const list = segs.get(k);
 		if (!list) return;
 		const childEnd = engine && geometry.role[k] === 0;
-		const s = childEnd ? list[list.length - 1] : list[list.length >> 1];
+		const s = host[k];
 		const [x0, y0, x1, y1] = [
 			geometry.sources[s * 3],
 			geometry.sources[s * 3 + 1],
@@ -319,8 +345,11 @@ export function schematicEquipment(
 			}
 			return;
 		}
-		// From the child end: centre 2.5 half-widths back, clamped to the segment's middle.
-		const along = childEnd ? Math.max(len / 2, len - 2.5 * half) : len / 2;
+		// From the child end: centre 2.5 half-widths back, clamped to the segment's middle. Branches
+		// sharing the segment take evenly spaced places along it.
+		const along = childEnd
+			? Math.max(len / 2, len - 2.5 * half)
+			: Math.min(len - half, Math.max(half, (len * (slot[k] + 1)) / (sharedRoute[k] + 1)));
 		const x = x0 + cos * along;
 		const y = y0 + sin * along;
 		anchors[k * 2] = x;
@@ -394,7 +423,8 @@ export function schematicEquipment(
 		},
 		anchors,
 		flowDir,
-		room
+		room,
+		sharedRoute
 	};
 }
 
