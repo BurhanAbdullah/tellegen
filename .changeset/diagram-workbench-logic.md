@@ -34,7 +34,9 @@ tinted by its worst state, with a summary tag. MV lines draw heavier than LV, an
 detail fades when zoomed out. Sources, generators, large IBRs and transformers stay
 visible as fixed-size landmarks, placed by priority. Geographic positions draw over the main
 map's basemap, which fades in and out with the layout switch. The diagram opens on the case's own
-positions and switches to the schematic from there. The schematic can be downloaded as a PowerIO
+positions and switches to the schematic from there. Branches drawn along the same route fan
+apart on hover, with a card to pick between them. Branches drawn along the same route fan
+apart on hover, with a card to pick between them. The schematic can be downloaded as a PowerIO
 diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.

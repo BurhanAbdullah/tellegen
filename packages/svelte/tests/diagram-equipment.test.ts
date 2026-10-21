@@ -8,6 +8,8 @@ import {
 	INLINE_HALF,
 	schematicEquipment,
 	sourceLayout,
+	fanRoute,
+	routeMiddle,
 	displayTree,
 	conductorSet,
 	conductorTicks,
@@ -192,6 +194,38 @@ describe('schematic equipment symbols', () => {
 		expect(Array.from(eq.sharedRoute)).toEqual([2, 2, 1]);
 		// The two lines' marks sit a third and two thirds of the way along, not both at the middle.
 		expect(Math.abs(eq.anchors[0] - eq.anchors[2])).toBeCloseTo(100, 3);
+	});
+
+	it('fans the members of a shared route apart, meeting at the shared ends', () => {
+		const g: DistGraph = {
+			buses: [bus('A', [], true), bus('B'), bus('A2'), bus('B2')],
+			edges: [edge('line', 'mv', 'A', 'B'), edge('line', 'lv', 'A2', 'B2')]
+		};
+		const placed = [
+			{ id: 'A', lon: 0, lat: 0 },
+			{ id: 'B', lon: 300, lat: 0 },
+			{ id: 'A2', lon: 0, lat: 0 },
+			{ id: 'B2', lon: 300, lat: 0 }
+		];
+		const geometry = sourceLayout(g, placed, false, displayTree(g));
+		const eq = schematicEquipment(g, geometry);
+		expect(eq.routeGroups).toEqual([[0, 1]]);
+		expect(Array.from(eq.routeOf)).toEqual([0, 0]);
+		// At 1 px per unit: 7 px apart, centred on the route, tapering in over 14 px.
+		const fans = fanRoute(eq.routeGroups[0], eq.host, geometry, 1);
+		const [a, b] = fans;
+		expect(a.path[0]).toEqual(b.path[0]);
+		expect(a.path[3]).toEqual(b.path[3]);
+		expect(Math.abs(a.path[1][1] - b.path[1][1])).toBeCloseTo(7, 6);
+		expect(a.path[1][1] + b.path[1][1]).toBeCloseTo(2 * a.path[0][1], 6);
+		expect(Math.abs(a.path[1][0] - a.path[0][0])).toBeCloseTo(14, 6);
+		// At 2 px per unit the same spread on screen is half as far in drawing units.
+		const zoomed = fanRoute(eq.routeGroups[0], eq.host, geometry, 2);
+		expect(Math.abs(zoomed[0].path[1][1] - zoomed[1].path[1][1])).toBeCloseTo(3.5, 6);
+		expect(routeMiddle(eq.routeGroups[0], eq.host, geometry)).toEqual([
+			(geometry.positions[0] + geometry.positions[3]) / 2,
+			geometry.positions[1]
+		]);
 	});
 
 	it('scales symbols to the drawing for source positions', () => {

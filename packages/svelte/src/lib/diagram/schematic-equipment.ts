@@ -209,6 +209,12 @@ export interface EquipmentSymbols {
 	/** Per edge: how many branches are drawn along exactly the same segment (1 when alone), as
 	 * when an MV and an LV line hang between buses at the same positions. */
 	sharedRoute: Uint8Array;
+	/** Routes carrying more than one branch: their member edges, in drawing order. */
+	routeGroups: number[][];
+	/** Per edge: its index in `routeGroups`, or −1 when its route is its own. */
+	routeOf: Int32Array;
+	/** Per edge: the segment its symbol or marks sit on (−1 when not drawn). */
+	host: Int32Array;
 }
 
 function medianEdgeLength(geometry: SchematicGeometry): number {
@@ -295,11 +301,18 @@ export function schematicEquipment(
 	});
 	const sharedRoute = new Uint8Array(graph.edges.length).fill(1);
 	const slot = new Int32Array(graph.edges.length);
-	for (const group of routes.values())
+	const routeGroups: number[][] = [];
+	const routeOf = new Int32Array(graph.edges.length).fill(-1);
+	for (const group of routes.values()) {
 		group.forEach((k, i) => {
 			sharedRoute[k] = Math.min(255, group.length);
 			slot[k] = i;
 		});
+		if (group.length > 1) {
+			for (const k of group) routeOf[k] = routeGroups.length;
+			routeGroups.push(group);
+		}
+	}
 	graph.edges.forEach((edge, k) => {
 		const glyph = branchGlyph(edge.kind, edge.closed);
 		const list = segs.get(k);
@@ -424,7 +437,10 @@ export function schematicEquipment(
 		anchors,
 		flowDir,
 		room,
-		sharedRoute
+		sharedRoute,
+		routeGroups,
+		routeOf,
+		host
 	};
 }
 

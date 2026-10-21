@@ -49,6 +49,9 @@
 		BASEMAP_STYLE,
 		basemapCamera,
 		cameraFromMap,
+		fanRoute,
+		routeMiddle,
+		type FannedBranch,
 		galvanicZones,
 		landmarkCandidates,
 		landmarkGlyph,
@@ -487,21 +490,142 @@
 			announcement = '';
 		});
 	});
+	/** Shared-route member chosen with Tab at the cursor bus (−1 for none). */
+	let tabEdge = -1;
 	function moveCursor(to: number) {
 		if (to < 0) return;
+		tabEdge = -1;
 		cursor = to;
 		announcement = describeBus(graph, tree, walk, to, voltageNote(to));
 		bringIntoView([geometry.positions[to * 3], geometry.positions[to * 3 + 1]]);
 	}
-	/** Per symbol stroke: ink, or faint when its bus or branch is not energised. */
+	// Shared routes: branches drawn along exactly the same segment (MV and LV on shared poles).
+	// At rest the route carries a count badge; hovering it fans its members apart by a few pixels,
+	// tapering into the shared ends, with a card listing them; clicking pins it open. The key can
+	// keep every shared route separated.
+	const SEPARATE_STORAGE = 'tellegen.schematic.separate';
+	let separateAll = $state(
+		(() => {
+			try {
+				return localStorage.getItem(SEPARATE_STORAGE) === 'on';
+			} catch {
+				return false;
+			}
+		})()
+	);
+	function rememberSeparate(on: boolean) {
+		separateAll = on;
+		try {
+			localStorage.setItem(SEPARATE_STORAGE, on ? 'on' : 'off');
+		} catch {
+			// Storage can be unavailable; the toggle still works for this view.
+		}
+	}
+	let hoverGroup = $state<number | null>(null);
+	let pinnedGroup = $state<number | null>(null);
+	let cardHovered = false;
+	let collapseTimer: ReturnType<typeof setTimeout> | null = null;
+	function openGroup(g: number) {
+		if (collapseTimer) clearTimeout(collapseTimer);
+		collapseTimer = null;
+		if (hoverGroup !== g) hoverGroup = g;
+	}
+	function leaveGroup() {
+		if (hoverGroup === null || collapseTimer || cardHovered) return;
+		collapseTimer = setTimeout(() => {
+			collapseTimer = null;
+			if (!cardHovered) hoverGroup = null;
+		}, 350);
+	}
+	/** The one route whose card shows: pinned, else hovered. */
+	const activeGroup = $derived(equipment && symbolsOn ? (pinnedGroup ?? hoverGroup) : null);
+	/** Routes drawn fanned out now. */
+	const fannedGroups = $derived(
+		!equipment || !symbolsOn
+			? []
+			: separateAll
+				? equipment.routeGroups.map((_, g) => g)
+				: activeGroup === null
+					? []
+					: [activeGroup]
+	);
+	const fannedEdges = $derived(
+		new Set(fannedGroups.flatMap((g) => equipment?.routeGroups[g] ?? []))
+	);
+	function fanned(): FannedBranch[] {
+		if (!equipment || !fannedGroups.length) return [];
+		const scale = 2 ** tagZoom;
+		return fannedGroups.flatMap((g) =>
+			fanRoute(equipment.routeGroups[g], equipment.host, geometry, scale, {
+				spreadPx: 11,
+				taperPx: 18
+			})
+		);
+	}
+	/** Whether a drawn segment lies on its edge's shared (host) segment, so it is replaced by the
+	 * fanned path while its route is fanned. */
+	function onHost(d: SchematicGeometry, s: number, k: number): boolean {
+		const h = equipment?.host[k] ?? -1;
+		if (h < 0) return false;
+		const [ax, ay, bx, by] = [
+			geometry.sources[h * 3],
+			geometry.sources[h * 3 + 1],
+			geometry.targets[h * 3],
+			geometry.targets[h * 3 + 1]
+		];
+		const len = Math.hypot(bx - ax, by - ay) || 1;
+		const off = (x: number, y: number) =>
+			Math.abs((bx - ax) * (ay - y) - (ax - x) * (by - ay)) / len;
+		const tol = len * 1e-6 + 1e-9;
+		return (
+			off(d.sources[s * 3], d.sources[s * 3 + 1]) <= tol &&
+			off(d.targets[s * 3], d.targets[s * 3 + 1]) <= tol
+		);
+	}
+	/** A drawn segment replaced by its fanned path right now. */
+	function hiddenUnderFan(d: SchematicGeometry, s: number): boolean {
+		const k = d.segmentEdge[s];
+		return fannedEdges.has(k) && onHost(d, s, k);
+	}
+	const HIDDEN: RGBA = [0, 0, 0, 0];
+	/** Per symbol stroke: ink, or faint when its bus or branch is not energised; hidden for a branch
+	 * whose route is fanned (its marks are redrawn on the fanned path). */
 	function strokeColours(owner: Int32Array): Uint8Array {
 		const out = new Uint8Array(owner.length * 4);
 		for (let s = 0; s < owner.length; s++) {
 			const o = owner[s];
+			if (o >= 0 && fannedEdges.has(o)) {
+				out.set(HIDDEN, s * 4);
+				continue;
+			}
 			const on = o >= 0 ? live.edges[o] : live.buses[-o - 1];
 			out.set(on ? SYMBOL_INK : DEAD, s * 4);
 		}
 		return out;
+	}
+	function routeCardRows(g: number) {
+		const members = equipment?.routeGroups[g] ?? [];
+		return members.map((k) => {
+			const e = graph.edges[k];
+			const { phases, neutral } = conductorSet(graph, k);
+			const loading = snapshot?.branches[k]?.loading ?? null;
+			return {
+				k,
+				id: e.id,
+				kind: e.kind,
+				level: edgeMv[k] ? 'MV' : 'LV',
+				wires: `${phases}${neutral ? '+N' : ''}`,
+				loading: loading === null ? null : `${loading.toFixed(0)} %`,
+				state:
+					loading === null
+						? 'normal'
+						: loading > 100
+							? 'violation'
+							: loading >= 90
+								? 'warning'
+								: 'normal'
+			};
+		});
 	}
 	const legendGlyphs = $derived(
 		equipment
@@ -648,6 +772,7 @@
 			const k = g.segmentEdge[s];
 			const c = edgeColours[k];
 			let alpha = g.role[k] === 2 ? Math.min(110, c[3]) : c[3];
+			if (hiddenUnderFan(g, s)) alpha = 0;
 			if (zoomedOut && !edgeMv[k]) alpha *= 0.45;
 			out.set([c[0], c[1], c[2], alpha], s * 4);
 		}
@@ -703,7 +828,7 @@
 		const selectedSegments: number[] = [];
 		if (selectedEdges.size)
 			for (let s = 0; s < d.segmentEdge.length; s++)
-				if (selectedEdges.has(d.segmentEdge[s])) selectedSegments.push(s);
+				if (selectedEdges.has(d.segmentEdge[s]) && !hiddenUnderFan(d, s)) selectedSegments.push(s);
 		const point = (i: number): [number, number] => [g.positions[i * 3], g.positions[i * 3 + 1]];
 		// Bus ids index `graph.buses`, so picks map back whatever subset is drawn.
 		const base = {
@@ -717,7 +842,7 @@
 		const hoveredSegments: number[] = [];
 		if (hoveredEdges.size)
 			for (let s = 0; s < d.segmentEdge.length; s++)
-				if (hoveredEdges.has(d.segmentEdge[s])) hoveredSegments.push(s);
+				if (hoveredEdges.has(d.segmentEdge[s]) && !hiddenUnderFan(d, s)) hoveredSegments.push(s);
 		return [
 			// Zone outlines sit beneath everything; they pick only where nothing else is.
 			new modules.layers.PolygonLayer({
@@ -796,6 +921,7 @@
 				getWidth: 4,
 				widthUnits: 'pixels'
 			}),
+			...sharedRouteLayers(common, d),
 			...(symbols
 				? [
 						new LineLayer({
@@ -821,10 +947,16 @@
 											length: arrows.edge.length,
 											attributes: {
 												getSourcePosition: { value: arrows.sources, size: 3 },
-												getTargetPosition: { value: arrows.targets, size: 3 }
+												getTargetPosition: { value: arrows.targets, size: 3 },
+												getColor: {
+													value: Uint8Array.from({ length: arrows.edge.length * 4 }, (_, i) =>
+														fannedEdges.has(arrows.edge[i >> 2]) ? 0 : ACCENT[i & 3]
+													),
+													size: 4,
+													normalized: true
+												}
 											}
 										},
-										getColor: ACCENT,
 										getWidth: 1.5,
 										widthUnits: 'pixels'
 									})
@@ -1019,6 +1151,139 @@
 		];
 	}
 
+	/** Fanned members of shared routes (with their marks), and the count badges of the others. */
+	function sharedRouteLayers(common: object, d: SchematicGeometry): Layer[] {
+		if (!modules || !equipment || !symbolsOn) return [];
+		const { LineLayer, TextLayer } = modules.layers;
+		const eq = equipment;
+		const fans = fanned();
+		const src: number[] = [];
+		const dst: number[] = [];
+		const owner: number[] = [];
+		for (const f of fans)
+			for (let i = 1; i < f.path.length; i++) {
+				src.push(f.path[i - 1][0], f.path[i - 1][1], 0);
+				dst.push(f.path[i][0], f.path[i][1], 0);
+				owner.push(f.edge);
+			}
+		// Marks on the fanned paths: the branch's symbol, or its conductor marks.
+		const mSrc: number[] = [];
+		const mDst: number[] = [];
+		for (const f of fans) {
+			const e = graph.edges[f.edge];
+			const glyph = branchGlyph(e.kind, e.closed);
+			const { phases, neutral } = conductorSet(graph, f.edge);
+			const shape = glyph ?? (ticksOn ? conductorTicks(phases, neutral) : null);
+			if (!shape) continue;
+			const [cos, sin] = f.dir;
+			const u = eq.unit * (glyph ? 0.8 : 1);
+			for (const line of shape)
+				for (let i = 1; i < line.length; i++) {
+					const [ax, ay] = line[i - 1];
+					const [bx, by] = line[i];
+					mSrc.push(f.mid[0] + u * (ax * cos - ay * sin), f.mid[1] + u * (ax * sin + ay * cos), 0);
+					mDst.push(f.mid[0] + u * (bx * cos - by * sin), f.mid[1] + u * (bx * sin + by * cos), 0);
+				}
+		}
+		const colours = new Uint8Array(owner.length * 4);
+		const widths = new Float32Array(owner.length);
+		const [mv, lv] = colour === 'none' ? [2.4, 1.1] : [3, 1.8];
+		owner.forEach((k, i) => {
+			const hovered = hoveredEdges.has(k);
+			colours.set(
+				selectedEdges.has(k)
+					? ACCENT
+					: hovered
+						? ([...ACCENT.slice(0, 3), 150] as RGBA)
+						: edgeColours[k],
+				i * 4
+			);
+			widths[i] = selectedEdges.has(k) ? 3.5 : hovered ? 4 : edgeMv[k] ? mv : lv;
+		});
+		const badges = ticksOn
+			? eq.routeGroups.flatMap((members, g) => {
+					if (fannedGroups.includes(g)) return [];
+					const p = routeMiddle(members, eq.host, geometry);
+					return p ? [{ g, n: members.length, position: p }] : [];
+				})
+			: [];
+		void d;
+		return [
+			...(owner.length
+				? [
+						new LineLayer({
+							...common,
+							id: 'fan-branches',
+							data: {
+								length: owner.length,
+								attributes: {
+									getSourcePosition: { value: Float32Array.from(src), size: 3 },
+									getTargetPosition: { value: Float32Array.from(dst), size: 3 },
+									getColor: { value: colours, size: 4, normalized: true },
+									getWidth: { value: widths, size: 1 }
+								}
+							},
+							widthUnits: 'pixels',
+							pickable: true
+						}),
+						new LineLayer({
+							...common,
+							id: 'fan-marks',
+							data: {
+								length: mSrc.length / 3,
+								attributes: {
+									getSourcePosition: { value: Float32Array.from(mSrc), size: 3 },
+									getTargetPosition: { value: Float32Array.from(mDst), size: 3 }
+								}
+							},
+							getColor: SYMBOL_INK,
+							getWidth: 1,
+							widthUnits: 'pixels'
+						})
+					]
+				: []),
+			...(badges.length
+				? [
+						new TextLayer({
+							...common,
+							id: 'route-badges',
+							data: badges,
+							getPosition: (b: { position: [number, number] }) => [...b.position, 0],
+							getText: (b: { n: number }) => `×${b.n}`,
+							getColor: SYMBOL_INK,
+							getSize: 11,
+							getPixelOffset: [0, -10],
+							background: true,
+							getBackgroundColor: [...PAPER.slice(0, 3), 230] as RGBA,
+							backgroundPadding: [3, 1],
+							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+							characterSet: 'auto',
+							pickable: true
+						})
+					]
+				: [])
+		];
+	}
+	/** The route a pick belongs to, if it is shared. */
+	function pickedGroup(info: PickingInfo): number | null {
+		if (!equipment || info.index < 0 || !info.layer) return null;
+		const id = info.layer.id;
+		if (id === 'route-badges') return (info.object as { g: number }).g;
+		const k =
+			id === 'fan-branches'
+				? fanEdgeAt(info.index)
+				: id.startsWith('branches-')
+					? drawn.segmentEdge[info.index]
+					: -1;
+		const g = k >= 0 ? equipment.routeOf[k] : -1;
+		return g >= 0 ? g : null;
+	}
+	/** Edge of the n-th fanned segment (three per member, in `fanned()` order). */
+	function fanEdgeAt(index: number): number {
+		const fans = fanned();
+		return fans[Math.floor(index / 3)]?.edge ?? -1;
+	}
+
 	/** Value labels for the view, placed by priority: selection, then severity, then magnitude. */
 	function updateLabels() {
 		const g = geometry;
@@ -1138,6 +1403,8 @@
 							next = { kind: 'bus', id: graph.buses[info.object as number].id };
 						else if (info.index >= 0 && id.startsWith('branches-'))
 							next = { kind: 'branch', id: graph.edges[drawn.segmentEdge[info.index]].id };
+						else if (info.index >= 0 && id === 'fan-branches')
+							next = { kind: 'branch', id: graph.edges[fanEdgeAt(info.index)].id };
 						else if (info.index >= 0 && id === 'equipment-hits') {
 							const item = info.object as EquipmentItem;
 							next =
@@ -1146,9 +1413,33 @@
 									: { kind: 'bus', id: graph.buses[item.bus].id };
 						}
 						if (next?.kind !== mc.hovered?.kind || next?.id !== mc.hovered?.id) mc.hovered = next;
+						const g = symbolsOn ? pickedGroup(info) : null;
+						if (g !== null) openGroup(g);
+						else leaveGroup();
 					},
 					onClick: (info: PickingInfo) => {
-						if (info.index < 0 || !info.layer) return;
+						if (info.index < 0 || !info.layer) {
+							// A click on empty canvas closes a pinned shared route.
+							pinnedGroup = null;
+							return;
+						}
+						if (info.layer.id === 'route-badges') {
+							pinnedGroup = (info.object as { g: number }).g;
+							return;
+						}
+						if (info.layer.id === 'fan-branches') {
+							pickedHere = true;
+							setTimeout(() => (pickedHere = false));
+							pinnedGroup = pickedGroup(info);
+							onselectedge(graph.edges[fanEdgeAt(info.index)].id);
+							return;
+						}
+						// A shared route is ambiguous when collapsed: open its members instead of guessing.
+						const shared = info.layer.id.startsWith('branches-') ? pickedGroup(info) : null;
+						if (shared !== null && !separateAll) {
+							pinnedGroup = shared;
+							return;
+						}
 						// Skip the fly-to for this selection; cleared after effects run, as a click on the
 						// already-selected item changes nothing.
 						pickedHere = true;
@@ -1175,17 +1466,26 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						info.index >= 0 && info.layer?.id === 'landmark-halos'
-							? landmarkTip(info.object as Landmark)
-							: info.index >= 0 && info.layer?.id === 'zones'
-								? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
-								: info.index >= 0 && info.layer?.id.startsWith('buses-')
-									? `${graph.buses[info.object as number].id}`
-									: info.index >= 0 && info.layer?.id.startsWith('branches-')
-										? branchTip(drawn.segmentEdge[info.index])
-										: info.index >= 0 && info.layer?.id === 'equipment-hits'
-											? itemLabel(info.object as EquipmentItem)
-											: null
+						info.index >= 0 && info.layer?.id === 'fan-branches'
+							? null
+							: info.index >= 0 && info.layer?.id === 'route-badges'
+								? `${(info.object as { n: number }).n} branches share this route. Hover to separate them; click to keep them open.`
+								: info.index >= 0 && info.layer?.id === 'landmark-halos'
+									? landmarkTip(info.object as Landmark)
+									: info.index >= 0 && info.layer?.id === 'zones'
+										? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
+										: info.index >= 0 && info.layer?.id.startsWith('buses-')
+											? `${graph.buses[info.object as number].id}`
+											: info.index >= 0 && info.layer?.id.startsWith('branches-')
+												? // A shared route's card names its branches; its hidden true route stays silent.
+													equipment &&
+													symbolsOn &&
+													equipment.routeOf[drawn.segmentEdge[info.index]] >= 0
+													? null
+													: branchTip(drawn.segmentEdge[info.index])
+												: info.index >= 0 && info.layer?.id === 'equipment-hits'
+													? itemLabel(info.object as EquipmentItem)
+													: null
 				});
 				// Open where the user just was: the case's own positions (the map they were looking at),
 				// when it has them. The schematic is laid out meanwhile, so switching to it is quick.
@@ -1226,7 +1526,9 @@
 			zoomedOut,
 			zoneTags,
 			tagZoom,
-			marks
+			marks,
+			fannedGroups,
+			fannedEdges
 		];
 		if (!morph) render();
 	});
@@ -1460,9 +1762,32 @@
 						: walk.step(-1, 'root')
 					: walk.step(cursor, WALK[e.key])
 			);
+		} else if (e.key === 'Tab' && !e.shiftKey && cursor >= 0 && equipment) {
+			// Cycle the branches on shared routes at the cursor bus; past the last, Tab moves on.
+			const members = graph.edges.flatMap((_, k) => {
+				const { from, to } = inputs.names.branches[k];
+				return (from === cursor || to === cursor) && equipment!.routeOf[k] >= 0 ? [k] : [];
+			});
+			const next = members.indexOf(tabEdge) + 1;
+			if (next >= members.length) {
+				tabEdge = -1;
+				pinnedGroup = null;
+				return;
+			}
+			e.preventDefault();
+			tabEdge = members[next];
+			pinnedGroup = equipment.routeOf[tabEdge];
+			mc.hovered = { kind: 'branch', id: graph.edges[tabEdge].id };
+			announcement = `${branchTip(tabEdge)}. Enter selects; Tab for the next.`;
+		} else if (e.key === 'Enter' && tabEdge >= 0) {
+			e.preventDefault();
+			onselectedge(graph.edges[tabEdge].id);
 		} else if (e.key === 'Enter' && cursor >= 0) {
 			e.preventDefault();
 			onselectbus(graph.buses[cursor].id);
+		} else if (e.key === 'Escape' && pinnedGroup !== null) {
+			pinnedGroup = null;
+			tabEdge = -1;
 		} else if (e.key === 'Escape' && cursor >= 0) {
 			cursor = -1;
 			announcement = '';
@@ -1627,8 +1952,9 @@
 <div class="schematic-stage" bind:clientWidth={width} bind:clientHeight={height}>
 	<p id="schematic-keys" class="sr-only">
 		Arrow keys walk the network from bus to bus: left to the feeding bus, right onward, up and down
-		between neighbours; Home returns to the source; Enter selects; Escape stops. Shift with the
-		arrow keys pans; plus and minus zoom; F fits the drawing.
+		between neighbours; Home returns to the source; Enter selects; Escape stops. Where lines share a
+		route, Tab at a bus steps through them. Shift with the arrow keys pans; plus and minus zoom; F
+		fits the drawing.
 	</p>
 	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (The canvas supports keyboard panning and zooming; selection is also available from the overview.) -->
 	<div
@@ -1766,6 +2092,17 @@
 		>
 			<summary>Key</summary>
 			<ul class="symbols" aria-label="Symbols">
+				{#if equipment?.routeGroups.length}
+					<li>
+						<label class="toggle"
+							><input
+								type="checkbox"
+								checked={separateAll}
+								onchange={(e) => rememberSeparate(e.currentTarget.checked)}
+							/> Separate overlapping lines</label
+						>
+					</li>
+				{/if}
 				{#if ticksOn && equipment?.ticks.edge.length}
 					<li>
 						<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
@@ -1799,6 +2136,60 @@
 				{/each}
 			</ul>
 		</details>
+	{/if}
+	{#if activeGroup !== null && equipment}
+		{@const middle = routeMiddle(equipment.routeGroups[activeGroup], equipment.host, geometry)}
+		{#if middle}
+			{@const k = 2 ** camera.zoom}
+			<!-- svelte-ignore a11y_no_static_element_interactions (Pointer bookkeeping only: the rows are buttons.) -->
+			<div
+				class="route-card"
+				style:left="{(middle[0] - camera.target[0]) * k + width / 2 + 16}px"
+				style:top="{(middle[1] - camera.target[1]) * k + height / 2 + 16}px"
+				onpointerenter={() => {
+					cardHovered = true;
+					if (collapseTimer) clearTimeout(collapseTimer);
+					collapseTimer = null;
+				}}
+				onpointerleave={() => {
+					cardHovered = false;
+					leaveGroup();
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'Escape') {
+						pinnedGroup = null;
+						hoverGroup = null;
+					}
+				}}
+			>
+				<p>
+					{equipment.routeGroups[activeGroup].length} branches on this route{pinnedGroup !== null
+						? ''
+						: ' · click to keep open'}
+				</p>
+				<ul aria-label="Branches on this route">
+					{#each routeCardRows(activeGroup) as row (row.k)}
+						<li>
+							<button
+								aria-pressed={selectedEdges.has(row.k)}
+								onpointerenter={() => (mc.hovered = { kind: 'branch', id: row.id })}
+								onpointerleave={() => (mc.hovered = null)}
+								onclick={() => {
+									pinnedGroup = activeGroup;
+									onselectedge(row.id);
+								}}
+							>
+								<span class="id" title={row.id}>{row.id}</span>
+								<span>{row.kind}</span>
+								<span>{row.level}</span>
+								<span>{row.wires}</span>
+								{#if row.loading}<span class={row.state}>{row.loading}</span>{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	{/if}
 	{#if basemapOpacity > 0}
 		<p
@@ -1922,6 +2313,55 @@
 		display: flex;
 		gap: 4px;
 		align-items: center;
+	}
+	.route-card {
+		position: absolute;
+		z-index: 2;
+		max-width: 360px;
+		padding: 4px 6px;
+		font: 10px var(--font-mono);
+		color: var(--text-secondary);
+		background: var(--paper);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		box-shadow: var(--elev-1);
+	}
+	.route-card p {
+		margin: 0 0 3px;
+	}
+	.route-card ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.route-card button {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+		gap: 8px;
+		width: 100%;
+		padding: 2px 4px;
+		font: inherit;
+		text-align: left;
+		color: var(--ink);
+		background: none;
+		border: 0;
+		border-radius: 2px;
+		cursor: pointer;
+	}
+	.route-card button:hover,
+	.route-card button[aria-pressed='true'] {
+		background: var(--accent-soft);
+	}
+	.route-card .id {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.route-card .violation {
+		color: var(--text-danger);
+	}
+	.route-card .warning {
+		color: var(--accent);
 	}
 	.key .toggle {
 		display: flex;
