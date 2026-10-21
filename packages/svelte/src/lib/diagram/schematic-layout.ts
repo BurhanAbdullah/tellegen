@@ -16,6 +16,9 @@ export interface SchematicGeometry {
 	version?: number;
 	/** Room reserved below each bus per attachment kind (engine layouts only). */
 	attachmentGap?: number;
+	/** For source positions: buses the data gives no position, drawn next to a connected bus
+	 * instead (1), or left at the origin because nothing placed connects to them (2). */
+	inferred?: Uint8Array;
 	/** For geographic source positions: the Web Mercator point (metres, y down) the positions are
 	 * relative to, so map tiles can be placed under them. */
 	mercatorOrigin?: [number, number];
@@ -148,6 +151,48 @@ export function sourceLayout(
 		positions[i * 3 + 1] = p[1] - cy;
 	});
 	const index = indexer(graph);
+	// A bus without a position (an LV stub behind a pole transformer, say) is drawn next to the
+	// nearest connected bus that has one, found breadth-first, rather than at the origin, where its
+	// branches would all run to one false point. The offset is a fraction of a typical branch.
+	const inferred = new Uint8Array(graph.buses.length);
+	if (known.length < graph.buses.length) {
+		const neighbours: number[][] = graph.buses.map(() => []);
+		graph.edges.forEach((e) => {
+			const a = index(e.from);
+			const b = index(e.to);
+			if (a < 0 || b < 0 || a === b) return;
+			neighbours[a].push(b);
+			neighbours[b].push(a);
+		});
+		const lengths: number[] = [];
+		graph.edges.forEach((e) => {
+			const a = index(e.from);
+			const b = index(e.to);
+			if (a >= 0 && b >= 0 && xy[a] && xy[b])
+				lengths.push(Math.hypot(xy[a]![0] - xy[b]![0], xy[a]![1] - xy[b]![1]));
+		});
+		const positive = lengths.filter((l) => l > 0).sort((p, q) => p - q);
+		const step = (positive.length ? positive[positive.length >> 1] : 1) * 0.5;
+		const placedAt = xy.map((p) => p !== null);
+		const queue = xy.flatMap((p, i) => (p ? [i] : []));
+		const children = new Int32Array(graph.buses.length);
+		for (let head = 0; head < queue.length; head++) {
+			const u = queue[head];
+			for (const v of neighbours[u]) {
+				if (placedAt[v]) continue;
+				placedAt[v] = true;
+				inferred[v] = 1;
+				// Fan several unplaced neighbours of one bus around it.
+				const angle = Math.PI / 4 + children[u]++ * 2.399963;
+				positions[v * 3] = positions[u * 3] + step * Math.cos(angle);
+				positions[v * 3 + 1] = positions[u * 3 + 1] + step * Math.sin(angle);
+				queue.push(v);
+			}
+		}
+		placedAt.forEach((ok, i) => {
+			if (!ok) inferred[i] = 2;
+		});
+	}
 	const role = new Uint8Array(graph.edges.length);
 	graph.edges.forEach((e, k) => {
 		const a = index(e.from);
@@ -178,6 +223,7 @@ export function sourceLayout(
 		}),
 		role,
 		bounds: bounds(positions),
+		...(inferred.some((v) => v) ? { inferred } : {}),
 		...(geographic ? { mercatorOrigin: [cx, cy] as [number, number] } : {})
 	};
 }

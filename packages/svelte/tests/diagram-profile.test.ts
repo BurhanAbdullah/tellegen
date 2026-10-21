@@ -145,6 +145,27 @@ describe('schematic layouts', () => {
 		]);
 	});
 
+	it('draws a bus without a position next to a connected bus, not at the origin', () => {
+		// S —l1→ M (both placed); M —t→ L has no position, as an LV stub behind a pole transformer.
+		const g: DistGraph = {
+			buses: [bus('S', true), bus('M'), bus('L')],
+			edges: [edge('l1', 'S', 'M'), edge('t', 'M', 'L', 'transformer')]
+		};
+		const placed = [
+			{ id: 'S', lon: 0, lat: 0 },
+			{ id: 'M', lon: 1000, lat: 0 }
+		];
+		const geo = sourceLayout(g, placed, false, displayTree(g));
+		expect(Array.from(geo.inferred ?? [])).toEqual([0, 0, 1]);
+		const d = Math.hypot(geo.positions[6] - geo.positions[3], geo.positions[7] - geo.positions[4]);
+		// Half a typical branch (the one placed branch is 1000 long) from M.
+		expect(d).toBeCloseTo(500, 3);
+		// A fully placed case carries no inferred flags.
+		expect(
+			sourceLayout(g, [...placed, { id: 'L', lon: 1000, lat: 50 }], false, displayTree(g)).inferred
+		).toBeUndefined();
+	});
+
 	it('projects geographic positions to Web Mercator, y down, relative to the centroid', () => {
 		const tree = displayTree(graph);
 		const placed = graph.buses.map((b, i) => ({ id: b.id, lon: 150 + i * 1e-5, lat: -30 }));

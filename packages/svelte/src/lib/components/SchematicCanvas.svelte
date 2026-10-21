@@ -649,6 +649,20 @@
 				)
 			: []
 	);
+	/** Buses the case gives no position, in source positions. */
+	const unplaced = $derived(
+		layout === 'source' && geometry.inferred
+			? geometry.inferred.reduce((n, v) => n + (v ? 1 : 0), 0)
+			: 0
+	);
+	const busTip = (i: number) => {
+		const how = layout === 'source' ? geometry.inferred?.[i] : 0;
+		return how === 1
+			? `${graph.buses[i].id} · no position in the case data; drawn next to a connected bus`
+			: how === 2
+				? `${graph.buses[i].id} · no position in the case data`
+				: graph.buses[i].id;
+	};
 	const branchTip = (k: number) => {
 		const e = graph.edges[k];
 		const { phases, neutral } = conductorSet(graph, k);
@@ -1475,7 +1489,7 @@
 									: info.index >= 0 && info.layer?.id === 'zones'
 										? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
 										: info.index >= 0 && info.layer?.id.startsWith('buses-')
-											? `${graph.buses[info.object as number].id}`
+											? busTip(info.object as number)
 											: info.index >= 0 && info.layer?.id.startsWith('branches-')
 												? // A shared route's card names its branches; its hidden true route stays silent.
 													equipment &&
@@ -2027,6 +2041,12 @@
 				role="status"
 				title="Buses with no path to a source through closed branches are drawn faint"
 				>{live.deadBuses.toLocaleString()} bus{live.deadBuses === 1 ? '' : 'es'} not energised</span
+			>{/if}
+		{#if unplaced}<span
+				class="note"
+				role="status"
+				title="The case gives these buses no position; each is drawn next to a bus it connects to"
+				>{unplaced.toLocaleString()} bus{unplaced === 1 ? '' : 'es'} without a position</span
 			>{/if}
 		<button onclick={exportPng} title="PNG of this view with a title block">PNG</button>
 		<button onclick={exportSvg} title="Vector SVG of the visible region with a title block"
