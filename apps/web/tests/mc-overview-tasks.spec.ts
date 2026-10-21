@@ -316,3 +316,34 @@ test('a balanced case without limits does not break the overview', async ({ page
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
 	await expect(page.getByText('Internal Error')).toHaveCount(0);
 });
+
+test('a center-tap transformer (one id, several graph edges) does not break the results', async ({
+	page
+}) => {
+	// Regression: a three-winding transformer projects to one graph edge per winding pair, all with
+	// its id; the equipment list was keyed by id and threw `each_key_duplicate` (a 500 page).
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type=file]').setInputFiles({
+		name: 'center-tap.bmopf.json',
+		mimeType: 'application/json',
+		buffer: await readFile(
+			new URL(
+				'../../../crates/tellegen/tests/data/mc_pf/oracle_inputs/pf_center_tap_loaded.json',
+				import.meta.url
+			)
+		)
+	});
+	const solve = page.getByRole('button', { name: 'Solve AC power flow', exact: true });
+	await expect(solve).toBeEnabled({ timeout: 60_000 });
+	await solve.click();
+	const overview = page.getByRole('region', { name: 'Operating point overview' });
+	await expect(overview.getByRole('heading', { name: /^Issues/ })).toBeVisible({ timeout: 60_000 });
+	await page.getByText('Equipment currents and power').click();
+	const equipment = page.locator('select').and(page.getByLabel('Branch result'));
+	await expect(equipment.locator('option', { hasText: 't1' })).toHaveCount(1);
+	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
+	await expect(page.getByText('Internal Error')).toHaveCount(0);
+});
