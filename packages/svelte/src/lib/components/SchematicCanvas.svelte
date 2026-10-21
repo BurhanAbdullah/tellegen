@@ -2141,11 +2141,15 @@
 		{@const middle = routeMiddle(equipment.routeGroups[activeGroup], equipment.host, geometry)}
 		{#if middle}
 			{@const k = 2 ** camera.zoom}
+			{@const sx = (middle[0] - camera.target[0]) * k + width / 2}
+			{@const sy = (middle[1] - camera.target[1]) * k + height / 2}
 			<!-- svelte-ignore a11y_no_static_element_interactions (Pointer bookkeeping only: the rows are buttons.) -->
 			<div
 				class="route-card"
-				style:left="{(middle[0] - camera.target[0]) * k + width / 2 + 16}px"
-				style:top="{(middle[1] - camera.target[1]) * k + height / 2 + 16}px"
+				style:left={sx + 440 < width ? `${sx + 16}px` : null}
+				style:right={sx + 440 < width ? null : `${width - sx + 16}px`}
+				style:top={sy + 180 < height ? `${sy + 16}px` : null}
+				style:bottom={sy + 180 < height ? null : `${height - sy + 16}px`}
 				onpointerenter={() => {
 					cardHovered = true;
 					if (collapseTimer) clearTimeout(collapseTimer);
@@ -2317,7 +2321,9 @@
 	.route-card {
 		position: absolute;
 		z-index: 2;
-		max-width: 360px;
+		width: max-content;
+		min-width: 280px;
+		max-width: 420px;
 		padding: 4px 6px;
 		font: 10px var(--font-mono);
 		color: var(--text-secondary);
