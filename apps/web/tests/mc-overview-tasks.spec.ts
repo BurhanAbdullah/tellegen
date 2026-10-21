@@ -347,3 +347,23 @@ test('a center-tap transformer (one id, several graph edges) does not break the 
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
 	await expect(page.getByText('Internal Error')).toHaveCount(0);
 });
+
+test('the diagram opens before a solve, without results', async ({ page }) => {
+	// Cases that do not solve yet (generators, IBRs) can still be inspected as a diagram.
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type=file]').setInputFiles({
+		name: 'four-wire-limits.bmopf.json',
+		mimeType: 'application/json',
+		buffer: await readFile(fixture)
+	});
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
+	await expect(toolbar.getByRole('combobox', { name: 'Colour by' })).toBeDisabled();
+	await toolbar.getByRole('button', { name: 'Schematic', exact: true }).click();
+	await expect(page.getByRole('list', { name: 'Symbols' })).toBeVisible();
+	await page.getByRole('button', { name: 'Show map' }).click();
+	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toHaveCount(0);
+});
