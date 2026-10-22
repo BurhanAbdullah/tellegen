@@ -288,7 +288,27 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
             }
         }
     }
-    let line_rating = |line: &powerio_dist::DistLine| {
+    // Index each element family once by name; `first` keeps the first of any duplicate names, as a
+    // linear search would.
+    fn first<T>(items: &[T], name: impl Fn(&T) -> &str) -> std::collections::HashMap<String, &T> {
+        let mut index = std::collections::HashMap::with_capacity(items.len());
+        for item in items {
+            index.entry(name(item).to_ascii_lowercase()).or_insert(item);
+        }
+        index
+    }
+    let lines = first(net.lines(), |line| &line.name);
+    let switches = first(net.switches(), |switch| &switch.name);
+    let transformers = first(net.transformers(), |t| &t.name);
+    let graph_bus_ids: std::collections::HashMap<String, String> = graph
+        .get("buses")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|bus| bus.get("id").and_then(Value::as_str))
+        .map(|id| (id.to_ascii_lowercase(), id.to_owned()))
+        .collect();
+    let line_rating = |line: &&powerio_dist::DistLine| {
         line.i_max.clone().or_else(|| {
             net.linecode(&line.linecode)
                 .and_then(|code| code.i_max.clone())
@@ -300,45 +320,38 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
     for edge in edges {
         let (Some(kind), Some(id)) = (
             edge.get("kind").and_then(Value::as_str),
-            edge.get("id").and_then(Value::as_str),
+            edge.get("id")
+                .and_then(Value::as_str)
+                .map(str::to_ascii_lowercase),
         ) else {
             continue;
         };
         let rating = match kind {
-            "line" => net
-                .lines()
-                .iter()
-                .find(|line| line.name.eq_ignore_ascii_case(id))
+            "line" => lines
+                .get(&id)
                 .and_then(line_rating)
                 .map(|amps| json!({ "i_max": amps })),
-            "switch" => net
-                .switches()
-                .iter()
-                .find(|switch| switch.name.eq_ignore_ascii_case(id))
+            "switch" => switches
+                .get(&id)
                 .and_then(|switch| switch.i_max.clone())
                 .map(|amps| json!({ "i_max": amps })),
-            "transformer" => {
-                let endpoint = |key: &str| edge.get(key).and_then(Value::as_str).map(str::to_owned);
-                let (from, to) = (endpoint("from"), endpoint("to"));
-                net.transformers()
-                    .iter()
-                    .find(|t| t.name.eq_ignore_ascii_case(id))
-                    .and_then(|t| {
-                        // An edge joins one winding pair; the smaller winding rating bounds it.
-                        let winding = |bus: &Option<String>| {
-                            t.windings.iter().find(|w| {
-                                bus.as_deref()
-                                    .is_some_and(|b| w.bus.eq_ignore_ascii_case(b))
-                            })
-                        };
-                        let rating = match (winding(&from), winding(&to)) {
-                            (Some(a), Some(b)) => a.s_rating.min(b.s_rating),
-                            (Some(w), None) | (None, Some(w)) => w.s_rating,
-                            (None, None) => return None,
-                        };
-                        (rating > 0.0).then(|| json!({ "s_rating": rating }))
-                    })
-            }
+            // A transformer projects to one edge per winding pair, so its rating is stated for the
+            // whole transformer: the largest winding rating at each bus it connects, and every edge
+            // of the transformer carries the same one. Windings that share a bus (the two halves of
+            // a centre tap) are each declared at the full nameplate, so they are not summed.
+            "transformer" => transformers.get(&id).and_then(|t| {
+                let mut by_bus = Map::new();
+                for winding in &t.windings {
+                    if winding.s_rating <= 0.0 {
+                        continue;
+                    }
+                    let lower = winding.bus.to_ascii_lowercase();
+                    let bus = graph_bus_ids.get(&lower).cloned().unwrap_or(lower);
+                    let largest = by_bus.get(&bus).and_then(Value::as_f64).unwrap_or(0.0);
+                    by_bus.insert(bus, json!(largest.max(winding.s_rating)));
+                }
+                (!by_bus.is_empty()).then(|| json!({ "s_rating_by_bus": by_bus }))
+            }),
             _ => None,
         };
         if let Some(rating) = rating {
@@ -694,6 +707,28 @@ mod tests {
 
         let plain = parse(&ingest_dist(MICRO_BMOPF, "bmopf").expect("plain"));
         assert!(plain["graph"]["edges"][0].get("rating").is_none());
+    }
+
+    #[test]
+    fn transformer_ratings_are_stated_per_bus_for_the_whole_transformer() {
+        // A centre-tap transformer projects to three winding-pair edges, two of them between the
+        // same buses and one from the low-voltage bus to itself.
+        let raw =
+            include_str!("../../tellegen/tests/data/mc_pf/oracle_inputs/pf_center_tap_loaded.json");
+        let value = parse(&ingest_dist(raw, "bmopf").expect("centre tap"));
+        let edges: Vec<&Value> = value["graph"]["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["kind"] == "transformer")
+            .collect();
+        assert_eq!(edges.len(), 3);
+        for edge in &edges {
+            assert_eq!(
+                edge["rating"],
+                serde_json::json!({ "s_rating_by_bus": { "hv": 25000.0, "lv": 25000.0 } })
+            );
+        }
     }
 
     #[test]

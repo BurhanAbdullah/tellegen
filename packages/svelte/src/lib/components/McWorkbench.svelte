@@ -8,6 +8,7 @@
 		busState,
 		conductorBars,
 		graphInputs,
+		LOADING_WARNING,
 		loadingState,
 		magnitudeUnbalance,
 		multiWireBranch,
@@ -154,7 +155,7 @@
 		return {
 			id: edge.id,
 			value: `${n(issue.value, 1)} %`,
-			detail: `${edge.kind} · ${issue.severity === 'violation' ? 'over rating' : '≥ 90 % of rating'}`
+			detail: `${edge.kind} · ${issue.severity === 'violation' ? 'over rating' : `≥ ${LOADING_WARNING} % of rating`}`
 		};
 	}
 	const isSelected = (issue: Issue) =>

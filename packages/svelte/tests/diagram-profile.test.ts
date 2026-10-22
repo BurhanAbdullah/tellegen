@@ -44,8 +44,20 @@ const graph: DistGraph = {
 		edge('sw', 'L2', 'X', 'switch', false)
 	]
 };
-const pp = (v: number): PairVoltage => ({ pair: ['1', '2'], volts: v, min: 19000, max: 21000 });
-const pn = (v: number): PairVoltage => ({ pair: ['1', 'n'], volts: v, min: 207, max: 253 });
+const pp = (v: number): PairVoltage => ({
+	pair: ['1', '2'],
+	zone: 'phase–phase',
+	volts: v,
+	min: 19000,
+	max: 21000
+});
+const pn = (v: number): PairVoltage => ({
+	pair: ['1', 'n'],
+	zone: 'phase–neutral',
+	volts: v,
+	min: 207,
+	max: 253
+});
 const result: ResultSnapshot = {
 	kind: 'solved',
 	label: 't',
@@ -243,9 +255,11 @@ describe('multi-wire view', () => {
 					null
 				],
 				loading: null,
-				basis: null
+				basis: null,
+				primary: true,
+				loss: null
 			},
-			{ ends: [null, null], loading: null, basis: null }
+			{ ends: [null, null], loading: null, basis: null, primary: true, loss: null }
 		]
 	};
 

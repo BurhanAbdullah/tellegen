@@ -34,6 +34,7 @@ import {
 
 const pn = (t: string, volts: number, min = 200, max = 260): PairVoltage => ({
 	pair: [t, 'n'],
+	zone: 'phase–neutral',
 	volts,
 	min,
 	max
@@ -43,7 +44,9 @@ describe('colour modes', () => {
 	it('places voltage in the declared band and keeps the pair nearest a limit', () => {
 		expect(bandPosition(pn('1', 200))).toBe(-1);
 		expect(bandPosition(pn('1', 230))).toBe(0);
-		expect(bandPosition({ pair: ['1', 'n'], volts: 230, min: null, max: null })).toBeNull();
+		expect(
+			bandPosition({ pair: ['1', 'n'], zone: 'phase–neutral', volts: 230, min: null, max: null })
+		).toBeNull();
 		expect(worstBand([pn('1', 230), pn('2', 258), pn('3', 203)])).toBe(bandPosition(pn('2', 258)));
 		expect(worstBand([])).toBeNull();
 	});
@@ -110,7 +113,9 @@ const snapshot: ResultSnapshot = {
 				{ p: -98, q: -9, currents: [] }
 			],
 			loading: 95,
-			basis: null
+			basis: null,
+			primary: true,
+			loss: { p: 2, q: 1 }
 		},
 		{
 			ends: [
@@ -118,9 +123,11 @@ const snapshot: ResultSnapshot = {
 				{ p: 50.5, q: -4, currents: [] }
 			],
 			loading: 40,
-			basis: null
+			basis: null,
+			primary: true,
+			loss: { p: 0.5, q: 1 }
 		},
-		{ ends: [null, null], loading: null, basis: null }
+		{ ends: [null, null], loading: null, basis: null, primary: true, loss: null }
 	]
 };
 const names = {
@@ -303,7 +310,9 @@ describe('phase bars and morph', () => {
 		expect(bar.band?.width).toBeCloseTo(200 / 3, 10);
 		expect([bar.marker, bar.state]).toEqual([50, 'normal']);
 		expect(pairBar(pn('1', 1e9)).marker).toBe(100);
-		expect(pairBar({ pair: ['1', 'n'], volts: 230, min: null, max: null })).toMatchObject({
+		expect(
+			pairBar({ pair: ['1', 'n'], zone: 'phase–neutral', volts: 230, min: null, max: null })
+		).toMatchObject({
 			band: null,
 			state: 'unbounded'
 		});

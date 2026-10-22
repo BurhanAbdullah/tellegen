@@ -243,8 +243,8 @@ export function zoneVoltage(
 		let v = pp ?? (pn === null ? null : pn * Math.sqrt(3));
 		if (v === null && snapshot) {
 			const pairs = snapshot.buses[i]?.pairs ?? [];
-			const phase = pairs.filter((p) => p.pair[0] !== 'n' && p.pair[1] !== 'n');
-			const neutral = pairs.filter((p) => p.pair[1] === 'n' && p.pair[0] !== 'n');
+			const phase = pairs.filter((p) => p.zone === 'phase–phase');
+			const neutral = pairs.filter((p) => p.zone === 'phase–neutral');
 			if (phase.length) v = Math.max(...phase.map((p) => p.volts));
 			else if (neutral.length) v = Math.max(...neutral.map((p) => p.volts)) * Math.sqrt(3);
 		}
@@ -274,8 +274,8 @@ export function zoneSummary(
 	for (const i of zone.buses)
 		for (const p of snapshot.buses[i]?.pairs ?? []) {
 			if (!Number.isFinite(p.volts)) continue;
-			if (p.pair[1] === 'n' && p.pair[0] !== 'n') pn = Math.min(pn, p.volts);
-			else if (p.pair[0] !== 'n') pp = Math.min(pp, p.volts);
+			if (p.zone === 'phase–neutral') pn = Math.min(pn, p.volts);
+			else pp = Math.min(pp, p.volts);
 		}
 	let loading = -Infinity;
 	for (const k of [...zone.transformers, ...zone.edges]) {

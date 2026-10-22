@@ -1,8 +1,13 @@
 import type { McComplex, McPfResult } from '@tellegen/engine';
 
+/** Which reference a pair voltage is measured against. */
+export type PairZone = 'phase–neutral' | 'phase–phase';
+
 /** One declared terminal-pair voltage magnitude and, when declared, its limits. */
 export interface PairVoltage {
 	pair: [string, string];
+	/** Set from the bus's declared neutral, whatever that terminal is named. */
+	zone: PairZone;
 	volts: number;
 	min: number | null;
 	max: number | null;
@@ -33,8 +38,16 @@ export interface BranchEnd {
 
 export interface BranchSnapshot {
 	ends: [BranchEnd | null, BranchEnd | null];
+	/** Loading of the whole piece of equipment: every edge of a multi-winding transformer shows the
+	 * same value. */
 	loading: number | null;
 	basis: string | null;
+	/** The first edge of its equipment. A multi-winding transformer projects to one edge per
+	 * winding pair; only its first edge counts in totals and issue lists. */
+	primary: boolean;
+	/** Active and reactive power the equipment consumes (kW, kvar), summed once over every port;
+	 * on the primary edge only, and null when a port is missing. */
+	loss: { p: number; q: number } | null;
 }
 
 /** A result snapshot indexed like the drawing: `buses[i]` and `branches[b]` follow the network order. */
@@ -58,7 +71,10 @@ export interface SnapshotBus {
 	limits?: BusLimits | null;
 }
 
-export type BranchRating = { kind: 'current'; amps: number[] } | { kind: 'apparent'; va: number };
+/** Ampacity per conductor, or a transformer's apparent-power rating (VA) at each bus it connects,
+ * keyed by bus id. */
+export type BranchRating =
+	{ kind: 'current'; amps: number[] } | { kind: 'apparent'; byBus: Record<string, number> };
 
 export interface SnapshotBranch {
 	id: string;
@@ -105,6 +121,7 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 			const limits = bus.limits?.reference === 'phase-neutral' ? bus.limits : null;
 			pairs.push({
 				pair: [t, neutral],
+				zone: 'phase–neutral',
 				volts: magnitude(sub(v, vn)),
 				min: limits?.min[i] ?? null,
 				max: limits?.max[i] ?? null
@@ -123,6 +140,7 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 			if (!a || !b) continue;
 			pairs.push({
 				pair: [phases[i], phases[j]],
+				zone: 'phase–phase',
 				volts: magnitude(sub(a, b)),
 				min: limits?.min ?? null,
 				max: limits?.max ?? null
@@ -161,13 +179,20 @@ export function snapshotFromMcPf(
 		if (rows) rows.push(p);
 		else element.set(p.bus, [p]);
 	}
+	/** The element's port rows, of its own kind when a line and a switch share a name. */
+	const elementPorts = (branch: SnapshotBranch, bus: string): Port[] | undefined => {
+		const all = ports.get(branch.id)?.get(bus);
+		if (!all?.some((r) => r.kind === branch.kind)) return all;
+		return all.filter((r) => r.kind === branch.kind);
+	};
+	const seen = new Set<string>();
 	const branchSnapshots = branches.map((branch): BranchSnapshot => {
+		const key = `${branch.kind ?? ''}\u0000${branch.id}`;
+		const primary = !seen.has(key);
+		seen.add(key);
 		const ends = [branch.from, branch.to].map((bus, side): BranchEnd | null => {
-			const all = ports.get(branch.id)?.get(bus);
-			if (!branch.inService || !all?.length) return null;
-			const rows = all.some((r) => r.kind === branch.kind)
-				? all.filter((r) => r.kind === branch.kind)
-				: all;
+			const rows = elementPorts(branch, bus);
+			if (!branch.inService || !rows?.length) return null;
 			let p = 0;
 			let q = 0;
 			const byTerminal = new Map<string, Port>();
@@ -183,7 +208,12 @@ export function snapshotFromMcPf(
 			}
 			return { p: p / 1000, q: q / 1000, currents };
 		}) as [BranchEnd | null, BranchEnd | null];
-		return { ends, ...loadingOf(branch, ends) };
+		return {
+			ends,
+			...loadingOf(branch, ends, elementPorts),
+			primary,
+			loss: primary ? equipmentLoss(branch, elementPorts) : null
+		};
 	});
 	return {
 		kind: 'solved',
@@ -214,9 +244,45 @@ export function snapshotBusesFromTerminals(
 	);
 }
 
+type PortRows = (
+	branch: SnapshotBranch,
+	bus: string
+) => McPfResult['element_ports'][number][] | undefined;
+
+/** Power summed over a set of port rows, in kW and kvar. */
+function portPower(rows: McPfResult['element_ports'][number][]) {
+	let p = 0;
+	let q = 0;
+	for (const r of rows) {
+		p += r.power_into_element.re;
+		q += r.power_into_element.im;
+	}
+	return { p: p / 1000, q: q / 1000 };
+}
+
+/** Both ends' ports are signed into the equipment, so their sum over every bus it connects is what
+ * it consumes. Each bus counts once, however many winding pairs join it. */
+function equipmentLoss(branch: SnapshotBranch, rows: PortRows): BranchSnapshot['loss'] {
+	if (!branch.inService) return null;
+	const buses = new Set([branch.from, branch.to]);
+	if (branch.rating?.kind === 'apparent')
+		for (const bus of Object.keys(branch.rating.byBus)) buses.add(bus);
+	let p = 0;
+	let q = 0;
+	for (const bus of buses) {
+		const at = rows(branch, bus);
+		if (!at?.length) return null;
+		const power = portPower(at);
+		p += power.p;
+		q += power.q;
+	}
+	return { p, q };
+}
+
 function loadingOf(
 	branch: SnapshotBranch,
-	ends: [BranchEnd | null, BranchEnd | null]
+	ends: [BranchEnd | null, BranchEnd | null],
+	rows: PortRows
 ): Pick<BranchSnapshot, 'loading' | 'basis'> {
 	const rating = branch.rating;
 	if (!rating || !ends[0] || !ends[1]) return { loading: null, basis: null };
@@ -234,11 +300,20 @@ function loadingOf(
 				}
 			: { loading: null, basis: null };
 	}
-	const apparent = Math.max(...ends.map((e) => Math.hypot(e?.p ?? 0, e?.q ?? 0) * 1000));
-	return rating.va > 0
-		? {
-				loading: (100 * apparent) / rating.va,
-				basis: 'Maximum end |S| / rating; aggregate, not worst winding'
-			}
-		: { loading: null, basis: null };
+	// Judged per bus against the transformer's rating there, so a winding-pair edge whose two ends
+	// are the same bus (a centre tap's halves) is not counted twice.
+	let loading: number | null = null;
+	for (const [bus, va] of Object.entries(rating.byBus)) {
+		const at = rows(branch, bus);
+		if (!(va > 0) || !at?.length) continue;
+		const { p, q } = portPower(at);
+		const percent = (100 * Math.hypot(p, q) * 1000) / va;
+		if (loading === null || percent > loading) loading = percent;
+	}
+	return loading === null
+		? { loading: null, basis: null }
+		: {
+				loading,
+				basis: 'Maximum |S| at a connected bus / rating there; aggregate, not per winding'
+			};
 }

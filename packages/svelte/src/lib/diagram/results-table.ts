@@ -1,6 +1,6 @@
 import { worstBand } from './colour-modes.js';
 import type { ResultSnapshot } from './snapshot.js';
-import { busState, busUnbalance, loadingState, pairZone } from './summary.js';
+import { busState, busUnbalance, loadingState } from './summary.js';
 
 export type TableKind = 'bus' | 'branch';
 type Cell = string | number | null;
@@ -94,9 +94,7 @@ export function tableModel(result: ResultSnapshot, names: TableNames, kind: Tabl
 			return {
 				id: names.buses[i].id,
 				source: names.buses[i].source ?? null,
-				reference: bus.pairs.length
-					? [...new Set(bus.pairs.map((p) => pairZone(p.pair)))].join(', ')
-					: null,
+				reference: bus.pairs.length ? [...new Set(bus.pairs.map((p) => p.zone))].join(', ') : null,
 				pairs: bus.pairs.map((p) => p.pair.join('–')).join(' ') || null,
 				v0: bus.pairs[0]?.volts ?? null,
 				v1: bus.pairs[1]?.volts ?? null,
@@ -108,7 +106,7 @@ export function tableModel(result: ResultSnapshot, names: TableNames, kind: Tabl
 			};
 		}
 		const name = names.branches[i];
-		const { ends, loading } = result.branches[i];
+		const { ends, loading, loss } = result.branches[i];
 		const [a, b] = ends;
 		return {
 			id: name.id,
@@ -119,7 +117,8 @@ export function tableModel(result: ResultSnapshot, names: TableNames, kind: Tabl
 			qFrom: a?.q ?? null,
 			pTo: b?.p ?? null,
 			qTo: b?.q ?? null,
-			loss: a && b ? a.p + b.p : null,
+			// The equipment's loss, on its first edge only, so the column sums to the total.
+			loss: loss?.p ?? null,
 			loading,
 			state: name.inService ? loadingState(loading) : 'inactive'
 		};

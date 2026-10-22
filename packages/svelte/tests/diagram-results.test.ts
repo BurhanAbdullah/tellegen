@@ -3,13 +3,13 @@ import type { McPfResult } from '@tellegen/engine';
 import {
 	exceedance,
 	magnitudeUnbalance,
-	pairZone,
 	rankIssues,
 	graphInputs,
 	sequenceUnbalance,
 	snapshotBusesFromTerminals,
 	snapshotFromMcPf,
 	snapshotSummary,
+	type BranchSnapshot,
 	type PairVoltage,
 	type ResultSnapshot
 } from '../src/lib/diagram/index.js';
@@ -29,16 +29,30 @@ const pn = (
 	max: number | null = 253
 ): PairVoltage => ({
 	pair: [t, 'n'],
+	zone: 'phase–neutral',
 	volts,
 	min,
 	max
 });
 const pp = (a: string, b: string, volts: number): PairVoltage => ({
 	pair: [a, b],
+	zone: 'phase–phase',
 	volts,
 	min: 19000,
 	max: 21000
 });
+
+/** A two-terminal branch snapshot whose loss is the sum of its ends. */
+function branch(ends: BranchSnapshot['ends'], loading: number | null): BranchSnapshot {
+	const [a, b] = ends;
+	return {
+		ends,
+		loading,
+		basis: null,
+		primary: true,
+		loss: a && b ? { p: a.p + b.p, q: a.q + b.q } : null
+	};
+}
 
 function snapshot(): ResultSnapshot {
 	return {
@@ -52,31 +66,28 @@ function snapshot(): ResultSnapshot {
 			{ pairs: [], unbalance: null }
 		],
 		branches: [
-			{
-				ends: [
+			branch(
+				[
 					{ p: 100, q: 10, currents: [] },
 					{ p: -98, q: -9, currents: [] }
 				],
-				loading: 95,
-				basis: null
-			},
-			{
-				ends: [
+				95
+			),
+			branch(
+				[
 					{ p: 50, q: 5, currents: [] },
 					{ p: -49.5, q: -4.8, currents: [] }
 				],
-				loading: 120,
-				basis: null
-			},
-			{ ends: [null, null], loading: null, basis: null },
-			{
-				ends: [
+				120
+			),
+			branch([null, null], null),
+			branch(
+				[
 					{ p: 10, q: 1, currents: [] },
 					{ p: -10, q: -1, currents: [] }
 				],
-				loading: 101,
-				basis: null
-			}
+				101
+			)
 		]
 	};
 }
@@ -194,9 +205,7 @@ describe('snapshotFromMcPf', () => {
 });
 
 describe('issues and summary', () => {
-	it('zones follow the declared reference and exceedance is relative to the violated limit', () => {
-		expect(pairZone(['1', 'n'])).toBe('phase–neutral');
-		expect(pairZone(['1', '2'])).toBe('phase–phase');
+	it('exceedance is relative to the violated limit', () => {
 		expect(exceedance(pn('1', 205))).toBeCloseTo((100 * 2) / 207, 12);
 		expect(exceedance(pn('1', 230))).toBeLessThan(0);
 		expect(exceedance(pn('1', 230, null, null))).toBe(Number.NEGATIVE_INFINITY);
@@ -298,7 +307,7 @@ describe('graphInputs and live-session terminals', () => {
 				conductors: [['1', '1']] as [string, string][],
 				closed: true,
 				n_phases: 3,
-				rating: { s_rating: 4e5 }
+				rating: { s_rating_by_bus: { A: 4e5, c: 4e5 } }
 			},
 			{
 				kind: 'switch' as const,
@@ -321,7 +330,7 @@ describe('graphInputs and live-session terminals', () => {
 		]);
 		expect(g.branches.map((b) => b.rating)).toEqual([
 			{ kind: 'current', amps: [200, 200, 200] },
-			{ kind: 'apparent', va: 4e5 },
+			{ kind: 'apparent', byBus: { A: 4e5, c: 4e5 } },
 			null
 		]);
 		expect(g.branches[2].inService).toBe(false);
@@ -387,5 +396,94 @@ describe('graphInputs and live-session terminals', () => {
 		};
 		const s = snapshotFromMcPf(result, [], [branch]);
 		expect(s.branches[0].ends.map((e) => e?.p)).toEqual([5, -4.9]);
+	});
+});
+
+describe('equipment that is not a plain two-terminal branch', () => {
+	const port = (element: string, kind: string, bus: string, t: string, kw: number) => ({
+		element,
+		kind,
+		branch: 0,
+		bus,
+		terminal: t,
+		current_into_element: { re: 1, im: 0 },
+		power_into_element: { re: kw * 1000, im: 0 }
+	});
+
+	it('takes the neutral from the bus, whatever it is named', () => {
+		const terminal = (t: string, v: { re: number; im: number }) => ({
+			bus: 'B',
+			terminal: t,
+			voltage: v,
+			current_into_network: { re: 0, im: 0 },
+			power_into_network: { re: 0, im: 0 }
+		});
+		const result = {
+			iterations: 1,
+			terminals: [
+				terminal('1', polar(230, 0)),
+				terminal('2', polar(230, -120)),
+				terminal('3', polar(200, 120)),
+				terminal('4', polar(0, 0))
+			],
+			element_ports: []
+		} as unknown as McPfResult;
+		const bus = {
+			id: 'B',
+			terminals: ['1', '2', '3', '4'],
+			neutral: '4',
+			limits: { reference: 'phase-neutral' as const, min: [207, 207, 207], max: [253, 253, 253] }
+		};
+		const s = snapshotFromMcPf(result, [bus], []);
+		expect(s.buses[0].pairs.map((p) => [p.pair.join('-'), p.zone])).toEqual([
+			['1-4', 'phase–neutral'],
+			['2-4', 'phase–neutral'],
+			['3-4', 'phase–neutral']
+		]);
+		expect(snapshotSummary(s).zones.map((z) => z.zone)).toEqual(['phase–neutral']);
+		expect(magnitudeUnbalance(s.buses[0].pairs)?.definition).toBe('IEEE PVUR');
+	});
+
+	it('counts a centre-tap transformer once, and judges its loading per bus', () => {
+		// 25 kVA, 20 kW in on the primary and 19.5 kW out across both halves of the secondary.
+		const result = {
+			iterations: 1,
+			terminals: [],
+			element_ports: [
+				port('T1', 'transformer', 'HV', 'a', 20),
+				port('T1', 'transformer', 'HV', 'n', 0),
+				port('T1', 'transformer', 'LV', 'a', -10),
+				port('T1', 'transformer', 'LV', 'b', -9.5),
+				port('T1', 'transformer', 'LV', 'n', 0)
+			]
+		} as unknown as McPfResult;
+		const rating = { kind: 'apparent' as const, byBus: { HV: 25e3, LV: 25e3 } };
+		const edge = (from: string, to: string, fromTerminals: string[], toTerminals: string[]) => ({
+			id: 'T1',
+			kind: 'transformer',
+			from,
+			to,
+			fromTerminals,
+			toTerminals,
+			inService: true,
+			rating
+		});
+		// PowerIO projects three windings to three winding-pair edges.
+		const s = snapshotFromMcPf(
+			result,
+			[],
+			[
+				edge('HV', 'LV', ['a', 'n'], ['a', 'n']),
+				edge('HV', 'LV', ['a', 'n'], ['n', 'b']),
+				edge('LV', 'LV', ['a', 'n'], ['n', 'b'])
+			]
+		);
+		expect(s.branches.map((b) => b.primary)).toEqual([true, false, false]);
+		expect(s.branches.map((b) => b.loading)).toEqual([80, 80, 80]);
+		const summary = snapshotSummary(s);
+		expect(summary.loss.p).toBeCloseTo(0.5, 12);
+		expect(summary.loss.branches).toBe(1);
+		s.branches.forEach((b) => (b.loading = 95));
+		expect(rankIssues(s).map((i) => i.target.index)).toEqual([0]);
 	});
 });

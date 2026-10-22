@@ -1,16 +1,19 @@
-import type { BusSnapshot, PairVoltage, ResultSnapshot, UnbalanceValue } from './snapshot.js';
+import { LOADING_ATTENTION } from '../colors.js';
+import type {
+	BusSnapshot,
+	PairVoltage,
+	PairZone,
+	ResultSnapshot,
+	UnbalanceValue
+} from './snapshot.js';
 
-export const LOADING_WARNING = 90;
+/** Loading thresholds in percent of rating: a warning from the shared attention line, a violation
+ * above the rating itself, since the multiconductor power flow does not enforce ratings. */
+export const LOADING_WARNING = 100 * LOADING_ATTENTION;
 export const LOADING_LIMIT = 100;
 
-export type PairZone = 'phase–neutral' | 'phase–phase' | 'neutral';
 export type VoltageState = 'normal' | 'violation' | 'unbounded' | 'missing';
 export type LoadingState = 'normal' | 'warning' | 'violation' | 'missing';
-
-/** Zone by declared reference, never by an inferred nominal voltage. */
-export function pairZone(pair: [string, string]): PairZone {
-	return pair[1] === 'n' ? 'phase–neutral' : pair[0] === 'n' ? 'neutral' : 'phase–phase';
-}
 
 export function pairState(p: PairVoltage): VoltageState {
 	if (!Number.isFinite(p.volts)) return 'missing';
@@ -44,7 +47,7 @@ export function exceedance(p: PairVoltage): number {
 /** Magnitude-only fallback: max deviation from the mean / mean (IEEE PVUR or NEMA LVUR). */
 export function magnitudeUnbalance(pairs: PairVoltage[]): UnbalanceValue | null {
 	if (pairs.length !== 3) return null;
-	const zones = new Set(pairs.map((p) => pairZone(p.pair)));
+	const zones = new Set(pairs.map((p) => p.zone));
 	if (zones.size !== 1) return null;
 	const mean = (pairs[0].volts + pairs[1].volts + pairs[2].volts) / 3;
 	if (!(mean > 0)) return null;
@@ -88,6 +91,7 @@ export function rankIssues(result: ResultSnapshot): Issue[] {
 		});
 	});
 	result.branches.forEach((branch, index) => {
+		if (!branch.primary) return;
 		const state = loadingState(branch.loading);
 		if (state !== 'warning' && state !== 'violation') return;
 		const value = branch.loading as number;
@@ -140,9 +144,8 @@ export function snapshotSummary(
 	result.buses.forEach((bus, index) => {
 		for (const p of bus.pairs) {
 			const extreme = { bus: index, pair: p.pair, volts: p.volts, state: pairState(p) };
-			const zone = zones.get(pairZone(p.pair));
-			if (!zone)
-				zones.set(pairZone(p.pair), { min: extreme, max: extreme, buses: new Set([index]) });
+			const zone = zones.get(p.zone);
+			if (!zone) zones.set(p.zone, { min: extreme, max: extreme, buses: new Set([index]) });
 			else {
 				zone.buses.add(index);
 				if (p.volts < zone.min.volts) zone.min = extreme;
@@ -155,11 +158,10 @@ export function snapshotSummary(
 	const loss = { p: 0, q: 0, branches: 0 };
 	let loading: SnapshotSummary['loading'] = null;
 	result.branches.forEach((branch, index) => {
-		// Both ends are signed into the equipment, so their sum is what the branch consumes.
-		const [a, b] = branch.ends;
-		if (a && b) {
-			loss.p += a.p + b.p;
-			loss.q += a.q + b.q;
+		// Once per piece of equipment: a multi-winding transformer has several edges.
+		if (branch.loss) {
+			loss.p += branch.loss.p;
+			loss.q += branch.loss.q;
 			loss.branches++;
 		}
 		if (

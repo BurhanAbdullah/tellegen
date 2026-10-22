@@ -503,6 +503,7 @@ describe('galvanic zones', () => {
 	it('reports the worst state inside, including the transformers', () => {
 		const pair = (volts: number) => ({
 			pair: ['a', 'n'] as [string, string],
+			zone: 'phase–neutral' as const,
 			volts,
 			min: 207,
 			max: 253
@@ -518,7 +519,9 @@ describe('galvanic zones', () => {
 			branches: g.edges.map((_, k) => ({
 				ends: [null, null] as [null, null],
 				loading: k === 3 ? tLoading : 10,
-				basis: null
+				basis: null,
+				primary: true,
+				loss: null
 			}))
 		});
 		const a = found.zones[2];
@@ -557,12 +560,14 @@ describe('galvanic zones', () => {
 				pairs: [
 					{
 						pair: ['a', 'b'] as [string, string],
+						zone: 'phase–phase' as const,
 						volts: 400,
 						min: null,
 						max: null
 					},
 					{
 						pair: ['a', 'n'] as [string, string],
+						zone: 'phase–neutral' as const,
 						volts: 230 - i,
 						min: null,
 						max: null
@@ -573,7 +578,9 @@ describe('galvanic zones', () => {
 			branches: g.edges.map((_, k) => ({
 				ends: [null, null] as [null, null],
 				loading: k * 10,
-				basis: null
+				basis: null,
+				primary: true,
+				loss: null
 			}))
 		};
 		// Zone a: buses 4–6 (a3 lowest at 224 V); branches a12, a23 and transformer t2.

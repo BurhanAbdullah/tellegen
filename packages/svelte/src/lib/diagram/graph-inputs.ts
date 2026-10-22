@@ -26,7 +26,8 @@ export function busLimits(bus: Pick<DistGraphBus, 'voltage_limits'>): BusLimits 
 export function edgeRating(edge: Pick<DistGraphEdge, 'rating'>): BranchRating | null {
 	const r = edge.rating;
 	if (r?.i_max?.length) return { kind: 'current', amps: r.i_max };
-	if (r?.s_rating && r.s_rating > 0) return { kind: 'apparent', va: r.s_rating };
+	const byBus = r?.s_rating_by_bus;
+	if (byBus && Object.values(byBus).some((va) => va > 0)) return { kind: 'apparent', byBus };
 	return null;
 }
 
