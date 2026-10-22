@@ -1359,16 +1359,20 @@
 </script>
 
 {#if schematicCase}
-	<SchematicCanvas
-		mc={schematicCase}
-		onselectbus={(id) => {
-			if (id !== schematicCase.selectedBusId) onmultibusclick(schematicCase.id, id);
-		}}
-		onselectedge={(id) => {
-			if (id !== schematicCase.selectedEdgeId) onmultiedgeclick?.(schematicCase.id, id);
-		}}
-		onclose={() => (schematicCase.schematic = false)}
-	/>
+	<!-- One canvas per graph: its layouts, camera and geometry belong to that graph, so another
+	     case, or the same case with coordinates attached, starts afresh. -->
+	{#key schematicCase.graph}
+		<SchematicCanvas
+			mc={schematicCase}
+			onselectbus={(id) => {
+				if (id !== schematicCase.selectedBusId) onmultibusclick(schematicCase.id, id);
+			}}
+			onselectedge={(id) => {
+				if (id !== schematicCase.selectedEdgeId) onmultiedgeclick?.(schematicCase.id, id);
+			}}
+			onclose={() => (schematicCase.schematic = false)}
+		/>
+	{/key}
 {:else if diagramNetwork}
 	<DiagramCanvas
 		network={diagramNetwork}

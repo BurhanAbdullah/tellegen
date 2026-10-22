@@ -393,6 +393,47 @@ test('a second case opens its own diagram while the first one is showing', async
 	await expect(diagram).toBeVisible();
 });
 
+test('switching between two open diagrams draws each case with its own layout', async ({
+	page
+}) => {
+	// Regression: the diagram component outlived a switch between two cases whose diagrams were
+	// both open, and served the other case's cached schematic for this one.
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	const centreTap = new URL(
+		'../../../crates/tellegen/tests/data/mc_pf/oracle_inputs/pf_center_tap_loaded.json',
+		import.meta.url
+	);
+	const load = async (name: string, file: URL) =>
+		page
+			.locator('input[type=file]')
+			.first()
+			.setInputFiles({ name, mimeType: 'application/json', buffer: await readFile(file) });
+	const diagram = page.getByRole('application', { name: 'Schematic diagram' });
+	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
+	const schematicLayout = async () => {
+		await toolbar.getByRole('button', { name: 'Schematic', exact: true }).click();
+		const download = page.waitForEvent('download');
+		await toolbar.getByRole('button', { name: 'Layout', exact: true }).click();
+		return JSON.parse(await readFile(await (await download).path(), 'utf8')).features;
+	};
+
+	await load('first.bmopf.json', fixture);
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	await expect(diagram).toBeVisible();
+	const first = await schematicLayout();
+
+	await load('centre-tap.bmopf.json', centreTap);
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	await expect(diagram).toBeVisible();
+	await schematicLayout();
+
+	await page.getByRole('button', { name: 'pf_3ph_line multiconductor' }).click();
+	await expect(diagram).toBeVisible();
+	expect(await schematicLayout()).toEqual(first);
+});
+
 test('perfectly grounded terminals show as a solid earth', async ({ page }) => {
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
