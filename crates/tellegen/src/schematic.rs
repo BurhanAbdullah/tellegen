@@ -453,6 +453,31 @@ mod tests {
         );
     }
 
+    /// The browser's `displayTree` reads the same fixture and must reproduce the same forest
+    /// (`tests/display-forest.test.ts` in `@tellegen/svelte`).
+    #[test]
+    fn forest_matches_the_shared_fixture() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/data/schematic/display-forest.json"))
+                .expect("fixture JSON");
+        let graph: DistGraph = serde_json::from_value(fixture["graph"].clone()).expect("graph");
+        let layout = schematic_layout(&graph, &SchematicOptions::default());
+        let forest = &fixture["forest"];
+        let ints = |key: &str| -> Vec<i64> {
+            forest[key]
+                .as_array()
+                .expect(key)
+                .iter()
+                .map(|v| v.as_i64().expect(key))
+                .collect()
+        };
+        let widen = |v: &[u32]| v.iter().map(|&x| i64::from(x)).collect::<Vec<_>>();
+        assert_eq!(widen(&layout.parent), ints("parent"));
+        assert_eq!(layout.parent_edge, ints("parent_edge"));
+        assert_eq!(widen(&layout.depth), ints("depth"));
+        assert_eq!(widen(&layout.roots), ints("roots"));
+    }
+
     #[test]
     fn leaf_order_matches_the_browser_layout() {
         let options = SchematicOptions {
