@@ -8,8 +8,9 @@ view gains an operating-point overview.
 
 In `@tellegen/engine`, `DistGraphBus.voltage_limits` holds the model's declared
 phase–neutral and phase–phase voltage bounds in volts, and `DistGraphEdge.rating`
-holds per-conductor ampacity or a transformer edge's smaller winding rating.
-Both are present only when the model declares them.
+holds per-conductor ampacity (`i_max`) or, for a transformer, its largest winding
+rating at each bus it connects (`s_rating_by_bus`), the same on every winding-pair
+edge. Both are present only when the model declares them.
 
 In `@tellegen/svelte`, `McWorkbench` summarises a multiconductor power-flow result:
 violations, losses, voltage ranges per declared reference, maximum loading and
@@ -41,6 +42,10 @@ diagram layer, follows a case's own routes in source positions, and a selected
 branch gets a multi-wire view of its conductors. Unbalance is the voltage
 unbalance factor from terminal phasors, shown beside the magnitude spread.
 `controller.multiFullResult`
-reads the full operating point from a stored result or the live session. The
+reads the full operating point from a stored result or the live session, and
+`TellegenShell` keeps `overviewResult` current for the active case
+(`controller.followOverview`, `readOverview` and `overviewOnRequest`). A
+multi-winding transformer counts once in losses and issues, and its loading is
+judged per connected bus. The
 renderer-independent logic lives in `src/lib/diagram`, ported from the diagram
 projection draft (#177).
