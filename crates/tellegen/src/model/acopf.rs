@@ -144,6 +144,16 @@ impl CancellableNlTnlp {
 
 impl TNLP for CancellableNlTnlp {
     fn get_nlp_info(&mut self) -> Option<NlpInfo> {
+        // POUNCE 0.13's ladder continues to the next rung even after a
+        // UserRequestedStop. Refuse its next initialization before it can
+        // rebuild/evaluate the NLP; the caller maps the flag to cancellation.
+        if self
+            .cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            return None;
+        }
         self.inner.get_nlp_info()
     }
 
@@ -1788,6 +1798,30 @@ mpc.gencost = [
                 &IpoptCq::default()
             ));
         }
+    }
+
+    #[test]
+    fn cancelled_recovery_refuses_another_solver_initialization() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let target = Rc::new(RefCell::new(CancellableNlTnlp::new(
+            case3_model().tnlp().expect("TNLP"),
+            Some(Arc::clone(&cancel)),
+        )));
+        let mut application = IpoptApplication::new();
+        application
+            .initialize_with_options_str(POUNCE_OPTIONS)
+            .unwrap();
+        application.initialize().unwrap();
+        configure_restoration(&mut application);
+        assert!(target.borrow_mut().get_nlp_info().is_some());
+
+        // A retry already in flight stops at its callback. Every subsequent
+        // retry must stop before initialization, not evaluate the model until
+        // another iteration-zero callback. Exercise POUNCE's actual entry.
+        cancel.store(true, Ordering::Relaxed);
+        let status = application.optimize_tnlp(target.clone() as Rc<RefCell<dyn TNLP>>);
+        assert_eq!(status, ApplicationReturnStatus::InvalidProblemDefinition);
+        assert!(target.borrow().inner.final_x().is_none());
     }
 
     #[test]

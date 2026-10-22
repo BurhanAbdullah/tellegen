@@ -17,7 +17,10 @@ cannot overwrite the selected point. Every emitted result still passes the
 independent physical validator; a retry does not weaken acceptance or turn a
 local infeasibility report into a proof. Cancellation is checked before rescue
 attempts, by callbacks during them, and after the ladder regardless of the
-selected status. Browser cancellation terminates the entire worker.
+selected status. POUNCE 0.13.0 may still visit later retry rungs after
+`UserRequestedStop`; the TNLP refuses their initialization once cancelled,
+before they can rebuild or evaluate the model. Browser cancellation terminates
+the entire worker.
 
 Responses retain the selected solve's iteration count and residuals, and add
 `base_solver_status`, `total_nlp_iterations`, `restoration_calls`,
@@ -40,8 +43,8 @@ archive URLs and checksums. Only opt-in app builds copy these files. These
 materials prepare review; they do not approve public distribution. Python
 3.11+ is required for the release guard (`PYTHON` can select an interpreter).
 
-Local validation used Rust 1.96.0 on macOS arm64 and Chromium with the release
-WASI artifact SHA-256
+Local validation at commit `c721344` used Rust 1.96.0 on macOS arm64 and Chromium
+with the release WASI artifact SHA-256
 `e6bf0775a90dec4fc8658c0559fadfed97545870adaae41152afb8ba8c12f5de`
 (10,463,176 bytes). The four browser UI/import/disposal checks and the four
 external PGLib corpus checks all passed. Each corpus test hashes the served
