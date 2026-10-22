@@ -28,13 +28,19 @@ Responses retain the selected solve's iteration count and residuals, and add
 selected solve; the total iteration count includes rejected attempts. The solve
 card uses that total and marks recovered solves. Older responses remain
 readable. The engine's TypeScript contract now includes the NLP diagnostic
-variant, which previously existed only in the Rust and Study schemas.
+variant, which previously existed only in the Rust and Study schemas. Each
+attempt uses the configured POUNCE iteration limit; the total across retries
+can exceed that per-attempt limit.
 
 A canonical full-pi regression forces entry into restoration, requires
 `restoration_calls > 0`, and checks electrical feasibility and objective
 agreement. A genuinely unserviceable instance exercises the retry ladder and
-must still return an error. Existing finite-difference, corrupt-result,
-portable-emission, cancellation and worker-lifecycle checks remain in place.
+must still return an error. Small exact-expression regressions additionally
+prove that a failed base solve can be rescued, rejected retries retain the
+base point and verdict, total work includes every attempt, and cancellation
+during the ladder returns a cancellation error. Existing finite-difference,
+corrupt-result, portable-emission, cancellation and worker-lifecycle checks
+remain in place.
 
 The opt-in build now places `POUNCE-EPL-2.0.txt`, `POUNCE-NOTICE.txt` and
 `POUNCE-SOURCE.json` beside the WASM asset. The manifest records its SHA-256,

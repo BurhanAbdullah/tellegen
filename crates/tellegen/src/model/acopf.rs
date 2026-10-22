@@ -1109,6 +1109,47 @@ fn validate_primal(
     })
 }
 
+/// Run recovery on the same cancellable TNLP and retain the selected point.
+/// Cancellation wins even if the upstream ladder retains a base failure after
+/// a cancelled retry. Keeping this boundary shared lets small exact-expression
+/// regressions exercise the production driver without requiring a large case.
+fn optimize_with_recovery(
+    application: &mut IpoptApplication,
+    target: Rc<RefCell<dyn TNLP>>,
+    cancel: &Option<Arc<AtomicBool>>,
+    report: &mut dyn FnMut(&str),
+) -> Result<SecondOpinionOutcome, String> {
+    application.defer_end_verdict();
+    let status = application.optimize_tnlp(Rc::clone(&target));
+    let statistics = application.statistics();
+    // Do not start rescue attempts after cancellation. The same decorated
+    // TNLP is used in every retry, so its callbacks remain cancellable.
+    let outcome = if cancel
+        .as_ref()
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
+        SecondOpinionOutcome::unchanged(status, statistics)
+    } else {
+        run_second_opinion_ladder(application, target, status, statistics, report)
+    };
+    let statistics = &outcome.statistics;
+    let total_iterations = outcome.total_iteration_count();
+    // A cancelled retry can leave the base verdict in the ladder outcome.
+    // Consult the flag independently of that verdict, including after success.
+    if cancel
+        .as_ref()
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
+        return Err(format!(
+            "AC OPF solve cancelled after {} total iterations (constraint violation {:.3e}, KKT error {:.3e})",
+            total_iterations,
+            statistics.final_unscaled_constr_viol,
+            statistics.final_unscaled_kkt_error,
+        ));
+    }
+    Ok(outcome)
+}
+
 /// Compile and solve one canonical instance with exact POUNCE derivatives.
 /// The optional atomic flag is polled before model construction and once per
 /// POUNCE iteration. A local infeasibility report is returned as a diagnostic
@@ -1150,35 +1191,15 @@ fn solve_ac_opf_with_options(
         .initialize()
         .map_err(|error| format!("could not initialize POUNCE AC OPF: {error}"))?;
     configure_restoration(&mut application);
-    let target = Rc::clone(&tnlp) as Rc<RefCell<dyn TNLP>>;
-    let status = application.optimize_tnlp(Rc::clone(&target));
-    let statistics = application.statistics();
-    // Do not start rescue attempts after cancellation. The same decorated
-    // TNLP is used in every retry, so its callbacks remain cancellable.
-    let outcome = if cancel
-        .as_ref()
-        .is_some_and(|flag| flag.load(Ordering::Relaxed))
-    {
-        SecondOpinionOutcome::unchanged(status, statistics)
-    } else {
-        run_second_opinion_ladder(&mut application, target, status, statistics, &mut |_| {})
-    };
+    let outcome = optimize_with_recovery(
+        &mut application,
+        Rc::clone(&tnlp) as Rc<RefCell<dyn TNLP>>,
+        &cancel,
+        &mut |_| {},
+    )?;
     let status = outcome.status;
     let statistics = &outcome.statistics;
     let total_iterations = outcome.total_iteration_count();
-    // A cancelled retry can leave the base verdict in the ladder outcome.
-    // Consult the flag independently of that verdict, including after success.
-    if cancel
-        .as_ref()
-        .is_some_and(|flag| flag.load(Ordering::Relaxed))
-    {
-        return Err(format!(
-            "AC OPF solve cancelled after {} total iterations (constraint violation {:.3e}, KKT error {:.3e})",
-            total_iterations,
-            statistics.final_unscaled_constr_viol,
-            statistics.final_unscaled_kkt_error,
-        ));
-    }
     if !matches!(
         status,
         ApplicationReturnStatus::SolveSucceeded | ApplicationReturnStatus::SolvedToAcceptableLevel
@@ -1235,6 +1256,122 @@ mod tests {
 
     use super::*;
     use crate::model::{parse_matpower, CASE3};
+
+    fn run_recovery_fixture(
+        target: Rc<RefCell<dyn TNLP>>,
+        cancel: &Option<Arc<AtomicBool>>,
+        options: &str,
+        report: &mut dyn FnMut(&str),
+    ) -> Result<SecondOpinionOutcome, String> {
+        let mut application = IpoptApplication::new();
+        application.initialize_with_options_str(options).unwrap();
+        application.initialize().unwrap();
+        configure_restoration(&mut application);
+        optimize_with_recovery(&mut application, target, cancel, report)
+    }
+
+    // At x=0 the equality Jacobian vanishes. A displaced recovery start must
+    // find x=+/-1; this exercises a real failed base solve and accepted retry.
+    fn recovery_fixture(
+        cancel: Option<Arc<AtomicBool>>,
+        feasible: bool,
+    ) -> Rc<RefCell<CancellableNlTnlp>> {
+        let problem = NlProblem::from_expressions(NlProblemParts {
+            minimize: true,
+            objective: Expr::Binary(
+                BinOp::Pow,
+                Box::new(Expr::Var(0)),
+                Box::new(Expr::Const(2.0)),
+            ),
+            obj_constant: 0.0,
+            constraints: vec![Expr::Binary(
+                BinOp::Pow,
+                Box::new(Expr::Var(0)),
+                Box::new(Expr::Const(2.0)),
+            )],
+            x_l: vec![-2.0],
+            x_u: vec![2.0],
+            x0: vec![0.0],
+            g_l: vec![if feasible { 1.0 } else { -1.0 }],
+            g_u: vec![if feasible { 1.0 } else { -1.0 }],
+            var_names: vec!["x".into()],
+            con_names: vec!["square".into()],
+        })
+        .unwrap();
+        Rc::new(RefCell::new(CancellableNlTnlp::new(
+            NlTnlp::try_new(problem).unwrap(),
+            cancel,
+        )))
+    }
+
+    #[test]
+    fn recovery_promotes_a_real_solve_and_counts_all_attempts() {
+        let tnlp = recovery_fixture(None, true);
+        let outcome = run_recovery_fixture(
+            Rc::clone(&tnlp) as Rc<RefCell<dyn TNLP>>,
+            &None,
+            POUNCE_OPTIONS,
+            &mut |_| {},
+        )
+        .unwrap();
+        assert_eq!(
+            outcome.status,
+            ApplicationReturnStatus::SolveSucceeded,
+            "{outcome:?}"
+        );
+        assert!(
+            outcome.ran() && outcome.promoted_by.is_some(),
+            "{outcome:?}"
+        );
+        assert_ne!(outcome.base_status, outcome.status);
+        assert!(outcome.total_iteration_count() > outcome.statistics.iteration_count as usize);
+        assert_eq!(outcome.tried.len(), outcome.rung_iteration_counts.len());
+        let solved = tnlp.borrow();
+        let x = solved.inner.final_x().unwrap()[0];
+        assert!((x * x - 1.0).abs() < 1e-6, "accepted x={x}");
+        assert!((solved.inner.final_obj() - 1.0).abs() < 1e-6);
+        assert!((outcome.statistics.final_objective - solved.inner.final_obj()).abs() < 1e-10);
+        assert!(outcome.statistics.final_unscaled_constr_viol < 1e-6);
+    }
+
+    #[test]
+    fn failed_recovery_preserves_the_base_verdict_and_point() {
+        let tnlp = recovery_fixture(None, false);
+        let outcome = run_recovery_fixture(
+            Rc::clone(&tnlp) as Rc<RefCell<dyn TNLP>>,
+            &None,
+            POUNCE_OPTIONS,
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(outcome.ran(), "{outcome:?}");
+        assert!(outcome.promoted_by.is_none());
+        assert_eq!(outcome.status, outcome.base_status);
+        assert!(!matches!(
+            outcome.status,
+            ApplicationReturnStatus::SolveSucceeded
+                | ApplicationReturnStatus::SolvedToAcceptableLevel
+        ));
+        // The rejected displaced starts must not replace the original point.
+        assert!(tnlp.borrow().inner.final_x().unwrap()[0].abs() < 1e-8);
+    }
+
+    #[test]
+    fn cancellation_during_recovery_cannot_return_a_base_failure_or_success() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let tnlp = recovery_fixture(Some(Arc::clone(&cancel)), true);
+        let error = run_recovery_fixture(
+            Rc::clone(&tnlp) as Rc<RefCell<dyn TNLP>>,
+            &Some(Arc::clone(&cancel)),
+            POUNCE_OPTIONS,
+            &mut |_| {
+                cancel.store(true, Ordering::Relaxed);
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("cancelled"), "{error}");
+        assert!(tnlp.borrow_mut().get_nlp_info().is_none());
+    }
 
     fn case3_model() -> CanonicalAcOpfModel {
         let network = parse_matpower(CASE3).expect("parse case3");
