@@ -65,6 +65,7 @@
 		zoneSummary,
 		zoneVoltage,
 		zoneCorridors,
+		zoneColouring,
 		zoneOutline,
 		zoneState,
 		type GalvanicZone,
@@ -339,6 +340,24 @@
 	);
 	/** Screen width of a zone's corridor on geographic positions. */
 	const CORRIDOR_PX = 9;
+	/** Muted tints for networks within limits, kept clear of the warning and violation colours.
+	 * Networks drawn near each other get different ones, so a customer's network reads at a
+	 * glance where corridors touch. */
+	const ZONE_TINTS: [number, number, number][] = [
+		[70, 110, 150],
+		[40, 140, 140],
+		[100, 145, 70],
+		[125, 95, 165],
+		[100, 105, 120],
+		[160, 90, 140]
+	];
+	/** Networks with buses within about this many metres count as neighbours for their tints. */
+	const TINT_REACH_M = 60;
+	const zoneTint = $derived(
+		corridors.length
+			? zoneColouring(zones, shown!.positions, outlined, TINT_REACH_M, ZONE_TINTS.length)
+			: null
+	);
 	/** The zone under the pointer: its corridor darkens, so it reads as one network. */
 	let hoveredZone = $state(-1);
 	const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {
@@ -724,11 +743,12 @@
 	);
 	const busTip = (i: number) => {
 		const how = layout === 'source' ? geometry.inferred?.[i] : 0;
+		const id = graph.buses[i].id + networkNote(i);
 		return how === 1
-			? `${graph.buses[i].id} · no position in the case data; drawn next to a connected bus`
+			? `${id} · no position in the case data; drawn next to a connected bus`
 			: how === 2
-				? `${graph.buses[i].id} · no position in the case data`
-				: graph.buses[i].id;
+				? `${id} · no position in the case data`
+				: id;
 	};
 	const branchTip = (k: number) => {
 		const e = graph.edges[k];
@@ -747,7 +767,7 @@
 		if (d.kind === 'ground')
 			return `solid earth: terminal${d.ids.length > 1 ? 's' : ''} ${d.ids.join(', ')} of ${graph.buses[d.bus].id} perfectly grounded`;
 		return d.bus >= 0
-			? `${d.ids.length > 1 ? `${d.ids.length} ${name}s` : name} ${ids} at ${graph.buses[d.bus].id}`
+			? `${d.ids.length > 1 ? `${d.ids.length} ${name}s` : name} ${ids} at ${graph.buses[d.bus].id}${networkNote(d.bus)}`
 			: `${name} ${ids}${graph.edges[d.edge].closed ? '' : ' (open)'}`;
 	};
 	/** Toolbar and legend start right of the left dock, so no panel covers them. */
@@ -774,6 +794,45 @@
 				: []
 		)
 	);
+
+	/** The network to emphasise: the corridor under the pointer, else the network of whatever is
+	 * hovered here or in a linked view (a bus, a line, or the transformer feeding it). */
+	const activeZone = $derived.by(() => {
+		if (hoveredZone >= 0) return hoveredZone;
+		let z = -1;
+		if (hoveredBus >= 0) z = zones.busZone[hoveredBus];
+		else
+			for (const k of hoveredEdges) {
+				if (graph.edges[k].kind === 'transformer') {
+					z = zones.zones.findIndex((zone) => !zone.hasSource && zone.transformers[0] === k);
+				} else {
+					const { from } = inputs.names.branches[k];
+					if (from >= 0) z = zones.busZone[from];
+				}
+				break;
+			}
+		return z >= 0 && outlined(zones.zones[z]) ? z : -1;
+	});
+	/** Where a zone's feeding transformer is drawn: its symbol, else midway between its buses. */
+	function feederPoint(z: number): [number, number] | null {
+		const k = zones.zones[z].transformers[0];
+		if (k === undefined) return null;
+		const a = equipment?.anchors;
+		if (a && Number.isFinite(a[k * 2])) return [a[k * 2], a[k * 2 + 1]];
+		const { from, to } = inputs.names.branches[k];
+		if (from < 0 || to < 0) return null;
+		const g = geometry.positions;
+		return [(g[from * 3] + g[to * 3]) / 2, (g[from * 3 + 1] + g[to * 3 + 1]) / 2];
+	}
+	/** The network a bus is in, for its tooltip. */
+	function networkNote(i: number): string {
+		const z = zones.busZone[i];
+		if (z < 0 || !outlined(zones.zones[z])) return '';
+		const k = zones.zones[z].transformers[0];
+		return k === undefined
+			? ' · in a network without a transformer'
+			: ` · network fed by ${transformerNames.get(k) ?? graph.edges[k].id}`;
+	}
 
 	/** Per-edge and per-bus colours for the active mode; results never recolour inactive branches. */
 	const edgeColours = $derived(
@@ -1355,16 +1414,23 @@
 	 * (no per-layer polygon offset): each pixel is tinted once, by the first zone drawn there (the
 	 * hovered one, drawn first). */
 	function corridorLayers(common: object): Layer[] {
-		if (!modules || !shown || !corridors.length || symbolsOn) return [];
+		if (!modules || !shown || !corridors.length) return [];
+		// Close in, only the emphasised network keeps its corridor.
+		if (symbolsOn && activeZone < 0) return [];
 		const { LineLayer, ScatterplotLayer } = modules.layers;
 		const g = shown;
 		const once = { depthWriteEnabled: true, depthCompare: 'less' } as const;
 		const band = (z: number, hovered: boolean): RGBA => {
-			const [fill, line] = ZONE_COLOURS[zoneStates[z]];
-			return hovered ? line : ([...fill.slice(0, 3), Math.min(255, fill[3] * 3)] as RGBA);
+			const state = zoneStates[z];
+			if (state === 'warning' || state === 'violation') {
+				const [fill, line] = ZONE_COLOURS[state];
+				return hovered ? line : ([...fill.slice(0, 3), Math.min(255, fill[3] * 3)] as RGBA);
+			}
+			const tint = ZONE_TINTS[Math.max(0, zoneTint?.[z] ?? 0)];
+			return [...tint, hovered ? 160 : 72] as RGBA;
 		};
 		const pass = (hovered: boolean) => {
-			const list = corridors.filter((c) => (c.z === hoveredZone) === hovered);
+			const list = corridors.filter((c) => (c.z === activeZone) === hovered);
 			const segments = list.flatMap((c) => c.segments.map((s) => ({ z: c.z, s })));
 			const buses = list.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
 			const suffix = hovered ? '-hovered' : '';
@@ -1398,7 +1464,28 @@
 				})
 			];
 		};
-		return [...pass(true), ...pass(false)];
+		const feeder = activeZone >= 0 ? feederPoint(activeZone) : null;
+		return [
+			...(feeder
+				? [
+						new ScatterplotLayer({
+							...common,
+							id: 'zone-feeder',
+							data: [feeder],
+							getPosition: (p: [number, number]) => [...p, 0],
+							getFillColor: [...band(activeZone, true).slice(0, 3), 60] as RGBA,
+							getLineColor: band(activeZone, true),
+							stroked: true,
+							getRadius: 13,
+							radiusUnits: 'pixels',
+							getLineWidth: 2,
+							lineWidthUnits: 'pixels'
+						})
+					]
+				: []),
+			...pass(true),
+			...(symbolsOn ? [] : pass(false))
+		];
 	}
 	/** Spokes from each spread stack's true point to its buses; a ring and ×n badge on the others. */
 	function stackLayers(common: object): Layer[] {
@@ -1808,7 +1895,8 @@
 			zoneTags,
 			tagZoom,
 			corridors,
-			hoveredZone,
+			activeZone,
+			zoneTint,
 			marks,
 			fannedGroups,
 			fannedEdges,

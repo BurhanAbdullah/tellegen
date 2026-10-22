@@ -29,6 +29,7 @@ import {
 	zoneState,
 	zoneOutline,
 	zoneCorridors,
+	zoneColouring,
 	zoneVoltage,
 	zoneLevel,
 	zoneSummary,
@@ -632,6 +633,35 @@ describe('galvanic zones', () => {
 			[1, [4], [3, 4]]
 		]);
 		expect(corridors[1].bounds).toEqual([2, 2, 8, 8]);
+	});
+
+	it('gives neighbouring networks different tints', () => {
+		// Four networks in a row, 10 apart, each touching the next; a fifth far away; a sixth with
+		// a source, left out.
+		const zone = (buses: number[], hasSource = false) => ({
+			buses,
+			edges: [],
+			transformers: [],
+			hasSource
+		});
+		const found: GalvanicZones = {
+			zones: [zone([0]), zone([1]), zone([2]), zone([3]), zone([4]), zone([5], true)],
+			busZone: Int32Array.from([0, 1, 2, 3, 4, 5])
+		};
+		const positions = [0, 0, 0, 10, 0, 0, 20, 0, 0, 30, 0, 0, 500, 500, 0, 5, 0, 0];
+		const tint = zoneColouring(found, positions, (z) => !z.hasSource, 10, 3);
+		expect(tint[5]).toBe(-1);
+		for (const [a, b] of [
+			[0, 1],
+			[1, 2],
+			[2, 3]
+		])
+			expect(tint[a]).not.toBe(tint[b]);
+		expect([...tint].every((c, z) => z === 5 || (c >= 0 && c < 3))).toBe(true);
+		// One tint for everything nearby: the least used among neighbours is reused.
+		expect([...zoneColouring(found, positions, (z) => !z.hasSource, 10, 1)].slice(0, 5)).toEqual([
+			0, 0, 0, 0, 0
+		]);
 	});
 });
 
