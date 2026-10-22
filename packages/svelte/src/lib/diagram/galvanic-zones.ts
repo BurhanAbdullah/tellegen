@@ -132,24 +132,43 @@ export function zoneOutline(
 	return [...top, ...bottom.reverse()];
 }
 
-/** Convex hull of a zone's buses, for source positions where columns mean nothing. */
-export function zoneHull(zone: GalvanicZone, positions: ArrayLike<number>): [number, number][] {
-	const points = zone.buses
-		.map((i): [number, number] => [positions[i * 3], positions[i * 3 + 1]])
-		.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-	if (points.length < 3) return points;
-	const cross = (o: number[], a: number[], b: number[]) =>
-		(a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-	const half = (list: [number, number][]) => {
-		const out: [number, number][] = [];
-		for (const p of list) {
-			while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
-			out.push(p);
+/** A zone's corridor, for source positions: the segments of its own branches and its buses, to be
+ * drawn as a band of fixed screen width. Unlike a hull it covers only where the network runs, so
+ * networks that interleave along streets stay apart; every bus belongs to exactly one zone. */
+export interface ZoneCorridor {
+	z: number;
+	/** Segment indices into the drawing's sources, targets and segmentEdge. */
+	segments: number[];
+	buses: number[];
+	/** Bounding box of its buses: [x0, y0, x1, y1]. */
+	bounds: [number, number, number, number];
+}
+
+export function zoneCorridors(
+	zones: GalvanicZones,
+	geometry: { positions: ArrayLike<number>; segmentEdge: ArrayLike<number> },
+	include: (zone: GalvanicZone) => boolean
+): ZoneCorridor[] {
+	const edgeZone = new Map<number, number>();
+	zones.zones.forEach((zone, z) => {
+		if (include(zone)) for (const k of zone.edges) edgeZone.set(k, z);
+	});
+	const out = new Map<number, ZoneCorridor>();
+	zones.zones.forEach((zone, z) => {
+		if (!include(zone)) return;
+		let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+		for (const i of zone.buses) {
+			const x = geometry.positions[i * 3];
+			const y = geometry.positions[i * 3 + 1];
+			[x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
 		}
-		out.pop();
-		return out;
-	};
-	return [...half(points), ...half([...points].reverse())];
+		out.set(z, { z, segments: [], buses: zone.buses, bounds: [x0, y0, x1, y1] });
+	});
+	for (let s = 0; s < geometry.segmentEdge.length; s++) {
+		const z = edgeZone.get(geometry.segmentEdge[s]);
+		if (z !== undefined) out.get(z)!.segments.push(s);
+	}
+	return [...out.values()];
 }
 
 /** A zone's phase–phase voltage level in volts: from declared limits (midpoint of the band; a

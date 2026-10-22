@@ -28,7 +28,7 @@ import {
 	galvanicZones,
 	zoneState,
 	zoneOutline,
-	zoneHull,
+	zoneCorridors,
 	zoneVoltage,
 	zoneLevel,
 	zoneSummary,
@@ -39,6 +39,7 @@ import {
 	mercatorToLngLat,
 	cameraFromMap
 } from '../src/lib/diagram/index.js';
+import type { GalvanicZones } from '../src/lib/diagram/index.js';
 
 const bus = (id: string, attachments: [string, string, string][] = [], source = false) => ({
 	id,
@@ -607,12 +608,30 @@ describe('galvanic zones', () => {
 			[150, 25],
 			[85, 25]
 		]);
-		expect(
-			zoneHull(
-				{ buses: [0, 1, 2, 3], edges: [], transformers: [], hasSource: false },
-				[0, 0, 0, 10, 0, 0, 10, 10, 0, 5, 5, 0]
-			)
-		).toHaveLength(3);
+	});
+
+	it('draws a zone on geographic positions as a corridor along its own branches', () => {
+		// Two LV networks interleave: their hulls would overlap, their corridors do not share a
+		// segment or a bus. Edge 2 is the transformer between them and belongs to neither.
+		const found: GalvanicZones = {
+			zones: [
+				{ buses: [0, 1, 2], edges: [0, 1], transformers: [2], hasSource: false },
+				{ buses: [3, 4], edges: [3], transformers: [2], hasSource: false },
+				{ buses: [5], edges: [], transformers: [], hasSource: true }
+			],
+			busZone: Int32Array.from([0, 0, 0, 1, 1, 2])
+		};
+		const geometry = {
+			positions: [0, 0, 0, 10, 0, 0, 10, 10, 0, 2, 2, 0, 8, 8, 0, 50, 50, 0],
+			// Edge 1 is routed in two segments.
+			segmentEdge: Int32Array.from([0, 1, 1, 2, 3])
+		};
+		const corridors = zoneCorridors(found, geometry, (z) => !z.hasSource);
+		expect(corridors.map((c) => [c.z, c.segments, c.buses])).toEqual([
+			[0, [0, 1, 2], [0, 1, 2]],
+			[1, [4], [3, 4]]
+		]);
+		expect(corridors[1].bounds).toEqual([2, 2, 8, 8]);
 	});
 });
 

@@ -64,7 +64,7 @@
 		zoneLevel,
 		zoneSummary,
 		zoneVoltage,
-		zoneHull,
+		zoneCorridors,
 		zoneOutline,
 		zoneState,
 		type GalvanicZone,
@@ -307,13 +307,15 @@
 	/** The branch geometry as drawn, interrupted under symbols when they show. */
 	const drawn = $derived<SchematicGeometry>(symbolsOn && equipment ? equipment.cut : geometry);
 	/** Galvanic zones: buses joined without passing a transformer. Those without a source (the LV
-	 * networks of a feeder) get a translucent outline tinted by their worst state. */
+	 * networks of a feeder) are tinted by their worst state: in the schematic as an outline that
+	 * follows the drawing column by column, on geographic positions as a corridor along their own
+	 * branches (a hull would overlap the hulls of networks interleaved with it). */
 	const zones = $derived(galvanicZones(graph, tree));
 	const zoneStates = $derived(zones.zones.map((z) => zoneState(z, snapshot)));
+	const outlined = (zone: GalvanicZone) => !zone.hasSource && zone.buses.length >= 2;
 	const zoneShapes = $derived.by(() => {
-		if (!shown) return [];
+		if (!shown || !shown.attachmentGap) return [];
 		const g = shown;
-		const engine = !!g.attachmentGap;
 		// Column spacing of the engine layout: any tree edge spans exactly one column.
 		let dx = 0;
 		for (let i = 0; i < graph.buses.length && !dx; i++)
@@ -325,15 +327,20 @@
 			);
 			return kinds.size * gap;
 		});
+		if (!(dx > 0)) return [];
 		return zones.zones.flatMap((zone, z) => {
-			if (zone.hasSource || zone.buses.length < 2) return [];
-			const polygon =
-				engine && dx > 0
-					? zoneOutline(zone, g.positions, below, { dx, pad: gap * 0.5 })
-					: zoneHull(zone, g.positions);
+			if (!outlined(zone)) return [];
+			const polygon = zoneOutline(zone, g.positions, below, { dx, pad: gap * 0.5 });
 			return polygon.length >= 3 ? [{ z, polygon }] : [];
 		});
 	});
+	const corridors = $derived(
+		shown && !shown.attachmentGap ? zoneCorridors(zones, shown, outlined) : []
+	);
+	/** Screen width of a zone's corridor on geographic positions. */
+	const CORRIDOR_PX = 9;
+	/** The zone under the pointer: its corridor darkens, so it reads as one network. */
+	let hoveredZone = $state(-1);
 	const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {
 		missing: [
 			[70, 110, 150, 16],
@@ -392,12 +399,17 @@
 	/** Zone tags at each outline's top-left: feeding transformer, size, and when solved the
 	 * lowest voltage and highest loading. Drawn once the outline is wide enough on screen. */
 	const zoneTags = $derived(
-		zoneShapes.map(({ z, polygon }) => {
+		[
+			...zoneShapes.map(({ z, polygon }) => {
+				const xs = polygon.map((p) => p[0]);
+				const ys = polygon.map((p) => p[1]);
+				return { z, bounds: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] };
+			}),
+			...corridors
+		].map(({ z, bounds: [x0, y0, x1] }) => {
 			const zone = zones.zones[z];
 			const t = zone.transformers[0];
 			const { minVolts, maxLoading } = zoneSummary(zone, snapshot);
-			const xs = polygon.map((p) => p[0]);
-			const ys = polygon.map((p) => p[1]);
 			const v = (x: number) => (x >= 1000 ? `${(x / 1000).toFixed(2)} kV` : `${x.toFixed(1)} V`);
 			const text = [
 				t === undefined ? 'network' : (transformerNames.get(t) ?? graph.edges[t].id),
@@ -408,8 +420,8 @@
 			return {
 				z,
 				text,
-				position: [Math.min(...xs), Math.min(...ys)] as [number, number],
-				width: Math.max(...xs) - Math.min(...xs)
+				position: [x0, y0] as [number, number],
+				width: x1 - x0
 			};
 		})
 	);
@@ -917,11 +929,11 @@
 				if (hoveredEdges.has(d.segmentEdge[s]) && !hiddenUnderFan(d, s)) hoveredSegments.push(s);
 		return [
 			// Zone outlines sit beneath everything; they pick only where nothing else is.
+			...corridorLayers(common),
 			new modules.layers.PolygonLayer({
 				...common,
 				id: 'zones',
-				// On geographic positions, outlines (convex hulls) overlap; close in they only cloud the map.
-				data: layout === 'source' && symbolsOn ? [] : zoneShapes,
+				data: zoneShapes,
 				getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
 				getFillColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][0],
 				getLineColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][1],
@@ -1337,6 +1349,57 @@
 				: [])
 		];
 	}
+	/** Zone corridors on geographic positions while zoomed out: a band of fixed screen width along
+	 * each LV network's branches, with discs at its buses to round the joints. A translucent band
+	 * would darken wherever its pieces overlap, so the bands test depth strictly, all at one depth
+	 * (no per-layer polygon offset): each pixel is tinted once, by the first zone drawn there (the
+	 * hovered one, drawn first). */
+	function corridorLayers(common: object): Layer[] {
+		if (!modules || !shown || !corridors.length || symbolsOn) return [];
+		const { LineLayer, ScatterplotLayer } = modules.layers;
+		const g = shown;
+		const once = { depthWriteEnabled: true, depthCompare: 'less' } as const;
+		const band = (z: number, hovered: boolean): RGBA => {
+			const [fill, line] = ZONE_COLOURS[zoneStates[z]];
+			return hovered ? line : ([...fill.slice(0, 3), Math.min(255, fill[3] * 3)] as RGBA);
+		};
+		const pass = (hovered: boolean) => {
+			const list = corridors.filter((c) => (c.z === hoveredZone) === hovered);
+			const segments = list.flatMap((c) => c.segments.map((s) => ({ z: c.z, s })));
+			const buses = list.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
+			const suffix = hovered ? '-hovered' : '';
+			return [
+				new LineLayer({
+					...common,
+					id: `zones${suffix}`,
+					data: segments,
+					getSourcePosition: (d: { s: number }) => [g.sources[d.s * 3], g.sources[d.s * 3 + 1], 0],
+					getTargetPosition: (d: { s: number }) => [g.targets[d.s * 3], g.targets[d.s * 3 + 1], 0],
+					getColor: (d: { z: number }) => band(d.z, hovered),
+					getWidth: CORRIDOR_PX,
+					widthUnits: 'pixels',
+					parameters: once,
+					getPolygonOffset: null,
+					pickable: true,
+					updateTriggers: { getColor: zoneStates }
+				}),
+				new ScatterplotLayer({
+					...common,
+					id: `zones${suffix}-buses`,
+					data: buses,
+					getPosition: (d: { i: number }) => [g.positions[d.i * 3], g.positions[d.i * 3 + 1], 0],
+					getFillColor: (d: { z: number }) => band(d.z, hovered),
+					getRadius: CORRIDOR_PX / 2,
+					radiusUnits: 'pixels',
+					parameters: once,
+					getPolygonOffset: null,
+					pickable: true,
+					updateTriggers: { getFillColor: zoneStates }
+				})
+			];
+		};
+		return [...pass(true), ...pass(false)];
+	}
 	/** Spokes from each spread stack's true point to its buses; a ring and ×n badge on the others. */
 	function stackLayers(common: object): Layer[] {
 		if (!modules || !stacks || !shown) return [];
@@ -1593,6 +1656,9 @@
 					},
 					onHover: (info: PickingInfo) => {
 						const id = info.layer?.id ?? '';
+						const hz =
+							info.index >= 0 && id.startsWith('zones') ? (info.object as { z: number }).z : -1;
+						if (hz !== hoveredZone) hoveredZone = hz;
 						let next: { kind: 'bus' | 'branch'; id: string } | null = null;
 						if (info.index >= 0 && id.startsWith('buses-'))
 							next = { kind: 'bus', id: graph.buses[info.object as number].id };
@@ -1661,7 +1727,7 @@
 							bringIntoView([l.x, l.y]);
 							return;
 						}
-						if (info.layer.id === 'zones') {
+						if (info.layer.id.startsWith('zones')) {
 							fitZone(zones.zones[(info.object as { z: number }).z]);
 							return;
 						}
@@ -1688,7 +1754,7 @@
 									? `${(info.object as { n: number }).n} branches share this route. Hover to separate them; click to keep them open.`
 									: info.index >= 0 && info.layer?.id === 'landmark-halos'
 										? landmarkTip(info.object as Landmark)
-										: info.index >= 0 && info.layer?.id === 'zones'
+										: info.index >= 0 && info.layer?.id.startsWith('zones')
 											? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
 											: info.index >= 0 && info.layer?.id.startsWith('buses-')
 												? busTip(info.object as number)
@@ -1741,6 +1807,8 @@
 			zoomedOut,
 			zoneTags,
 			tagZoom,
+			corridors,
+			hoveredZone,
 			marks,
 			fannedGroups,
 			fannedEdges,

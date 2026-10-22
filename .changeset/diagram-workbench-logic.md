@@ -29,8 +29,8 @@ Lines show their conductors at close zoom; buses are named with short ids; parts
 energised from any source are drawn faint; and outside selections fly into view.
 The schematic can be walked bus by bus from the keyboard, with a spoken description.
 Solved P/Q and power-flow arrows show at close zoom, hover is linked across the
-schematic and tables, and each LV network (galvanic zone) is outlined and
-tinted by its worst state, with a summary tag. MV lines draw heavier than LV, and LV
+schematic and tables, and each LV network (galvanic zone) is outlined (on geographic
+positions, as a corridor along its lines) and tinted by its worst state, with a summary tag. MV lines draw heavier than LV, and LV
 detail fades when zoomed out. Sources, generators, large IBRs and transformers stay
 visible as fixed-size landmarks, placed by priority. Geographic positions draw over the main
 map's basemap, which fades in and out with the layout switch. The diagram opens on the case's own
