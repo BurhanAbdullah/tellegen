@@ -99,7 +99,22 @@ export interface SolveIteration {
 }
 
 export type NewtonIterations = { count: number; residual: number };
-export type Iterations = SolveIteration[] | NewtonIterations;
+export interface NlpIterations {
+\tnlp_iterations: number;
+\tprimal_residual: number;
+\tsolver_status: string;
+\tsolver_constraint_violation: number;
+\tsolver_kkt_error: number;
+\tmodel_fingerprint: string;
+\t/** Base verdict and work across all attempts (older assets omit these). */
+\tbase_solver_status?: string;
+\ttotal_nlp_iterations?: number;
+\t/** Restoration entries in the selected solve. */
+\trestoration_calls?: number;
+\trecovery_attempts?: string[];
+\trecovered_by?: string;
+}
+export type Iterations = SolveIteration[] | NewtonIterations | NlpIterations;
 
 export interface BusScalar {
 \tbus: number;

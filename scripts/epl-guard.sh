@@ -31,6 +31,8 @@ check_has_pounce() {
 	fi
 }
 
+"${PYTHON:-python3}" "$(dirname "$0")/acopf-release.py"
+
 check_no_pounce tellegen-default -p tellegen
 check_no_pounce tellegen-wasm -p tellegen-wasm --target wasm32-unknown-unknown
 check_no_pounce tellegen-server -p tellegen-server

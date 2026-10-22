@@ -325,6 +325,19 @@ pub enum Iterations {
         solver_constraint_violation: f64,
         solver_kkt_error: f64,
         model_fingerprint: String,
+        /// Status before recovery; absent in older responses.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_solver_status: Option<String>,
+        /// Base plus every retry, including rejected attempts.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_nlp_iterations: Option<usize>,
+        /// Restoration entries in the selected solve (not the whole ladder).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restoration_calls: Option<usize>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        recovery_attempts: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        recovered_by: Option<String>,
     },
 }
 
@@ -748,6 +761,11 @@ fn ac_opf_assemble(
             solver_constraint_violation: solved.solver_constraint_violation,
             solver_kkt_error: solved.solver_kkt_error,
             model_fingerprint: solved.fingerprint.clone(),
+            base_solver_status: Some(solved.recovery.base_status.clone()),
+            total_nlp_iterations: Some(solved.recovery.total_iterations),
+            restoration_calls: Some(solved.recovery.restoration_calls),
+            recovery_attempts: solved.recovery.attempts.clone(),
+            recovered_by: solved.recovery.promoted_by.clone(),
         }),
         lmp: None,
         lmp_q: None,

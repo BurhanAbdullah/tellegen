@@ -1,5 +1,5 @@
 // Generated from Rust by study_contract and generate-study-contracts.mjs.
-// Source SHA256: e6aab1a83bc096ec5b80cae83be7a229ad267c564bd1e445bdb5a524aca35ca8
+// Source SHA256: 0e875733932aa0f32c93a52ed3317d0da98997d22cff0cfef6d865ff9af5377f
 
 export type ArtifactKind = "powerio_ir" | "geo_layer" | "evidence";
 
@@ -69,7 +69,7 @@ export type GoalRevision = { "anchor_state": string; "decisions": DecisionSpace;
 
 export type Intervention = "branch_rating" | "active_demand";
 
-export type Iterations = (Array<SolveIteration>) | ({ "count": number; "residual": number; }) | ({ "model_fingerprint": string; "nlp_iterations": number; "primal_residual": number; "solver_constraint_violation": number; "solver_kkt_error": number; "solver_status": string; });
+export type Iterations = (Array<SolveIteration>) | ({ "count": number; "residual": number; }) | ({ "base_solver_status"?: string | null; "model_fingerprint": string; "nlp_iterations": number; "primal_residual": number; "recovered_by"?: string | null; "recovery_attempts"?: Array<string>; "restoration_calls"?: number | null; "solver_constraint_violation": number; "solver_kkt_error": number; "solver_status": string; "total_nlp_iterations"?: number | null; });
 
 export type ModelDetails = { "approximations": Array<CostApproximation>; "method": CostPreparation; "model": string; "quantity": string; "source": string; "units": string; };
 

@@ -1106,6 +1106,13 @@
         {
           "description": "Nonlinear-program diagnostics. The primal residual is Tellegen's\nindependent source-model check; the other residuals are POUNCE reports.",
           "properties": {
+            "base_solver_status": {
+              "description": "Status before recovery; absent in older responses.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "model_fingerprint": {
               "type": "string"
             },
@@ -1118,6 +1125,27 @@
               "format": "double",
               "type": "number"
             },
+            "recovered_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "recovery_attempts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "restoration_calls": {
+              "description": "Restoration entries in the selected solve (not the whole ladder).",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "solver_constraint_violation": {
               "format": "double",
               "type": "number"
@@ -1128,6 +1156,15 @@
             },
             "solver_status": {
               "type": "string"
+            },
+            "total_nlp_iterations": {
+              "description": "Base plus every retry, including rejected attempts.",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           },
           "required": [
@@ -2512,5 +2549,5 @@
   ],
   "title": "StudyContract",
   "type": "object",
-  "x-rust-source-sha256": "e6aab1a83bc096ec5b80cae83be7a229ad267c564bd1e445bdb5a524aca35ca8"
+  "x-rust-source-sha256": "0e875733932aa0f32c93a52ed3317d0da98997d22cff0cfef6d865ff9af5377f"
 }
