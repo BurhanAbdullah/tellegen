@@ -187,8 +187,32 @@ describe('schematic equipment symbols', () => {
 		]);
 	});
 
+	it('draws perfectly grounded terminals as one solid earth in a slot of its own', () => {
+		const b = { ...bus('G', [['1', 'load', 'ld']], true), grounded: ['n'], neutral_terminal: 'n' };
+		const g: DistGraph = { buses: [b], edges: [] };
+		const eq = schematicEquipment(
+			g,
+			fromEngineLayout({
+				...layout,
+				positions: [0, 0],
+				segments: [],
+				segment_edge: [],
+				role: [],
+				parent: [0],
+				parent_edge: [-1],
+				depth: [0],
+				roots: [0],
+				attachment_slots: [2]
+			})
+		);
+		expect(eq.items.map((d) => [d.kind, d.ids, d.y])).toEqual([
+			['load', ['ld'], 22],
+			['ground', ['n'], 44]
+		]);
+	});
+
 	it('gives every attachment kind a distinct glyph connected at its origin', () => {
-		const kinds = ['load', 'generator', 'source', 'ibr', 'shunt', 'earth'] as const;
+		const kinds = ['load', 'generator', 'source', 'ibr', 'shunt', 'earth', 'ground'] as const;
 		const paths = kinds.map((k) => glyphPath(attachmentGlyph(k), 10));
 		expect(new Set(paths).size).toBe(kinds.length);
 		for (const k of kinds) expect(attachmentGlyph(k)[0][0]).toEqual([0, 0]);

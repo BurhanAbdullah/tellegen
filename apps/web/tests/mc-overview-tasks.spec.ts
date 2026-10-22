@@ -392,3 +392,30 @@ test('a second case opens its own diagram while the first one is showing', async
 	await page.getByRole('button', { name: 'Show diagram' }).click();
 	await expect(diagram).toBeVisible();
 });
+
+test('perfectly grounded terminals show as a solid earth', async ({ page }) => {
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type=file]').setInputFiles({
+		name: 'pf_1ph_line.bmopf.json',
+		mimeType: 'application/json',
+		buffer: await readFile(
+			new URL(
+				'../../../crates/tellegen/tests/data/mc_pf/oracle_inputs/pf_1ph_line.json',
+				import.meta.url
+			)
+		)
+	});
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	await page
+		.getByRole('toolbar', { name: 'Schematic' })
+		.getByRole('button', { name: 'Schematic', exact: true })
+		.click();
+	await expect(
+		page
+			.getByRole('list', { name: 'Symbols' })
+			.getByRole('listitem', { name: undefined })
+			.filter({ hasText: 'solid earth' })
+	).toHaveCount(1);
+});

@@ -78,7 +78,8 @@ pub struct SchematicLayout {
     /// Echo of [`SchematicOptions::attachment_gap`]; attachment symbol `i` of a bus sits
     /// `(i + 1) * attachment_gap` below it.
     pub attachment_gap: f64,
-    /// Distinct attachment kinds per bus, the number of reserved symbol slots.
+    /// Reserved symbol slots per bus: one per distinct attachment kind, plus one when the bus has
+    /// perfectly grounded terminals.
     pub attachment_slots: Vec<u8>,
 }
 
@@ -309,7 +310,8 @@ pub fn schematic_layout(graph: &DistGraph, options: &SchematicOptions) -> Schema
                 .collect();
             kinds.sort_by_key(|k| format!("{k:?}"));
             kinds.dedup();
-            kinds.len() as u8
+            // Perfectly grounded terminals draw one solid-earth symbol in a slot of its own.
+            kinds.len() as u8 + u8::from(!bus.grounded.is_empty())
         })
         .collect();
     let extent: Vec<f64> = attachment_slots
@@ -559,6 +561,23 @@ mod tests {
             schematic_layout(&g, &flat).positions,
             schematic_layout(&feeder(), &flat).positions
         );
+    }
+
+    #[test]
+    fn perfectly_grounded_terminals_reserve_a_slot_of_their_own() {
+        let mut g = attach(feeder(), &[("L2", "load", "ld1")]);
+        let l2 = g.buses.iter_mut().find(|b| b.id == "L2").expect("bus");
+        l2.grounded = vec!["n".into()];
+        let options = SchematicOptions {
+            strategy: SchematicStrategy::LeafOrder,
+            dx: 100.0,
+            dy: 20.0,
+            attachment_gap: 10.0,
+        };
+        let layout = schematic_layout(&g, &options);
+        assert_eq!(layout.attachment_slots, vec![0, 0, 0, 2, 0, 0]);
+        let bare = schematic_layout(&feeder(), &options);
+        assert_eq!(layout.positions[9] - bare.positions[9], 20.0);
     }
 
     #[test]

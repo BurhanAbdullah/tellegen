@@ -68,7 +68,8 @@ export function branchGlyph(kind: string, closed: boolean): Glyph | null {
  * admittance block: BMOPF shunts can be conductive, so no capacitor is asserted. A shunt on a bus's
  * neutral and nothing else is a neutral earth through an impedance (an MEN electrode, say): drawn
  * as an impedance box in series with the IEC 60617 earth (three shrinking bars), not as a solid
- * earth, since a shunt always has finite admittance. */
+ * earth, since a shunt always has finite admittance. A perfectly grounded terminal is a solid earth:
+ * the earth symbol alone. */
 export function attachmentGlyph(kind: SymbolKind): Glyph {
 	const lead: [number, number][] = [
 		[0, 0],
@@ -111,6 +112,26 @@ export function attachmentGlyph(kind: SymbolKind): Glyph {
 					[1.1, -0.5]
 				],
 				sine(1.75, 0.5, 0.3, 0.18, 8)
+			];
+		case 'ground':
+			return [
+				[
+					[0, 0],
+					[0.8, 0],
+					[0.8, 0.3]
+				],
+				[
+					[0.4, 0.3],
+					[1.2, 0.3]
+				],
+				[
+					[0.55, 0.55],
+					[1.05, 0.55]
+				],
+				[
+					[0.7, 0.8],
+					[0.9, 0.8]
+				]
 			];
 		case 'earth':
 			return [
@@ -192,8 +213,9 @@ export function conductorSet(graph: DistGraph, k: number): { phases: number; neu
 	return { phases: edge.conductors.length - (neutral ? 1 : 0), neutral };
 }
 
-/** Attachment symbols: the PowerIO kinds, plus `earth` for a shunt on a bus's neutral alone. */
-export type SymbolKind = DistAttachmentKind | 'earth';
+/** Attachment symbols: the PowerIO kinds, plus `earth` for a shunt on a bus's neutral alone and
+ * `ground` for a bus's perfectly grounded terminals. */
+export type SymbolKind = DistAttachmentKind | 'earth' | 'ground';
 
 /** Drawing order of attachment kinds below a bus. A neutral earth shares the shunt slot (the
  * engine layout reserves one slot per PowerIO kind). */
@@ -203,7 +225,8 @@ export const ATTACHMENT_ORDER: SymbolKind[] = [
 	'ibr',
 	'load',
 	'shunt',
-	'earth'
+	'earth',
+	'ground'
 ];
 export const ATTACHMENT_NAMES: Record<SymbolKind, string> = {
 	source: 'source',
@@ -211,7 +234,8 @@ export const ATTACHMENT_NAMES: Record<SymbolKind, string> = {
 	ibr: 'inverter-based resource',
 	load: 'load',
 	shunt: 'shunt',
-	earth: 'neutral earth'
+	earth: 'neutral earth',
+	ground: 'solid earth'
 };
 
 /** Shunts of `bus` connected to its neutral terminal and to nothing else: neutral earths. */
@@ -450,6 +474,8 @@ export function schematicEquipment(
 				ids.add(a.id);
 				byKind.set(kind, ids);
 			}
+		// Perfectly grounded terminals: one solid earth, listing the terminals.
+		if (bus.grounded?.length) byKind.set('ground', new Set(bus.grounded));
 		if (!byKind.size) return;
 		const [bx, by] = [geometry.positions[i * 3], geometry.positions[i * 3 + 1]];
 		const present = ATTACHMENT_ORDER.filter((kind) => byKind.has(kind));

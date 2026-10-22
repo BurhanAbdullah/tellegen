@@ -634,7 +634,7 @@
 						['transformer', branchGlyph('transformer', true), 'transformer'],
 						['switch', branchGlyph('switch', true), 'switch, closed'],
 						['switch', branchGlyph('switch', false), 'switch, open'],
-						...(['source', 'generator', 'ibr', 'load', 'shunt', 'earth'] as const).map(
+						...(['source', 'generator', 'ibr', 'load', 'shunt', 'earth', 'ground'] as const).map(
 							(k) => [k, attachmentGlyph(k), ATTACHMENT_NAMES[k]] as const
 						)
 					] as [EquipmentItem['kind'], Glyph | null, string][]
@@ -677,6 +677,8 @@
 	const itemLabel = (d: EquipmentItem) => {
 		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;
 		const ids = d.ids.slice(0, 4).join(', ') + (d.ids.length > 4 ? ` +${d.ids.length - 4}` : '');
+		if (d.kind === 'ground')
+			return `solid earth: terminal${d.ids.length > 1 ? 's' : ''} ${d.ids.join(', ')} of ${graph.buses[d.bus].id} perfectly grounded`;
 		return d.bus >= 0
 			? `${d.ids.length > 1 ? `${d.ids.length} ${name}s` : name} ${ids} at ${graph.buses[d.bus].id}`
 			: `${name} ${ids}${graph.edges[d.edge].closed ? '' : ' (open)'}`;

@@ -84,6 +84,7 @@ export function describeBus(
 			const kind = a.kind === 'shunt' && earths.has(a.id) ? 'earth' : a.kind;
 			counts.set(kind, (counts.get(kind) ?? new Set()).add(a.id));
 		}
+	if (bus.grounded?.length) counts.set('ground', new Set(bus.grounded));
 	const attached = ATTACHMENT_ORDER.filter((k) => counts.has(k)).map((k) => {
 		const c = counts.get(k)!.size;
 		return `${c} ${ATTACHMENT_NAMES[k]}${c === 1 ? '' : 's'}`;
