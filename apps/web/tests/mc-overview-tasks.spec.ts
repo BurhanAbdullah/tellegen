@@ -367,3 +367,28 @@ test('the diagram opens before a solve, without results', async ({ page }) => {
 	await page.getByRole('button', { name: 'Show map' }).click();
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toHaveCount(0);
 });
+
+test('a second case opens its own diagram while the first one is showing', async ({ page }) => {
+	// Regression: the first diagram's teardown wrote app state, leaving the map's choice of
+	// diagram stale, so the second case's Show diagram did nothing.
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	const load = async (name: string) =>
+		page
+			.locator('input[type=file]')
+			.first()
+			.setInputFiles({
+				name,
+				mimeType: 'application/json',
+				buffer: await readFile(fixture)
+			});
+	await load('first.bmopf.json');
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	const diagram = page.getByRole('application', { name: 'Schematic diagram' });
+	await expect(diagram).toBeVisible();
+	await load('second.bmopf.json');
+	await expect(diagram).toHaveCount(0);
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	await expect(diagram).toBeVisible();
+});

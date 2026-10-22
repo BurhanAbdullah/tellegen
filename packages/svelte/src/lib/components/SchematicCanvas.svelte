@@ -745,15 +745,16 @@
 		return false;
 	}
 
-	/** Leaving from geographic positions (Close, or *Show map* in the overview), hand the view back
-	 * so the map continues from it. */
-	function handOffCamera() {
+	// Record the geographic view on the case, so the map can continue from it when this diagram is
+	// closed (TellegenMap applies it). A plain field, written here rather than on teardown: writing
+	// app state while a component is torn down left the map's deriveds stale.
+	$effect(() => {
 		const origin = source?.mercatorOrigin;
-		if (layout !== 'source' || !origin || !shown) return;
-		const view = basemapCamera(camera, origin);
-		app.camera = { center: view.center, zoom: view.zoom, bearing: 0, pitch: 0 };
-		app.cameraHandoff = true;
-	}
+		const view = layout === 'source' && origin && shown ? basemapCamera(camera, origin) : null;
+		untrack(() => {
+			mc.lastGeoView = view ? { center: view.center, zoom: view.zoom, bearing: 0, pitch: 0 } : null;
+		});
+	});
 
 	/** Screen insets of the area no panel or toolbar covers. */
 	function freeArea() {
@@ -1518,7 +1519,6 @@
 	});
 	$effect(() => () => {
 		if (morph) cancelAnimationFrame(morph.raf);
-		handOffCamera();
 		deck?.finalize();
 	});
 

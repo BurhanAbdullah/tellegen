@@ -1,6 +1,6 @@
 <script lang="ts">
 	import 'maplibre-gl/dist/maplibre-gl.css';
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import type { Layer, PickingInfo } from '@deck.gl/core';
 	import type { IconLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 	import type { MapLibreOverlay } from '@deck.gl/maplibre';
@@ -82,6 +82,20 @@
 	const schematicCase = $derived(
 		!app.studyView && app.activeMulti?.schematic && app.activeMulti.graph ? app.activeMulti : null
 	);
+	// When a case closes its own diagram (Close, Show map), the map continues from the diagram's
+	// geographic view. Switching to another case does not: the map frames the new case instead.
+	let shownSchematic: typeof schematicCase = null;
+	$effect(() => {
+		const now = schematicCase;
+		const before = shownSchematic;
+		shownSchematic = now;
+		untrack(() => {
+			if (before && !now && app.activeMulti === before && !before.schematic && before.lastGeoView) {
+				app.camera = before.lastGeoView;
+				app.cameraHandoff = true;
+			}
+		});
+	});
 	const diagramCaseId = $derived(
 		app.studyView?.caseId ?? diagramMulti?.id ?? diagramCase?.id ?? 'diagram'
 	);

@@ -284,6 +284,9 @@ export class MulticonductorCase {
 	overviewLoading = $state(false);
 	/** Show this case as a schematic instead of the map. */
 	schematic = $state(false);
+	/** The diagram's last geographic view as a map camera, for the map to continue from when the
+	 * diagram closes. Plain, not reactive: it is read once, on close. */
+	lastGeoView: CameraSnapshot | null = null;
 
 	constructor(init: {
 		id: string;
