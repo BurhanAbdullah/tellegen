@@ -83,8 +83,12 @@ export function landmarkCandidates(
 		if (edge.kind !== 'transformer') return;
 		let x = symbols?.anchors[k * 2] ?? NaN;
 		let y = symbols?.anchors[k * 2 + 1] ?? NaN;
-		let cos = symbols?.flowDir[k * 2] || 1;
-		let sin = symbols?.flowDir[k * 2 + 1] || 0;
+		// A vertical branch has cos exactly 0, so test for a missing direction, not a falsy one.
+		const fx = symbols?.flowDir[k * 2] ?? 0;
+		const fy = symbols?.flowDir[k * 2 + 1] ?? 0;
+		const known = fx !== 0 || fy !== 0;
+		let cos = known ? fx : 1;
+		let sin = known ? fy : 0;
 		if (!Number.isFinite(x)) {
 			const a = index.get(edge.from.toLowerCase());
 			const b = index.get(edge.to.toLowerCase());

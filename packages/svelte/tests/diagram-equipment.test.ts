@@ -615,6 +615,34 @@ describe('landmarks', () => {
 		expect(placeLandmarks(c, () => [-10, -10], { width: 100, height: 100 })).toEqual([]);
 	});
 
+	it('draws a vertical transformer at the same size as any other', () => {
+		// S above M: the transformer runs exactly north-south, so its direction has x = 0.
+		const g2: DistGraph = {
+			buses: [bus('S', [['1', 'source', 'grid']], true), bus('M')],
+			edges: [edge('transformer', 't', 'S', 'M')]
+		};
+		const geo = sourceLayout(
+			g2,
+			[
+				{ id: 'S', lon: 0, lat: 0 },
+				{ id: 'M', lon: 0, lat: 400 }
+			],
+			false,
+			displayTree(g2)
+		);
+		const z = galvanicZones(g2, displayTree(g2));
+		const t = landmarkCandidates(
+			g2,
+			geo,
+			schematicEquipment(g2, geo),
+			z,
+			z.zones.map(() => 'normal' as const),
+			null
+		).find((l) => l.kind === 'transformer')!;
+		expect(Math.hypot(t.cos, t.sin)).toBeCloseTo(1, 9);
+		expect(Math.abs(t.sin)).toBeCloseTo(1, 9);
+	});
+
 	it('draws markers centred on their point, without the symbol lead', () => {
 		const xs = landmarkGlyph('source')
 			.flat()
