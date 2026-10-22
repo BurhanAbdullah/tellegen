@@ -203,12 +203,28 @@ export function conductorTicks(phases: number, neutral: boolean): Glyph {
 	return out;
 }
 
+/** Each graph's neutral terminal per bus id (lower case), built once: `conductorSet` runs per edge,
+ * and a scan of the buses each time made the equipment quadratic in the network size. */
+const neutralsByGraph = new WeakMap<DistGraph, Map<string, string | null>>();
+function neutralOf(graph: DistGraph, bus: string): string | null {
+	let index = neutralsByGraph.get(graph);
+	if (!index) {
+		index = new Map();
+		// The first bus of an id wins, as a search in graph order would find it.
+		for (const b of graph.buses) {
+			const id = b.id.toLowerCase();
+			if (!index.has(id)) index.set(id, b.neutral_terminal ?? null);
+		}
+		neutralsByGraph.set(graph, index);
+	}
+	return index.get(bus.toLowerCase()) ?? null;
+}
+
 /** Phase conductors and whether a neutral runs, from a branch's conductor pairs: a conductor whose
  * from terminal is the from bus's neutral is the neutral. */
 export function conductorSet(graph: DistGraph, k: number): { phases: number; neutral: boolean } {
 	const edge = graph.edges[k];
-	const from = graph.buses.find((b) => b.id.toLowerCase() === edge.from.toLowerCase());
-	const n = from?.neutral_terminal ?? null;
+	const n = neutralOf(graph, edge.from);
 	const neutral = n !== null && edge.conductors.some(([a]) => a === n);
 	return { phases: edge.conductors.length - (neutral ? 1 : 0), neutral };
 }
