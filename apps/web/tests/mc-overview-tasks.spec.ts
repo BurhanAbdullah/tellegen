@@ -419,3 +419,31 @@ test('perfectly grounded terminals show as a solid earth', async ({ page }) => {
 			.filter({ hasText: 'solid earth' })
 	).toHaveCount(1);
 });
+
+test('buses at the same point spread apart for the keyboard cursor', async ({ page }) => {
+	// Geographic data often puts an MV and an LV bus at one pole; drawn on top of each other, one
+	// hides the other. The cursor on either opens the stack: its buses spread and a card lists them.
+	const at = { latitude: -34.9285, longitude: 138.6007 };
+	const data = JSON.parse(await readFile(fixture, 'utf8'));
+	for (const bus of Object.values(data.bus) as object[]) Object.assign(bus, at);
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type=file]').setInputFiles({
+		name: 'stacked.bmopf.json',
+		mimeType: 'application/json',
+		buffer: Buffer.from(JSON.stringify(data))
+	});
+	await page.getByRole('button', { name: 'Show diagram' }).click();
+	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
+	await expect(schematic).toBeVisible();
+	await schematic.focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(schematic.locator('[aria-live]')).toContainText('One of 2 buses at this point');
+	const card = page.getByRole('list', { name: 'Buses at this point' });
+	await expect(card.getByRole('listitem')).toHaveCount(2);
+	await expect(card).toContainText('src');
+	await expect(card).toContainText('lb');
+	await page.keyboard.press('Escape');
+	await expect(card).toHaveCount(0);
+});

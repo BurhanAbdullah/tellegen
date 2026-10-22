@@ -10,6 +10,9 @@ import {
 	sourceLayout,
 	fanRoute,
 	routeMiddle,
+	busStacks,
+	spreadOffsets,
+	displaceBuses,
 	displayTree,
 	conductorSet,
 	conductorTicks,
@@ -188,7 +191,11 @@ describe('schematic equipment symbols', () => {
 	});
 
 	it('draws perfectly grounded terminals as one solid earth in a slot of its own', () => {
-		const b = { ...bus('G', [['1', 'load', 'ld']], true), grounded: ['n'], neutral_terminal: 'n' };
+		const b = {
+			...bus('G', [['1', 'load', 'ld']], true),
+			grounded: ['n'],
+			neutral_terminal: 'n'
+		};
 		const g: DistGraph = { buses: [b], edges: [] };
 		const eq = schematicEquipment(
 			g,
@@ -502,7 +509,10 @@ describe('galvanic zones', () => {
 			kind: 'solved' as const,
 			label: '',
 			iterations: 1,
-			buses: g.buses.map((_, i) => ({ pairs: [pair(i === 5 ? volts : 230)], unbalance: null })),
+			buses: g.buses.map((_, i) => ({
+				pairs: [pair(i === 5 ? volts : 230)],
+				unbalance: null
+			})),
 			branches: g.edges.map((_, k) => ({
 				ends: [null, null] as [null, null],
 				loading: k === 3 ? tLoading : 10,
@@ -543,8 +553,18 @@ describe('galvanic zones', () => {
 			iterations: 1,
 			buses: g.buses.map((_, i) => ({
 				pairs: [
-					{ pair: ['a', 'b'] as [string, string], volts: 400, min: null, max: null },
-					{ pair: ['a', 'n'] as [string, string], volts: 230 - i, min: null, max: null }
+					{
+						pair: ['a', 'b'] as [string, string],
+						volts: 400,
+						min: null,
+						max: null
+					},
+					{
+						pair: ['a', 'n'] as [string, string],
+						volts: 230 - i,
+						min: null,
+						max: null
+					}
 				],
 				unbalance: null
 			})),
@@ -555,8 +575,14 @@ describe('galvanic zones', () => {
 			}))
 		};
 		// Zone a: buses 4–6 (a3 lowest at 224 V); branches a12, a23 and transformer t2.
-		expect(zoneSummary(found.zones[2], snap)).toEqual({ minVolts: 224, maxLoading: 50 });
-		expect(zoneSummary(found.zones[2], null)).toEqual({ minVolts: null, maxLoading: null });
+		expect(zoneSummary(found.zones[2], snap)).toEqual({
+			minVolts: 224,
+			maxLoading: 50
+		});
+		expect(zoneSummary(found.zones[2], null)).toEqual({
+			minVolts: null,
+			maxLoading: null
+		});
 	});
 
 	it('outlines a zone as a staircase over its drawing columns', () => {
@@ -744,5 +770,63 @@ describe('basemap camera', () => {
 		expect(view.center[0]).toBeCloseTo(0, 9);
 		expect(view.center[1]).toBeCloseTo(0, 9);
 		expect(view.zoom).toBeCloseTo(0, 9);
+	});
+});
+
+describe('stacked buses', () => {
+	// An MV bus and an LV bus at one pole, joined by a transformer; a line runs on from the LV bus.
+	const g: DistGraph = {
+		buses: [bus('S', [], true), bus('MV'), bus('LV')],
+		edges: [
+			edge('line', 'f', 'S', 'MV'),
+			edge('transformer', 't', 'MV', 'LV'),
+			edge('line', 'l', 'LV', 'S')
+		]
+	};
+	const geo = sourceLayout(
+		g,
+		[
+			{ id: 'S', lon: 0, lat: 0 },
+			{ id: 'MV', lon: 300, lat: 0 },
+			{ id: 'LV', lon: 300, lat: 0 }
+		],
+		false,
+		displayTree(g)
+	);
+
+	it('finds buses at exactly the same point', () => {
+		const st = busStacks(geo);
+		expect(st.groups).toEqual([[1, 2]]);
+		expect(Array.from(st.stackOf)).toEqual([-1, 0, 0]);
+	});
+
+	it('spreads a stack by a fixed screen distance and takes branch ends along', () => {
+		const offsets = spreadOffsets(2, 2);
+		// 12 px at 2 px per unit is 6 units either side.
+		expect(offsets).toEqual([
+			[-6, 0],
+			[6, 0]
+		]);
+		expect(spreadOffsets(3, 1).map(([x, y]) => Math.round(Math.hypot(x, y)))).toEqual([12, 12, 12]);
+		const moved = displaceBuses(
+			g,
+			geo,
+			new Map([
+				[1, offsets[0]],
+				[2, offsets[1]]
+			])
+		);
+		const at = (i: number) => [moved.positions[i * 3], moved.positions[i * 3 + 1]];
+		expect(at(1)[0] - geo.positions[3]).toBeCloseTo(-6);
+		expect(at(2)[0] - geo.positions[6]).toBeCloseTo(6);
+		// The transformer now runs from the spread MV bus to the spread LV bus.
+		const t = Array.from(moved.segmentEdge).indexOf(1);
+		expect([moved.sources[t * 3], moved.targets[t * 3]]).toEqual([at(1)[0], at(2)[0]]);
+		// The feeder line ends at MV, the LV line starts at LV.
+		const f = Array.from(moved.segmentEdge).indexOf(0);
+		const l = Array.from(moved.segmentEdge).indexOf(2);
+		expect(moved.targets[f * 3]).toBe(at(1)[0]);
+		expect(moved.sources[l * 3]).toBe(at(2)[0]);
+		expect(displaceBuses(g, geo, new Map())).toBe(geo);
 	});
 });

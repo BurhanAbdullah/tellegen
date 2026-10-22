@@ -18,6 +18,9 @@
 		bandColour,
 		branchLabel,
 		busLabel,
+		busStacks,
+		displaceBuses,
+		spreadOffsets,
 		chordsInto,
 		displayTree,
 		ease,
@@ -167,7 +170,71 @@
 			? sourceLayout(graph, mc.view.buses, mc.coordsKind === 'geographic', tree, mc.view.edges)
 			: null
 	);
-	const geometry = $derived<SchematicGeometry>(shown ?? EMPTY_GEOMETRY);
+	const SEPARATE_STORAGE = 'tellegen.schematic.separate';
+	let separateAll = $state(
+		(() => {
+			try {
+				return localStorage.getItem(SEPARATE_STORAGE) === 'on';
+			} catch {
+				return false;
+			}
+		})()
+	);
+	function rememberSeparate(on: boolean) {
+		separateAll = on;
+		try {
+			localStorage.setItem(SEPARATE_STORAGE, on ? 'on' : 'off');
+		} catch {
+			// Storage can be unavailable; the toggle still works for this view.
+		}
+	}
+	// Stacked buses: several buses at exactly the same point (MV and LV at one pole). At rest a ring
+	// and a ×n badge mark the stack; hovering it, or the keyboard cursor on one of its buses,
+	// spreads the buses on a small circle of fixed screen size, with a card listing them; clicking
+	// pins it. "Separate overlapping buses and lines" keeps every stack spread.
+	const stacks = $derived(shown && layout === 'source' ? busStacks(shown) : null);
+	let hoverStack = $state<number | null>(null);
+	let pinnedStack = $state<number | null>(null);
+	let cursorStack = $state<number | null>(null);
+	let stackCardHovered = false;
+	let stackTimer: ReturnType<typeof setTimeout> | null = null;
+	function openStack(g: number) {
+		if (stackTimer) clearTimeout(stackTimer);
+		stackTimer = null;
+		if (hoverStack !== g) hoverStack = g;
+	}
+	function leaveStack() {
+		if (hoverStack === null || stackTimer || stackCardHovered) return;
+		stackTimer = setTimeout(() => {
+			stackTimer = null;
+			if (!stackCardHovered) hoverStack = null;
+		}, 350);
+	}
+	/** The stack whose card shows: pinned, else hovered, else the keyboard cursor's. */
+	const activeStack = $derived(pinnedStack ?? hoverStack ?? cursorStack);
+	const spreadStacks = $derived(
+		!stacks
+			? []
+			: separateAll
+				? stacks.groups.map((_, g) => g)
+				: activeStack === null
+					? []
+					: [activeStack]
+	);
+	/** Pixels per drawing unit in quarter zoom steps, so spread stacks keep a fixed screen size. */
+	const stackScale = $derived(2 ** (Math.floor(camera.zoom * 4) / 4));
+	const geometry = $derived.by<SchematicGeometry>(() => {
+		if (!shown) return EMPTY_GEOMETRY;
+		if (!stacks || !spreadStacks.length) return shown;
+		const offsets = new Map<number, [number, number]>();
+		for (const g of spreadStacks) {
+			const members = stacks.groups[g];
+			spreadOffsets(members.length, stackScale, stackRadius(members.length)).forEach((o, m) =>
+				offsets.set(members[m], o)
+			);
+		}
+		return displaceBuses(graph, shown, offsets);
+	});
 	const basemapWanted = $derived(
 		basemapOn && layout === 'source' && mc.coordsKind === 'geographic' && !!source?.mercatorOrigin
 	);
@@ -233,7 +300,7 @@
 		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
 	);
 	/** Equipment symbols on the shown layout: branch symbols interrupt their line. */
-	const equipment = $derived(shown ? schematicEquipment(graph, shown) : null);
+	const equipment = $derived(shown ? schematicEquipment(graph, geometry) : null);
 	/** Symbols draw once they are legible (a glyph about 6 px across); below that the plain lines
 	 * and their kind colours carry the topology. */
 	const symbolsOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 3);
@@ -368,7 +435,7 @@
 		}
 	}
 	const landmarkPool = $derived(
-		shown ? landmarkCandidates(graph, shown, equipment, zones, zoneStates, powers) : []
+		shown ? landmarkCandidates(graph, geometry, equipment, zones, zoneStates, powers) : []
 	);
 	const markName = $derived.by(() => {
 		const ids = [...new Set(landmarkPool.flatMap((l) => (l.kind === 'transformer' ? [] : l.ids)))];
@@ -440,6 +507,8 @@
 		}
 		return parts.join(' ');
 	}
+	/** Screen radius of a spread stack of `n` buses: wider for more, so their symbols stay apart. */
+	const stackRadius = (n: number) => 8 + 4 * n;
 	const SYMBOL_INK: RGBA = [52, 56, 62, 255];
 	/** Not connected to any source through closed branches: drawn faint in every colour mode. */
 	const DEAD: RGBA = [196, 191, 182, 110];
@@ -496,31 +565,17 @@
 		if (to < 0) return;
 		tabEdge = -1;
 		cursor = to;
-		announcement = describeBus(graph, tree, walk, to, voltageNote(to));
+		const g = stacks?.stackOf[to] ?? -1;
+		cursorStack = g >= 0 ? g : null;
+		announcement =
+			describeBus(graph, tree, walk, to, voltageNote(to)) +
+			(g >= 0 ? `. One of ${stacks!.groups[g].length} buses at this point` : '');
 		bringIntoView([geometry.positions[to * 3], geometry.positions[to * 3 + 1]]);
 	}
 	// Shared routes: branches drawn along exactly the same segment (MV and LV on shared poles).
 	// At rest the route carries a count badge; hovering it fans its members apart by a few pixels,
 	// tapering into the shared ends, with a card listing them; clicking pins it open. The key can
 	// keep every shared route separated.
-	const SEPARATE_STORAGE = 'tellegen.schematic.separate';
-	let separateAll = $state(
-		(() => {
-			try {
-				return localStorage.getItem(SEPARATE_STORAGE) === 'on';
-			} catch {
-				return false;
-			}
-		})()
-	);
-	function rememberSeparate(on: boolean) {
-		separateAll = on;
-		try {
-			localStorage.setItem(SEPARATE_STORAGE, on ? 'on' : 'off');
-		} catch {
-			// Storage can be unavailable; the toggle still works for this view.
-		}
-	}
 	let hoverGroup = $state<number | null>(null);
 	let pinnedGroup = $state<number | null>(null);
 	let cardHovered = false;
@@ -939,6 +994,7 @@
 				widthUnits: 'pixels'
 			}),
 			...sharedRouteLayers(common, d),
+			...stackLayers(common),
 			...(symbols
 				? [
 						new LineLayer({
@@ -1042,7 +1098,7 @@
 				pickable: true,
 				updateTriggers: {
 					getFillColor: [colour, snapshot],
-					getPosition: layout,
+					getPosition: geometry,
 					getRadius: symbolsOn
 				}
 			}),
@@ -1281,6 +1337,128 @@
 				: [])
 		];
 	}
+	/** Spokes from each spread stack's true point to its buses; a ring and ×n badge on the others. */
+	function stackLayers(common: object): Layer[] {
+		if (!modules || !stacks || !shown) return [];
+		const { LineLayer, ScatterplotLayer, TextLayer } = modules.layers;
+		const base = shown;
+		const point = (g: number): [number, number] => {
+			const i = stacks.groups[g][0];
+			return [base.positions[i * 3], base.positions[i * 3 + 1]];
+		};
+		const spokes: { from: [number, number]; to: [number, number] }[] = [];
+		for (const g of spreadStacks)
+			for (const i of stacks.groups[g])
+				spokes.push({
+					from: point(g),
+					to: [geometry.positions[i * 3], geometry.positions[i * 3 + 1]]
+				});
+		// A spread stack keeps a faint ring around its circle, so the gaps between its buses still
+		// belong to it: the hover holds and a click there pins it.
+		const rings = stacks.groups.flatMap((members, g) =>
+			spreadStacks.includes(g)
+				? [{ g, n: members.length, position: point(g), spread: true }]
+				: symbolsOn
+					? [{ g, n: members.length, position: point(g), spread: false }]
+					: []
+		);
+		const closed = rings.filter((r) => !r.spread);
+		return [
+			...(spokes.length
+				? [
+						new LineLayer({
+							...common,
+							id: 'stack-spokes',
+							data: spokes,
+							getSourcePosition: (d: { from: [number, number] }) => [...d.from, 0],
+							getTargetPosition: (d: { to: [number, number] }) => [...d.to, 0],
+							getColor: [120, 114, 102, 140],
+							getWidth: 1,
+							widthUnits: 'pixels'
+						})
+					]
+				: []),
+			...(rings.length
+				? [
+						new ScatterplotLayer({
+							...common,
+							id: 'stack-rings',
+							data: rings,
+							getPosition: (d: { position: [number, number] }) => [...d.position, 0],
+							stroked: true,
+							filled: true,
+							getFillColor: [0, 0, 0, 1],
+							getLineColor: (d: { spread: boolean }) =>
+								d.spread ? ([...SYMBOL_INK.slice(0, 3), 70] as RGBA) : SYMBOL_INK,
+							getRadius: (d: { spread: boolean; n: number }) =>
+								d.spread ? stackRadius(d.n) + 6 : 6,
+							radiusUnits: 'pixels',
+							lineWidthUnits: 'pixels',
+							getLineWidth: 1,
+							pickable: true,
+							updateTriggers: { getLineColor: spreadStacks, getRadius: spreadStacks }
+						})
+					]
+				: []),
+			...(closed.length
+				? [
+						new TextLayer({
+							...common,
+							id: 'stack-badges',
+							data: closed,
+							getPosition: (d: { position: [number, number] }) => [...d.position, 0],
+							getText: (d: { n: number }) => `×${d.n}`,
+							getColor: SYMBOL_INK,
+							getSize: 10,
+							getTextAnchor: 'end',
+							getAlignmentBaseline: 'bottom',
+							getPixelOffset: [-6, -5],
+							background: true,
+							getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
+							backgroundPadding: [2, 1],
+							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
+							characterSet: 'auto'
+						})
+					]
+				: [])
+		];
+	}
+	/** The stack a pick belongs to: a stacked bus, a stack's ring, or the symbol of a branch
+	 * between two buses of one stack (a pole transformer, drawn on the stack's point). */
+	function pickedStack(info: PickingInfo): number | null {
+		if (!stacks || info.index < 0 || !info.layer) return null;
+		if (info.layer.id === 'stack-rings') return (info.object as { g: number }).g;
+		if (info.layer.id.startsWith('buses-')) {
+			const g = stacks.stackOf[info.object as number];
+			return g >= 0 ? g : null;
+		}
+		if (info.layer.id === 'equipment-hits') {
+			const item = info.object as EquipmentItem;
+			if (item.edge < 0) return null;
+			const e = graph.edges[item.edge];
+			const g = stacks.stackOf[busIndex.get(e.from) ?? -1] ?? -1;
+			const h = stacks.stackOf[busIndex.get(e.to) ?? -1] ?? -1;
+			return g >= 0 && g === h ? g : null;
+		}
+		return null;
+	}
+	function stackCardRows(g: number) {
+		return (stacks?.groups[g] ?? []).map((i) => {
+			const bus = graph.buses[i];
+			const kinds = new Set(
+				Object.values(bus.terminal_attachments ?? {}).flatMap((list) => list.map((a) => a.kind))
+			);
+			const note = voltageNote(i);
+			return {
+				i,
+				id: bus.id,
+				level: zoneMv[zones.busZone[i]] ? 'MV' : 'LV',
+				attached: [...kinds].join(', '),
+				voltage: note ? note.replace(/^Worst voltage /, '').replace(/, (within|outside).*/, '') : ''
+			};
+		});
+	}
+
 	/** The route a pick belongs to, if it is shared. */
 	function pickedGroup(info: PickingInfo): number | null {
 		if (!equipment || info.index < 0 || !info.layer) return null;
@@ -1433,13 +1611,28 @@
 						const g = symbolsOn ? pickedGroup(info) : null;
 						if (g !== null) openGroup(g);
 						else leaveGroup();
+						const sg = pickedStack(info);
+						if (sg !== null) openStack(sg);
+						else leaveStack();
 					},
 					onClick: (info: PickingInfo) => {
 						if (info.index < 0 || !info.layer) {
-							// A click on empty canvas closes a pinned shared route.
+							// A click on empty canvas closes a pinned shared route or stack.
 							pinnedGroup = null;
+							pinnedStack = null;
 							return;
 						}
+						if (info.layer.id === 'stack-rings') {
+							pinnedStack = (info.object as { g: number }).g;
+							return;
+						}
+						// A stacked bus is ambiguous while its stack is closed: open it instead of guessing.
+						const stack = pickedStack(info);
+						if (stack !== null && !spreadStacks.includes(stack)) {
+							pinnedStack = stack;
+							return;
+						}
+						if (stack !== null) pinnedStack = stack;
 						if (info.layer.id === 'route-badges') {
 							pinnedGroup = (info.object as { g: number }).g;
 							return;
@@ -1483,26 +1676,32 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						info.index >= 0 && info.layer?.id === 'fan-branches'
+						// A stack's ring opens its card, which says the rest; inside an open stack the
+						// card names the buses, and a tooltip would cover them.
+						info.index >= 0 &&
+						(info.layer?.id === 'stack-rings' ||
+							(activeStack !== null && pickedStack(info) === activeStack))
 							? null
-							: info.index >= 0 && info.layer?.id === 'route-badges'
-								? `${(info.object as { n: number }).n} branches share this route. Hover to separate them; click to keep them open.`
-								: info.index >= 0 && info.layer?.id === 'landmark-halos'
-									? landmarkTip(info.object as Landmark)
-									: info.index >= 0 && info.layer?.id === 'zones'
-										? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
-										: info.index >= 0 && info.layer?.id.startsWith('buses-')
-											? busTip(info.object as number)
-											: info.index >= 0 && info.layer?.id.startsWith('branches-')
-												? // A shared route's card names its branches; its hidden true route stays silent.
-													equipment &&
-													symbolsOn &&
-													equipment.routeOf[drawn.segmentEdge[info.index]] >= 0
-													? null
-													: branchTip(drawn.segmentEdge[info.index])
-												: info.index >= 0 && info.layer?.id === 'equipment-hits'
-													? itemLabel(info.object as EquipmentItem)
-													: null
+							: info.index >= 0 && info.layer?.id === 'fan-branches'
+								? null
+								: info.index >= 0 && info.layer?.id === 'route-badges'
+									? `${(info.object as { n: number }).n} branches share this route. Hover to separate them; click to keep them open.`
+									: info.index >= 0 && info.layer?.id === 'landmark-halos'
+										? landmarkTip(info.object as Landmark)
+										: info.index >= 0 && info.layer?.id === 'zones'
+											? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
+											: info.index >= 0 && info.layer?.id.startsWith('buses-')
+												? busTip(info.object as number)
+												: info.index >= 0 && info.layer?.id.startsWith('branches-')
+													? // A shared route's card names its branches; its hidden true route stays silent.
+														equipment &&
+														symbolsOn &&
+														equipment.routeOf[drawn.segmentEdge[info.index]] >= 0
+														? null
+														: branchTip(drawn.segmentEdge[info.index])
+													: info.index >= 0 && info.layer?.id === 'equipment-hits'
+														? itemLabel(info.object as EquipmentItem)
+														: null
 				});
 				// Open where the user just was: the case's own positions (the map they were looking at),
 				// when it has them. The schematic is laid out meanwhile, so switching to it is quick.
@@ -1544,7 +1743,8 @@
 			tagZoom,
 			marks,
 			fannedGroups,
-			fannedEdges
+			fannedEdges,
+			spreadStacks
 		];
 		if (!morph) render();
 	});
@@ -1801,11 +2001,14 @@
 		} else if (e.key === 'Enter' && cursor >= 0) {
 			e.preventDefault();
 			onselectbus(graph.buses[cursor].id);
+		} else if (e.key === 'Escape' && pinnedStack !== null) {
+			pinnedStack = null;
 		} else if (e.key === 'Escape' && pinnedGroup !== null) {
 			pinnedGroup = null;
 			tabEdge = -1;
 		} else if (e.key === 'Escape' && cursor >= 0) {
 			cursor = -1;
+			cursorStack = null;
 			announcement = '';
 		} else if (pan[e.key]) {
 			e.preventDefault();
@@ -2114,14 +2317,14 @@
 		>
 			<summary>Key</summary>
 			<ul class="symbols" aria-label="Symbols">
-				{#if equipment?.routeGroups.length}
+				{#if equipment?.routeGroups.length || stacks?.groups.length}
 					<li>
 						<label class="toggle"
 							><input
 								type="checkbox"
 								checked={separateAll}
 								onchange={(e) => rememberSeparate(e.currentTarget.checked)}
-							/> Separate overlapping lines</label
+							/> Separate overlapping buses and lines</label
 						>
 					</li>
 				{/if}
@@ -2158,6 +2361,62 @@
 				{/each}
 			</ul>
 		</details>
+	{/if}
+	{#if activeStack !== null && stacks && shown}
+		{@const first = stacks.groups[activeStack][0]}
+		{@const k = 2 ** camera.zoom}
+		{@const gap = stackRadius(stacks.groups[activeStack].length) + 10}
+		{@const sx = (shown.positions[first * 3] - camera.target[0]) * k + width / 2}
+		{@const sy = (shown.positions[first * 3 + 1] - camera.target[1]) * k + height / 2}
+		<!-- svelte-ignore a11y_no_static_element_interactions (Pointer bookkeeping only: the rows are buttons.) -->
+		<div
+			class="route-card"
+			style:left={sx + 460 < width ? `${sx + gap}px` : null}
+			style:right={sx + 460 < width ? null : `${width - sx + gap}px`}
+			style:top={sy + 180 < height ? `${sy + gap}px` : null}
+			style:bottom={sy + 180 < height ? null : `${height - sy + gap}px`}
+			onpointerenter={() => {
+				stackCardHovered = true;
+				if (stackTimer) clearTimeout(stackTimer);
+				stackTimer = null;
+			}}
+			onpointerleave={() => {
+				stackCardHovered = false;
+				leaveStack();
+			}}
+			onkeydown={(e) => {
+				if (e.key === 'Escape') {
+					pinnedStack = null;
+					hoverStack = null;
+				}
+			}}
+		>
+			<p>
+				{stacks.groups[activeStack].length} buses at this point{pinnedStack !== null
+					? ''
+					: ' · click to keep open'}
+			</p>
+			<ul aria-label="Buses at this point">
+				{#each stackCardRows(activeStack) as row (row.i)}
+					<li>
+						<button
+							aria-pressed={selectedBus === row.i}
+							onpointerenter={() => (mc.hovered = { kind: 'bus', id: row.id })}
+							onpointerleave={() => (mc.hovered = null)}
+							onclick={() => {
+								pinnedStack = activeStack;
+								onselectbus(row.id);
+							}}
+						>
+							<span class="id" title={row.id}>{row.id}</span>
+							<span>{row.level}</span>
+							<span>{row.attached || '—'}</span>
+							{#if row.voltage}<span>{row.voltage}</span>{/if}
+						</button>
+					</li>
+				{/each}
+			</ul>
+		</div>
 	{/if}
 	{#if activeGroup !== null && equipment}
 		{@const middle = routeMiddle(equipment.routeGroups[activeGroup], equipment.host, geometry)}
