@@ -24,7 +24,6 @@
 		chordsInto,
 		displayTree,
 		ease,
-		fitText,
 		graphInputs,
 		diagramLayer,
 		EMPTY_GEOMETRY,
@@ -38,13 +37,10 @@
 		screenAnchored,
 		snapshotFromMcPf,
 		sourceLayout,
-		TITLE_BLOCK_HEIGHT,
 		titleBlock,
-		viewportSvg,
 		worstBand,
 		attachmentGlyph,
 		ATTACHMENT_NAMES,
-		bandPosition,
 		describeBus,
 		treeWalk,
 		type WalkKey,
@@ -69,12 +65,9 @@
 		zoneOutline,
 		zoneState,
 		type GalvanicZone,
-		type ZoneState,
-		conductorSet,
 		conductorTicks,
 		elementPowers,
 		flowArrows,
-		formatPower,
 		energisation,
 		shortNames,
 		branchGlyph,
@@ -85,6 +78,19 @@
 		type LabelCandidate,
 		type SchematicGeometry
 	} from '../diagram/index.js';
+	import { canvasPng, download, fileStem, sceneSvg } from './schematic/export.js';
+	import {
+		morphLayers,
+		sceneLayers,
+		stackRadius,
+		type Colour,
+		type SchematicScene
+	} from './schematic/layers.js';
+	import type { FanState } from './schematic/paint.js';
+	import { DEAD, INK, ZONE_TINTS } from './schematic/palette.js';
+	import PickCard from './schematic/PickCard.svelte';
+	import { SchematicText, tooltip } from './schematic/text.js';
+	import { HoverPin, StoredFlag } from './schematic/view-prefs.svelte.js';
 
 	let {
 		mc,
@@ -99,7 +105,6 @@
 	} = $props();
 
 	type Layout = 'schematic' | 'source';
-	type Colour = 'none' | 'voltage-band' | 'loading-heat';
 	const COLOURS: Record<Colour, string> = {
 		none: 'Equipment and topology',
 		'voltage-band': 'Voltage within declared band',
@@ -107,11 +112,6 @@
 	};
 	const app = getAppState();
 	const panels = getPanelLayout();
-	const INK: RGBA = [32, 36, 43, 255];
-	const ACCENT: RGBA = [178, 94, 0, 255];
-	const PAPER: RGBA = [252, 251, 247, 255];
-	const DANGER: RGBA = [184, 50, 42, 255];
-	const WARNING: RGBA = [178, 94, 0, 255];
 
 	let layout = $state<Layout>('schematic');
 	let strategy = $state<SchematicStrategy>('tidy');
@@ -133,24 +133,7 @@
 	let labels = $state.raw<(LabelCandidate & { position: [number, number] })[]>([]);
 	/** Map tiles under geographic positions, as for the main map; they fade in and out with the
 	 * layout switch. While fading out they stay pinned to the screen as the camera moves on. */
-	const BASEMAP_STORAGE = 'tellegen.schematic.basemap';
-	let basemapOn = $state(
-		(() => {
-			try {
-				return localStorage.getItem(BASEMAP_STORAGE) !== 'off';
-			} catch {
-				return true;
-			}
-		})()
-	);
-	function rememberBasemap(on: boolean) {
-		basemapOn = on;
-		try {
-			localStorage.setItem(BASEMAP_STORAGE, on ? 'on' : 'off');
-		} catch {
-			// Storage can be unavailable; the toggle still works for this view.
-		}
-	}
+	const basemapPref = new StoredFlag('tellegen.schematic.basemap', ['on', 'off'], true);
 	let basemapOpacity = $state(0);
 	const BASEMAP_FADE_MS = 700;
 	let mapBox = $state<HTMLDivElement>();
@@ -171,52 +154,21 @@
 			? sourceLayout(graph, mc.view.buses, mc.coordsKind === 'geographic', tree, mc.view.edges)
 			: null
 	);
-	const SEPARATE_STORAGE = 'tellegen.schematic.separate';
-	let separateAll = $state(
-		(() => {
-			try {
-				return localStorage.getItem(SEPARATE_STORAGE) === 'on';
-			} catch {
-				return false;
-			}
-		})()
-	);
-	function rememberSeparate(on: boolean) {
-		separateAll = on;
-		try {
-			localStorage.setItem(SEPARATE_STORAGE, on ? 'on' : 'off');
-		} catch {
-			// Storage can be unavailable; the toggle still works for this view.
-		}
-	}
+	/** "Separate overlapping buses and lines": every stack and shared route stays spread. */
+	const separatePref = new StoredFlag('tellegen.schematic.separate', ['on', 'off'], false);
 	// Stacked buses: several buses at exactly the same point (MV and LV at one pole). At rest a ring
 	// and a ×n badge mark the stack; hovering it, or the keyboard cursor on one of its buses,
 	// spreads the buses on a small circle of fixed screen size, with a card listing them; clicking
 	// pins it. "Separate overlapping buses and lines" keeps every stack spread.
 	const stacks = $derived(shown && layout === 'source' ? busStacks(shown) : null);
-	let hoverStack = $state<number | null>(null);
-	let pinnedStack = $state<number | null>(null);
+	const stackPin = new HoverPin();
 	let cursorStack = $state<number | null>(null);
-	let stackCardHovered = false;
-	let stackTimer: ReturnType<typeof setTimeout> | null = null;
-	function openStack(g: number) {
-		if (stackTimer) clearTimeout(stackTimer);
-		stackTimer = null;
-		if (hoverStack !== g) hoverStack = g;
-	}
-	function leaveStack() {
-		if (hoverStack === null || stackTimer || stackCardHovered) return;
-		stackTimer = setTimeout(() => {
-			stackTimer = null;
-			if (!stackCardHovered) hoverStack = null;
-		}, 350);
-	}
 	/** The stack whose card shows: pinned, else hovered, else the keyboard cursor's. */
-	const activeStack = $derived(pinnedStack ?? hoverStack ?? cursorStack);
+	const activeStack = $derived(stackPin.active ?? cursorStack);
 	const spreadStacks = $derived(
 		!stacks
 			? []
-			: separateAll
+			: separatePref.value
 				? stacks.groups.map((_, g) => g)
 				: activeStack === null
 					? []
@@ -237,7 +189,10 @@
 		return displaceBuses(graph, shown, offsets);
 	});
 	const basemapWanted = $derived(
-		basemapOn && layout === 'source' && mc.coordsKind === 'geographic' && !!source?.mercatorOrigin
+		basemapPref.value &&
+			layout === 'source' &&
+			mc.coordsKind === 'geographic' &&
+			!!source?.mercatorOrigin
 	);
 	let fadeFrame = 0;
 	$effect(() => {
@@ -338,19 +293,6 @@
 	const corridors = $derived(
 		shown && !shown.attachmentGap ? zoneCorridors(zones, shown, outlined) : []
 	);
-	/** Screen width of a zone's corridor on geographic positions. */
-	const CORRIDOR_PX = 9;
-	/** Muted tints for networks within limits, kept clear of the warning and violation colours.
-	 * Networks drawn near each other get different ones, so a customer's network reads at a
-	 * glance where corridors touch. */
-	const ZONE_TINTS: [number, number, number][] = [
-		[70, 110, 150],
-		[40, 140, 140],
-		[100, 145, 70],
-		[125, 95, 165],
-		[100, 105, 120],
-		[160, 90, 140]
-	];
 	/** Networks with buses within about this many metres count as neighbours for their tints. */
 	const TINT_REACH_M = 60;
 	const zoneTint = $derived(
@@ -360,24 +302,6 @@
 	);
 	/** The zone under the pointer: its corridor darkens, so it reads as one network. */
 	let hoveredZone = $state(-1);
-	const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {
-		missing: [
-			[70, 110, 150, 16],
-			[70, 110, 150, 90]
-		],
-		normal: [
-			[70, 110, 150, 16],
-			[70, 110, 150, 90]
-		],
-		warning: [
-			[178, 94, 0, 30],
-			[178, 94, 0, 170]
-		],
-		violation: [
-			[184, 50, 42, 34],
-			[184, 50, 42, 190]
-		]
-	};
 	/** MV (from 1 kV phase–phase) is drawn heavier than LV, as on a paper single-line diagram; a
 	 * transformer takes its higher side. */
 	const zoneMv = $derived(
@@ -394,19 +318,6 @@
 	const zoomedOut = $derived(!symbolsOn);
 	const mvBuses = $derived(graph.buses.flatMap((_, i) => (zoneMv[zones.busZone[i]] ? [i] : [])));
 	const allBuses = $derived(graph.buses.map((_, i) => i));
-	/** Landmark strokes in ink; a transformer whose network has a problem takes that state's colour. */
-	function landmarkColours(m: { placed: Landmark[]; strokes: { owner: Int32Array } }): Uint8Array {
-		const out = new Uint8Array(m.strokes.owner.length * 4);
-		for (let s = 0; s < m.strokes.owner.length; s++) {
-			const l = m.placed[m.strokes.owner[s]];
-			out.set(l.state === 'violation' ? DANGER : l.state === 'warning' ? WARNING : INK, s * 4);
-		}
-		return out;
-	}
-	function segmentWidths(g: SchematicGeometry): Float32Array {
-		const [mv, lv] = colour === 'none' ? [2.4, 1.1] : [3, 1.8];
-		return Float32Array.from(g.segmentEdge, (k) => (edgeMv[k] ? mv : lv));
-	}
 	const transformerNames = $derived.by(() => {
 		const ks = graph.edges.flatMap((e, k) => (e.kind === 'transformer' ? [k] : []));
 		const short = shortNames(
@@ -447,24 +358,7 @@
 	/** Sources, generators, IBRs and transformers stay findable when zoomed out: drawn at a fixed
 	 * screen size and placed by priority (see `landmarks.ts`), handing over to the full symbols as
 	 * the drawing grows. */
-	const LANDMARKS_STORAGE = 'tellegen.schematic.landmarks';
-	let landmarksOn = $state(
-		(() => {
-			try {
-				return localStorage.getItem(LANDMARKS_STORAGE) !== 'off';
-			} catch {
-				return true;
-			}
-		})()
-	);
-	function rememberLandmarks(on: boolean) {
-		landmarksOn = on;
-		try {
-			localStorage.setItem(LANDMARKS_STORAGE, on ? 'on' : 'off');
-		} catch {
-			// Storage can be unavailable; the toggle still works for this view.
-		}
-	}
+	const landmarksPref = new StoredFlag('tellegen.schematic.landmarks', ['on', 'off'], true);
 	const landmarkPool = $derived(
 		shown ? landmarkCandidates(graph, geometry, equipment, zones, zoneStates, powers) : []
 	);
@@ -473,35 +367,8 @@
 		const short = shortNames(ids, 16);
 		return new Map(ids.map((id, j) => [id, short[j]]));
 	});
-	function landmarkTip(l: Landmark): string {
-		const name = {
-			source: 'source',
-			generator: 'generator',
-			ibr: 'inverter-based resource',
-			transformer: 'transformer'
-		}[l.kind];
-		const ids = l.ids.slice(0, 4).join(', ') + (l.ids.length > 4 ? ` +${l.ids.length - 4}` : '');
-		const where = l.bus >= 0 ? ` at ${graph.buses[l.bus].id}` : '';
-		return `${l.ids.length > 1 ? `${l.ids.length} ${name}s` : name} ${ids}${where}`;
-	}
 	/** Zoom in quarter steps: zone tags appear and go only when this changes, not on every pan. */
 	const tagZoom = $derived(Math.floor(camera.zoom * 4) / 4);
-	function zoneLabel(z: number): string {
-		const zone = zones.zones[z];
-		const t = zone.transformers[0];
-		const state = zoneStates[z];
-		const verdict =
-			state === 'violation'
-				? 'a limit is violated'
-				: state === 'warning'
-					? 'a branch is near its rating'
-					: state === 'normal'
-						? 'within limits'
-						: 'no result';
-		const fed =
-			t === undefined ? 'Network' : `Network fed by ${graph.edges[t].kind} ${graph.edges[t].id}`;
-		return `${fed}: ${zone.buses.length} buses, ${verdict}`;
-	}
 	/** Conductor marks need a closer view than symbols; bus names closer still. */
 	const ticksOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 6);
 	const namesOn = $derived(!!equipment && equipment.unit * 2 ** camera.zoom >= 9);
@@ -516,80 +383,14 @@
 				)
 			: null
 	);
-	/** An attachment's text: its count when several, and its solved P and Q when values show.
-	 * Generators, IBRs and sources read as output; loads and shunts as consumption. */
-	function itemText(d: EquipmentItem): string {
-		const parts = d.ids.length > 1 ? [`×${d.ids.length}`] : [];
-		if (valuesOn && powers) {
-			let p = 0;
-			let q = 0;
-			let found = false;
-			for (const id of d.ids) {
-				const row = powers.get(id);
-				if (!row) continue;
-				p += row.p;
-				q += row.q;
-				found = true;
-			}
-			const output = d.kind === 'generator' || d.kind === 'ibr' || d.kind === 'source';
-			// Below 1 VA (an earthing shunt, say) the value is noise, not information.
-			if (found && Math.hypot(p, q) >= 1)
-				parts.push(output ? formatPower(-p, -q) : formatPower(p, q));
-		}
-		return parts.join(' ');
-	}
-	/** Screen radius of a spread stack of `n` buses: wider for more, so their symbols stay apart. */
-	const stackRadius = (n: number) => 8 + 4 * n;
-	const SYMBOL_INK: RGBA = [52, 56, 62, 255];
-	/** Not connected to any source through closed branches: drawn faint in every colour mode. */
-	const DEAD: RGBA = [196, 191, 182, 110];
 	const live = $derived(energisation(graph));
 	const names = $derived(shortNames(graph.buses.map((b) => b.id)));
 	/** Whether the symbol key is expanded; remembered per viewer. */
-	const KEY_STORAGE = 'tellegen.schematic.key';
-	let keyOpen = $state(
-		(() => {
-			try {
-				return localStorage.getItem(KEY_STORAGE) !== 'closed';
-			} catch {
-				return true;
-			}
-		})()
-	);
-	function rememberKey(open: boolean) {
-		keyOpen = open;
-		try {
-			localStorage.setItem(KEY_STORAGE, open ? 'open' : 'closed');
-		} catch {
-			// Storage can be unavailable (private windows); the key still toggles.
-		}
-	}
+	const keyPref = new StoredFlag('tellegen.schematic.key', ['open', 'closed'], true);
 	/** Keyboard cursor: the bus the arrow keys walk from, distinct from the selection. */
 	let cursor = $state(-1);
 	let announcement = $state('');
 	const walk = $derived(treeWalk(tree, geometry.positions));
-	function voltageNote(i: number): string | null {
-		const pairs = snapshot?.buses[i]?.pairs ?? [];
-		if (!pairs.length) return null;
-		const worst = pairs.reduce((a, b) =>
-			Math.abs(bandPosition(b) ?? 0) > Math.abs(bandPosition(a) ?? 0) ? b : a
-		);
-		const t = bandPosition(worst);
-		const v = (x: number) => (x >= 1000 ? `${(x / 1000).toFixed(3)} kV` : `${x.toFixed(1)} V`);
-		const band =
-			worst.min !== null && worst.max !== null
-				? `, ${t !== null && Math.abs(t) > 1 ? 'outside' : 'within'} ${v(worst.min)} to ${v(worst.max)}`
-				: '';
-		return `Worst voltage ${worst.pair.join('–')} ${v(worst.volts)}${band}`;
-	}
-	// A new graph invalidates the cursor's bus index.
-	$effect(() => {
-		void graph;
-		untrack(() => {
-			cursor = -1;
-			announcement = '';
-		});
-	});
 	/** Shared-route member chosen with Tab at the cursor bus (−1 for none). */
 	let tabEdge = -1;
 	function moveCursor(to: number) {
@@ -599,7 +400,7 @@
 		const g = stacks?.stackOf[to] ?? -1;
 		cursorStack = g >= 0 ? g : null;
 		announcement =
-			describeBus(graph, tree, walk, to, voltageNote(to)) +
+			describeBus(graph, tree, walk, to, text.voltageNote(to)) +
 			(g >= 0 ? `. One of ${stacks!.groups[g].length} buses at this point` : '');
 		bringIntoView([geometry.positions[to * 3], geometry.positions[to * 3 + 1]]);
 	}
@@ -607,29 +408,14 @@
 	// At rest the route carries a count badge; hovering it fans its members apart by a few pixels,
 	// tapering into the shared ends, with a card listing them; clicking pins it open. The key can
 	// keep every shared route separated.
-	let hoverGroup = $state<number | null>(null);
-	let pinnedGroup = $state<number | null>(null);
-	let cardHovered = false;
-	let collapseTimer: ReturnType<typeof setTimeout> | null = null;
-	function openGroup(g: number) {
-		if (collapseTimer) clearTimeout(collapseTimer);
-		collapseTimer = null;
-		if (hoverGroup !== g) hoverGroup = g;
-	}
-	function leaveGroup() {
-		if (hoverGroup === null || collapseTimer || cardHovered) return;
-		collapseTimer = setTimeout(() => {
-			collapseTimer = null;
-			if (!cardHovered) hoverGroup = null;
-		}, 350);
-	}
+	const routePin = new HoverPin();
 	/** The one route whose card shows: pinned, else hovered. */
-	const activeGroup = $derived(equipment && symbolsOn ? (pinnedGroup ?? hoverGroup) : null);
+	const activeGroup = $derived(equipment && symbolsOn ? routePin.active : null);
 	/** Routes drawn fanned out now. */
 	const fannedGroups = $derived(
 		!equipment || !symbolsOn
 			? []
-			: separateAll
+			: separatePref.value
 				? equipment.routeGroups.map((_, g) => g)
 				: activeGroup === null
 					? []
@@ -648,71 +434,11 @@
 			})
 		);
 	}
-	/** Whether a drawn segment lies on its edge's shared (host) segment, so it is replaced by the
-	 * fanned path while its route is fanned. */
-	function onHost(d: SchematicGeometry, s: number, k: number): boolean {
-		const h = equipment?.host[k] ?? -1;
-		if (h < 0) return false;
-		const [ax, ay, bx, by] = [
-			geometry.sources[h * 3],
-			geometry.sources[h * 3 + 1],
-			geometry.targets[h * 3],
-			geometry.targets[h * 3 + 1]
-		];
-		const len = Math.hypot(bx - ax, by - ay) || 1;
-		const off = (x: number, y: number) =>
-			Math.abs((bx - ax) * (ay - y) - (ax - x) * (by - ay)) / len;
-		const tol = len * 1e-6 + 1e-9;
-		return (
-			off(d.sources[s * 3], d.sources[s * 3 + 1]) <= tol &&
-			off(d.targets[s * 3], d.targets[s * 3 + 1]) <= tol
-		);
-	}
-	/** A drawn segment replaced by its fanned path right now. */
-	function hiddenUnderFan(d: SchematicGeometry, s: number): boolean {
-		const k = d.segmentEdge[s];
-		return fannedEdges.has(k) && onHost(d, s, k);
-	}
-	const HIDDEN: RGBA = [0, 0, 0, 0];
-	/** Per symbol stroke: ink, or faint when its bus or branch is not energised; hidden for a branch
-	 * whose route is fanned (its marks are redrawn on the fanned path). */
-	function strokeColours(owner: Int32Array): Uint8Array {
-		const out = new Uint8Array(owner.length * 4);
-		for (let s = 0; s < owner.length; s++) {
-			const o = owner[s];
-			if (o >= 0 && fannedEdges.has(o)) {
-				out.set(HIDDEN, s * 4);
-				continue;
-			}
-			const on = o >= 0 ? live.edges[o] : live.buses[-o - 1];
-			out.set(on ? SYMBOL_INK : DEAD, s * 4);
-		}
-		return out;
-	}
-	function routeCardRows(g: number) {
-		const members = equipment?.routeGroups[g] ?? [];
-		return members.map((k) => {
-			const e = graph.edges[k];
-			const { phases, neutral } = conductorSet(graph, k);
-			const loading = snapshot?.branches[k]?.loading ?? null;
-			return {
-				k,
-				id: e.id,
-				kind: e.kind,
-				level: edgeMv[k] ? 'MV' : 'LV',
-				wires: `${phases}${neutral ? '+N' : ''}`,
-				loading: loading === null ? null : `${loading.toFixed(0)} %`,
-				state:
-					loading === null
-						? 'normal'
-						: loading > 100
-							? 'violation'
-							: loading >= 90
-								? 'warning'
-								: 'normal'
-			};
-		});
-	}
+	const fan = $derived<FanState>({
+		edges: fannedEdges,
+		host: equipment?.host ?? null,
+		geometry
+	});
 	const legendGlyphs = $derived(
 		equipment
 			? (
@@ -741,35 +467,6 @@
 			? geometry.inferred.reduce((n, v) => n + (v ? 1 : 0), 0)
 			: 0
 	);
-	const busTip = (i: number) => {
-		const how = layout === 'source' ? geometry.inferred?.[i] : 0;
-		const id = graph.buses[i].id + networkNote(i);
-		return how === 1
-			? `${id} · no position in the case data; drawn next to a connected bus`
-			: how === 2
-				? `${id} · no position in the case data`
-				: id;
-	};
-	const branchTip = (k: number) => {
-		const e = graph.edges[k];
-		const { phases, neutral } = conductorSet(graph, k);
-		const wires = `${phases} phase${phases === 1 ? '' : 's'}${neutral ? ' + neutral' : ''}`;
-		const shared = equipment?.sharedRoute[k] ?? 1;
-		const route =
-			shared > 1
-				? ` · drawn on a route shared with ${shared - 1} other branch${shared > 2 ? 'es' : ''}`
-				: '';
-		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}${route}`;
-	};
-	const itemLabel = (d: EquipmentItem) => {
-		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;
-		const ids = d.ids.slice(0, 4).join(', ') + (d.ids.length > 4 ? ` +${d.ids.length - 4}` : '');
-		if (d.kind === 'ground')
-			return `solid earth: terminal${d.ids.length > 1 ? 's' : ''} ${d.ids.join(', ')} of ${graph.buses[d.bus].id} perfectly grounded`;
-		return d.bus >= 0
-			? `${d.ids.length > 1 ? `${d.ids.length} ${name}s` : name} ${ids} at ${graph.buses[d.bus].id}${networkNote(d.bus)}`
-			: `${name} ${ids}${graph.edges[d.edge].closed ? '' : ' (open)'}`;
-	};
 	/** Toolbar and legend start right of the left dock, so no panel covers them. */
 	const toolLeft = $derived(panels.compact ? 12 : panels.dockWidth('left') + 24);
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
@@ -824,16 +521,6 @@
 		const g = geometry.positions;
 		return [(g[from * 3] + g[to * 3]) / 2, (g[from * 3 + 1] + g[to * 3 + 1]) / 2];
 	}
-	/** The network a bus is in, for its tooltip. */
-	function networkNote(i: number): string {
-		const z = zones.busZone[i];
-		if (z < 0 || !outlined(zones.zones[z])) return '';
-		const k = zones.zones[z].transformers[0];
-		return k === undefined
-			? ' · in a network without a transformer'
-			: ` · network fed by ${transformerNames.get(k) ?? graph.edges[k].id}`;
-	}
-
 	/** Per-edge and per-bus colours for the active mode; results never recolour inactive branches. */
 	const edgeColours = $derived(
 		graph.edges.map((e, k): RGBA => {
@@ -909,19 +596,6 @@
 		return { target: [cx, cy, 0] as [number, number, number], zoom: Math.min(zoom, max) };
 	}
 
-	function segmentColours(g: SchematicGeometry): Uint8Array {
-		const out = new Uint8Array(g.segmentEdge.length * 4);
-		for (let s = 0; s < g.segmentEdge.length; s++) {
-			const k = g.segmentEdge[s];
-			const c = edgeColours[k];
-			let alpha = g.role[k] === 2 ? Math.min(110, c[3]) : c[3];
-			if (hiddenUnderFan(g, s)) alpha = 0;
-			if (zoomedOut && !edgeMv[k]) alpha *= 0.45;
-			out.set([c[0], c[1], c[2], alpha], s * 4);
-		}
-		return out;
-	}
-
 	let morph: {
 		from: Float32Array;
 		cur: Float32Array;
@@ -933,646 +607,78 @@
 		raf: number;
 	} | null = null;
 
-	function layers(): Layer[] {
-		if (!modules) return [];
-		const { LineLayer, ScatterplotLayer, TextLayer } = modules.layers;
-		const g = geometry;
-		const common = { coordinateSystem: modules.core.COORDINATE_SYSTEM.CARTESIAN };
-		if (morph) {
-			return [
-				new LineLayer({
-					...common,
-					id: 'morph-chords',
-					data: {
-						length: morph.endpoints.length / 2,
-						attributes: {
-							getSourcePosition: { value: morph.s, size: 3 },
-							getTargetPosition: { value: morph.t, size: 3 }
-						}
-					},
-					getColor: [120, 114, 102, 200],
-					getWidth: 1,
-					widthUnits: 'pixels'
-				}),
-				new ScatterplotLayer({
-					...common,
-					id: 'morph-buses',
-					data: {
-						length: graph.buses.length,
-						attributes: { getPosition: { value: morph.cur, size: 3 } }
-					},
-					getFillColor: INK,
-					getRadius: 2,
-					radiusUnits: 'pixels'
-				})
-			];
-		}
-		const d = drawn;
-		const selectedSegments: number[] = [];
-		if (selectedEdges.size)
-			for (let s = 0; s < d.segmentEdge.length; s++)
-				if (selectedEdges.has(d.segmentEdge[s]) && !hiddenUnderFan(d, s)) selectedSegments.push(s);
-		const point = (i: number): [number, number] => [g.positions[i * 3], g.positions[i * 3 + 1]];
-		// Bus ids index `graph.buses`, so picks map back whatever subset is drawn.
-		const base = {
-			length: d.segmentEdge.length,
-			attributes: {
-				getSourcePosition: { value: d.sources, size: 3 },
-				getTargetPosition: { value: d.targets, size: 3 }
-			}
+	const text = $derived(
+		new SchematicText({
+			graph,
+			zones,
+			zoneStates,
+			outlined,
+			transformerNames,
+			live,
+			equipment,
+			snapshot,
+			powers,
+			valuesOn,
+			edgeMv,
+			zoneMv,
+			inferred: layout === 'source' ? (geometry.inferred ?? null) : null
+		})
+	);
+
+	/** Everything a frame draws; the layers and the SVG export both read it. */
+	function scene(): SchematicScene {
+		return {
+			graph,
+			layout,
+			colour,
+			shown: shown ?? EMPTY_GEOMETRY,
+			geometry,
+			drawn,
+			symbols: symbolsOn ? equipment : null,
+			ticksOn,
+			valuesOn,
+			zoomedOut,
+			live,
+			edgeColours,
+			busColours,
+			edgeMv,
+			snapshot,
+			powers,
+			itemText: (d) => text.itemValue(d),
+			arrows,
+			selectedBus,
+			selectedEdges,
+			hoveredBus,
+			hoveredEdges,
+			cursor,
+			labels,
+			marks,
+			markName,
+			mvBuses,
+			allBuses,
+			zones: {
+				states: zoneStates,
+				shapes: zoneShapes,
+				tags: zoneTags,
+				tagZoom,
+				corridors,
+				active: activeZone,
+				tint: zoneTint,
+				feeder: activeZone >= 0 ? feederPoint(activeZone) : null
+			},
+			stacks,
+			spreadStacks,
+			fans: fanned(),
+			fannedGroups,
+			fan
 		};
-		const symbols = symbolsOn && equipment ? equipment : null;
-		const hoveredSegments: number[] = [];
-		if (hoveredEdges.size)
-			for (let s = 0; s < d.segmentEdge.length; s++)
-				if (hoveredEdges.has(d.segmentEdge[s]) && !hiddenUnderFan(d, s)) hoveredSegments.push(s);
-		return [
-			// Zone outlines sit beneath everything; they pick only where nothing else is.
-			...corridorLayers(common),
-			new modules.layers.PolygonLayer({
-				...common,
-				id: 'zones',
-				data: zoneShapes,
-				getPolygon: (d: { polygon: [number, number][] }) => d.polygon,
-				getFillColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][0],
-				getLineColor: (d: { z: number }) => ZONE_COLOURS[zoneStates[d.z]][1],
-				getLineWidth: 1,
-				lineWidthUnits: 'pixels',
-				lineWidthMinPixels: 1,
-				pickable: true,
-				updateTriggers: { getFillColor: zoneStates, getLineColor: zoneStates }
-			}),
-			new TextLayer({
-				...common,
-				id: 'zone-tags',
-				data:
-					layout === 'source' && symbolsOn
-						? []
-						: zoneTags.filter((t) => t.width * 2 ** tagZoom >= 150),
-				getPosition: (t: { position: [number, number] }) => [...t.position, 0],
-				getText: (t: { text: string }) => t.text,
-				getColor: (t: { z: number }) => {
-					const s = zoneStates[t.z];
-					return s === 'violation' ? DANGER : s === 'warning' ? WARNING : [70, 110, 150, 255];
-				},
-				getSize: 10,
-				getTextAnchor: 'start',
-				getAlignmentBaseline: 'bottom',
-				getPixelOffset: [2, -2],
-				background: true,
-				getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
-				backgroundPadding: [3, 1],
-				fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-				characterSet: 'auto',
-				updateTriggers: { getColor: zoneStates }
-			}),
-			// Result colours are quiet for normal values; a faint underlay keeps the topology legible.
-			...(colour === 'none'
-				? []
-				: [
-						new LineLayer({
-							...common,
-							id: 'topology-underlay',
-							data: base,
-							getColor: [120, 114, 102, 70],
-							getWidth: 1,
-							widthUnits: 'pixels'
-						})
-					]),
-			new LineLayer({
-				...common,
-				id: `branches-${layout}`,
-				data: {
-					length: d.segmentEdge.length,
-					attributes: {
-						getSourcePosition: { value: d.sources, size: 3 },
-						getTargetPosition: { value: d.targets, size: 3 },
-						getColor: { value: segmentColours(d), size: 4, normalized: true },
-						getWidth: { value: segmentWidths(d), size: 1 }
-					}
-				},
-				widthUnits: 'pixels',
-				pickable: true
-			}),
-			new LineLayer({
-				...common,
-				id: 'selected-branch',
-				data: selectedSegments,
-				getSourcePosition: (s: number) => [d.sources[s * 3], d.sources[s * 3 + 1], 0],
-				getTargetPosition: (s: number) => [d.targets[s * 3], d.targets[s * 3 + 1], 0],
-				getColor: ACCENT,
-				getWidth: 4,
-				widthUnits: 'pixels'
-			}),
-			...sharedRouteLayers(common, d),
-			...stackLayers(common),
-			...(symbols
-				? [
-						new LineLayer({
-							...common,
-							id: 'equipment',
-							data: {
-								length: symbols.sources.length / 3,
-								attributes: {
-									getSourcePosition: { value: symbols.sources, size: 3 },
-									getTargetPosition: { value: symbols.targets, size: 3 },
-									getColor: { value: strokeColours(symbols.owner), size: 4, normalized: true }
-								}
-							},
-							getWidth: 1.25,
-							widthUnits: 'pixels'
-						}),
-						...(valuesOn && arrows
-							? [
-									new LineLayer({
-										...common,
-										id: 'flow-arrows',
-										data: {
-											length: arrows.edge.length,
-											attributes: {
-												getSourcePosition: { value: arrows.sources, size: 3 },
-												getTargetPosition: { value: arrows.targets, size: 3 },
-												getColor: {
-													value: Uint8Array.from({ length: arrows.edge.length * 4 }, (_, i) =>
-														fannedEdges.has(arrows.edge[i >> 2]) ? 0 : ACCENT[i & 3]
-													),
-													size: 4,
-													normalized: true
-												}
-											}
-										},
-										getWidth: 1.5,
-										widthUnits: 'pixels'
-									})
-								]
-							: []),
-						...(ticksOn
-							? [
-									new LineLayer({
-										...common,
-										id: 'conductor-ticks',
-										data: {
-											length: symbols.ticks.edge.length,
-											attributes: {
-												getSourcePosition: { value: symbols.ticks.sources, size: 3 },
-												getTargetPosition: { value: symbols.ticks.targets, size: 3 },
-												getColor: {
-													value: strokeColours(symbols.ticks.edge),
-													size: 4,
-													normalized: true
-												}
-											}
-										},
-										getWidth: 1,
-										widthUnits: 'pixels'
-									})
-								]
-							: []),
-						// Invisible discs over each symbol make it clickable and give it a tooltip.
-						new ScatterplotLayer({
-							...common,
-							id: 'equipment-hits',
-							data: symbols.items,
-							getPosition: (d: EquipmentItem) => [d.x, d.y, 0],
-							getRadius: symbols.unit * 1.3,
-							radiusUnits: 'common',
-							getFillColor: [0, 0, 0, 1],
-							pickable: true
-						}),
-						new TextLayer({
-							...common,
-							id: 'equipment-text',
-							data: symbols.items.filter((d) => d.bus >= 0 && itemText(d)),
-							getPosition: (d: EquipmentItem) => [d.x + symbols.unit * 1.1, d.y, 0],
-							getText: itemText,
-							updateTriggers: { getText: [valuesOn, powers] },
-							getColor: SYMBOL_INK,
-							getSize: 10,
-							getTextAnchor: 'start',
-							getAlignmentBaseline: 'center',
-							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-							characterSet: 'auto'
-						})
-					]
-				: []),
-			new ScatterplotLayer({
-				...common,
-				id: `buses-${layout}`,
-				// Zoomed out, LV bus dots are noise unless they carry the voltage colouring.
-				data: zoomedOut && colour !== 'voltage-band' ? mvBuses : allBuses,
-				getPosition: (i: number) => [...point(i), 0],
-				getFillColor: (i: number) => busColours[i],
-				// Zoomed out, small dots keep dense chains from merging into bars.
-				getRadius: symbolsOn ? 2.6 : 1.4,
-				radiusUnits: 'pixels',
-				radiusMinPixels: 1,
-				pickable: true,
-				updateTriggers: {
-					getFillColor: [colour, snapshot],
-					getPosition: geometry,
-					getRadius: symbolsOn
-				}
-			}),
-			new ScatterplotLayer({
-				...common,
-				id: 'selected-bus',
-				data: selectedBus >= 0 ? [selectedBus] : [],
-				getPosition: (i: number) => [...point(i), 0],
-				getFillColor: [0, 0, 0, 0],
-				getLineColor: ACCENT,
-				stroked: true,
-				filled: false,
-				getRadius: 7,
-				radiusUnits: 'pixels',
-				lineWidthUnits: 'pixels',
-				getLineWidth: 2.5
-			}),
-			// Hovered in a linked view (profile, table) or here: a soft halo.
-			new ScatterplotLayer({
-				...common,
-				id: 'hovered-bus',
-				data: hoveredBus >= 0 ? [hoveredBus] : [],
-				getPosition: (i: number) => [...point(i), 0],
-				getFillColor: [...ACCENT.slice(0, 3), 60] as RGBA,
-				getRadius: 9,
-				radiusUnits: 'pixels'
-			}),
-			new LineLayer({
-				...common,
-				id: 'hovered-branch',
-				data: hoveredSegments,
-				getSourcePosition: (s: number) => [d.sources[s * 3], d.sources[s * 3 + 1], 0],
-				getTargetPosition: (s: number) => [d.targets[s * 3], d.targets[s * 3 + 1], 0],
-				getColor: [...ACCENT.slice(0, 3), 110] as RGBA,
-				getWidth: 7,
-				widthUnits: 'pixels'
-			}),
-			...(marks && marks.placed.length
-				? [
-						// A paper halo lifts each marker off the faded drawing; it is also the pick target.
-						new ScatterplotLayer({
-							...common,
-							id: 'landmark-halos',
-							data: marks.placed,
-							getPosition: (l: Landmark) => [l.x, l.y, 0],
-							// Semi-transparent: lifts the marker without blanking the drawing under it.
-							getFillColor: [...PAPER.slice(0, 3), 150] as RGBA,
-							getRadius: 11,
-							radiusUnits: 'pixels',
-							pickable: true
-						}),
-						new LineLayer({
-							...common,
-							id: 'landmarks',
-							data: {
-								length: marks.strokes.owner.length,
-								attributes: {
-									getSourcePosition: { value: marks.strokes.sources, size: 3 },
-									getTargetPosition: { value: marks.strokes.targets, size: 3 },
-									getColor: {
-										value: landmarkColours(marks),
-										size: 4,
-										normalized: true
-									}
-								}
-							},
-							getWidth: 1.6,
-							widthUnits: 'pixels'
-						}),
-						new TextLayer({
-							...common,
-							id: 'landmark-names',
-							data: marks.placed.filter((l) => l.kind === 'source' || l.kind === 'generator'),
-							getPosition: (l: Landmark) => [l.x, l.y, 0],
-							getText: (l: Landmark) =>
-								(markName.get(l.ids[0]) ?? l.ids[0]) +
-								(l.ids.length > 1 ? ` +${l.ids.length - 1}` : ''),
-							getColor: INK,
-							getSize: 10,
-							getTextAnchor: 'middle',
-							getAlignmentBaseline: 'top',
-							getPixelOffset: [0, 14],
-							background: true,
-							getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
-							backgroundPadding: [2, 1],
-							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-							characterSet: 'auto'
-						})
-					]
-				: []),
-			new ScatterplotLayer({
-				...common,
-				id: 'keyboard-cursor',
-				data: cursor >= 0 ? [cursor] : [],
-				getPosition: (i: number) => [...point(i), 0],
-				getLineColor: INK,
-				stroked: true,
-				filled: false,
-				getRadius: 11,
-				radiusUnits: 'pixels',
-				lineWidthUnits: 'pixels',
-				getLineWidth: 1.5
-			}),
-			new TextLayer({
-				...common,
-				id: 'labels',
-				data: labels,
-				getPosition: (d: { position: [number, number] }) => [...d.position, 0],
-				getText: (d: LabelCandidate) => d.text,
-				getColor: (d: LabelCandidate) =>
-					d.state === 'violation' ? DANGER : d.state === 'warning' ? WARNING : INK,
-				getSize: 11,
-				getTextAnchor: 'start',
-				// Above-right of the point: attachment symbols hang below buses.
-				getAlignmentBaseline: 'bottom',
-				getPixelOffset: [6, -5],
-				background: true,
-				getBackgroundColor: [...PAPER.slice(0, 3), 230] as RGBA,
-				backgroundPadding: [3, 1],
-				fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-				characterSet: 'auto'
-			})
-		];
 	}
 
-	/** Fanned members of shared routes (with their marks), and the count badges of the others. */
-	function sharedRouteLayers(common: object, d: SchematicGeometry): Layer[] {
-		if (!modules || !equipment || !symbolsOn) return [];
-		const { LineLayer, TextLayer } = modules.layers;
-		const eq = equipment;
-		const fans = fanned();
-		const src: number[] = [];
-		const dst: number[] = [];
-		const owner: number[] = [];
-		for (const f of fans)
-			for (let i = 1; i < f.path.length; i++) {
-				src.push(f.path[i - 1][0], f.path[i - 1][1], 0);
-				dst.push(f.path[i][0], f.path[i][1], 0);
-				owner.push(f.edge);
-			}
-		// Marks on the fanned paths: the branch's symbol, or its conductor marks.
-		const mSrc: number[] = [];
-		const mDst: number[] = [];
-		for (const f of fans) {
-			const e = graph.edges[f.edge];
-			const glyph = branchGlyph(e.kind, e.closed);
-			const { phases, neutral } = conductorSet(graph, f.edge);
-			const shape = glyph ?? (ticksOn ? conductorTicks(phases, neutral) : null);
-			if (!shape) continue;
-			const [cos, sin] = f.dir;
-			const u = eq.unit * (glyph ? 0.8 : 1);
-			for (const line of shape)
-				for (let i = 1; i < line.length; i++) {
-					const [ax, ay] = line[i - 1];
-					const [bx, by] = line[i];
-					mSrc.push(f.mid[0] + u * (ax * cos - ay * sin), f.mid[1] + u * (ax * sin + ay * cos), 0);
-					mDst.push(f.mid[0] + u * (bx * cos - by * sin), f.mid[1] + u * (bx * sin + by * cos), 0);
-				}
-		}
-		const colours = new Uint8Array(owner.length * 4);
-		const widths = new Float32Array(owner.length);
-		const [mv, lv] = colour === 'none' ? [2.4, 1.1] : [3, 1.8];
-		owner.forEach((k, i) => {
-			const hovered = hoveredEdges.has(k);
-			colours.set(
-				selectedEdges.has(k)
-					? ACCENT
-					: hovered
-						? ([...ACCENT.slice(0, 3), 150] as RGBA)
-						: edgeColours[k],
-				i * 4
-			);
-			widths[i] = selectedEdges.has(k) ? 3.5 : hovered ? 4 : edgeMv[k] ? mv : lv;
-		});
-		const badges = ticksOn
-			? eq.routeGroups.flatMap((members, g) => {
-					if (fannedGroups.includes(g)) return [];
-					const p = routeMiddle(members, eq.host, geometry);
-					return p ? [{ g, n: members.length, position: p }] : [];
-				})
-			: [];
-		void d;
-		return [
-			...(owner.length
-				? [
-						new LineLayer({
-							...common,
-							id: 'fan-branches',
-							data: {
-								length: owner.length,
-								attributes: {
-									getSourcePosition: { value: Float32Array.from(src), size: 3 },
-									getTargetPosition: { value: Float32Array.from(dst), size: 3 },
-									getColor: { value: colours, size: 4, normalized: true },
-									getWidth: { value: widths, size: 1 }
-								}
-							},
-							widthUnits: 'pixels',
-							pickable: true
-						}),
-						new LineLayer({
-							...common,
-							id: 'fan-marks',
-							data: {
-								length: mSrc.length / 3,
-								attributes: {
-									getSourcePosition: { value: Float32Array.from(mSrc), size: 3 },
-									getTargetPosition: { value: Float32Array.from(mDst), size: 3 }
-								}
-							},
-							getColor: SYMBOL_INK,
-							getWidth: 1,
-							widthUnits: 'pixels'
-						})
-					]
-				: []),
-			...(badges.length
-				? [
-						new TextLayer({
-							...common,
-							id: 'route-badges',
-							data: badges,
-							getPosition: (b: { position: [number, number] }) => [...b.position, 0],
-							getText: (b: { n: number }) => `×${b.n}`,
-							getColor: SYMBOL_INK,
-							getSize: 11,
-							getPixelOffset: [0, -10],
-							background: true,
-							getBackgroundColor: [...PAPER.slice(0, 3), 230] as RGBA,
-							backgroundPadding: [3, 1],
-							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-							characterSet: 'auto',
-							pickable: true
-						})
-					]
-				: [])
-		];
+	function layers(): Layer[] {
+		if (!modules) return [];
+		return morph ? morphLayers(modules, morph, graph.buses.length) : sceneLayers(modules, scene());
 	}
-	/** Zone corridors on geographic positions while zoomed out: a band of fixed screen width along
-	 * each LV network's branches, with discs at its buses to round the joints. A translucent band
-	 * would darken wherever its pieces overlap, so the bands test depth strictly, all at one depth
-	 * (no per-layer polygon offset): each pixel is tinted once, by the first zone drawn there (the
-	 * hovered one, drawn first). */
-	function corridorLayers(common: object): Layer[] {
-		if (!modules || !shown || !corridors.length) return [];
-		// Close in, only the emphasised network keeps its corridor.
-		if (symbolsOn && activeZone < 0) return [];
-		const { LineLayer, ScatterplotLayer } = modules.layers;
-		const g = shown;
-		const once = { depthWriteEnabled: true, depthCompare: 'less' } as const;
-		const band = (z: number, hovered: boolean): RGBA => {
-			const state = zoneStates[z];
-			if (state === 'warning' || state === 'violation') {
-				const [fill, line] = ZONE_COLOURS[state];
-				return hovered ? line : ([...fill.slice(0, 3), Math.min(255, fill[3] * 3)] as RGBA);
-			}
-			const tint = ZONE_TINTS[Math.max(0, zoneTint?.[z] ?? 0)];
-			return [...tint, hovered ? 160 : 72] as RGBA;
-		};
-		const pass = (hovered: boolean) => {
-			const list = corridors.filter((c) => (c.z === activeZone) === hovered);
-			const segments = list.flatMap((c) => c.segments.map((s) => ({ z: c.z, s })));
-			const buses = list.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
-			const suffix = hovered ? '-hovered' : '';
-			return [
-				new LineLayer({
-					...common,
-					id: `zones${suffix}`,
-					data: segments,
-					getSourcePosition: (d: { s: number }) => [g.sources[d.s * 3], g.sources[d.s * 3 + 1], 0],
-					getTargetPosition: (d: { s: number }) => [g.targets[d.s * 3], g.targets[d.s * 3 + 1], 0],
-					getColor: (d: { z: number }) => band(d.z, hovered),
-					getWidth: CORRIDOR_PX,
-					widthUnits: 'pixels',
-					parameters: once,
-					getPolygonOffset: null,
-					pickable: true,
-					updateTriggers: { getColor: zoneStates }
-				}),
-				new ScatterplotLayer({
-					...common,
-					id: `zones${suffix}-buses`,
-					data: buses,
-					getPosition: (d: { i: number }) => [g.positions[d.i * 3], g.positions[d.i * 3 + 1], 0],
-					getFillColor: (d: { z: number }) => band(d.z, hovered),
-					getRadius: CORRIDOR_PX / 2,
-					radiusUnits: 'pixels',
-					parameters: once,
-					getPolygonOffset: null,
-					pickable: true,
-					updateTriggers: { getFillColor: zoneStates }
-				})
-			];
-		};
-		const feeder = activeZone >= 0 ? feederPoint(activeZone) : null;
-		return [
-			...(feeder
-				? [
-						new ScatterplotLayer({
-							...common,
-							id: 'zone-feeder',
-							data: [feeder],
-							getPosition: (p: [number, number]) => [...p, 0],
-							getFillColor: [...band(activeZone, true).slice(0, 3), 60] as RGBA,
-							getLineColor: band(activeZone, true),
-							stroked: true,
-							getRadius: 13,
-							radiusUnits: 'pixels',
-							getLineWidth: 2,
-							lineWidthUnits: 'pixels'
-						})
-					]
-				: []),
-			...pass(true),
-			...(symbolsOn ? [] : pass(false))
-		];
-	}
-	/** Spokes from each spread stack's true point to its buses; a ring and ×n badge on the others. */
-	function stackLayers(common: object): Layer[] {
-		if (!modules || !stacks || !shown) return [];
-		const { LineLayer, ScatterplotLayer, TextLayer } = modules.layers;
-		const base = shown;
-		const point = (g: number): [number, number] => {
-			const i = stacks.groups[g][0];
-			return [base.positions[i * 3], base.positions[i * 3 + 1]];
-		};
-		const spokes: { from: [number, number]; to: [number, number] }[] = [];
-		for (const g of spreadStacks)
-			for (const i of stacks.groups[g])
-				spokes.push({
-					from: point(g),
-					to: [geometry.positions[i * 3], geometry.positions[i * 3 + 1]]
-				});
-		// A spread stack keeps a faint ring around its circle, so the gaps between its buses still
-		// belong to it: the hover holds and a click there pins it.
-		const rings = stacks.groups.flatMap((members, g) =>
-			spreadStacks.includes(g)
-				? [{ g, n: members.length, position: point(g), spread: true }]
-				: symbolsOn
-					? [{ g, n: members.length, position: point(g), spread: false }]
-					: []
-		);
-		const closed = rings.filter((r) => !r.spread);
-		return [
-			...(spokes.length
-				? [
-						new LineLayer({
-							...common,
-							id: 'stack-spokes',
-							data: spokes,
-							getSourcePosition: (d: { from: [number, number] }) => [...d.from, 0],
-							getTargetPosition: (d: { to: [number, number] }) => [...d.to, 0],
-							getColor: [120, 114, 102, 140],
-							getWidth: 1,
-							widthUnits: 'pixels'
-						})
-					]
-				: []),
-			...(rings.length
-				? [
-						new ScatterplotLayer({
-							...common,
-							id: 'stack-rings',
-							data: rings,
-							getPosition: (d: { position: [number, number] }) => [...d.position, 0],
-							stroked: true,
-							filled: true,
-							getFillColor: [0, 0, 0, 1],
-							getLineColor: (d: { spread: boolean }) =>
-								d.spread ? ([...SYMBOL_INK.slice(0, 3), 70] as RGBA) : SYMBOL_INK,
-							getRadius: (d: { spread: boolean; n: number }) =>
-								d.spread ? stackRadius(d.n) + 6 : 6,
-							radiusUnits: 'pixels',
-							lineWidthUnits: 'pixels',
-							getLineWidth: 1,
-							pickable: true,
-							updateTriggers: { getLineColor: spreadStacks, getRadius: spreadStacks }
-						})
-					]
-				: []),
-			...(closed.length
-				? [
-						new TextLayer({
-							...common,
-							id: 'stack-badges',
-							data: closed,
-							getPosition: (d: { position: [number, number] }) => [...d.position, 0],
-							getText: (d: { n: number }) => `×${d.n}`,
-							getColor: SYMBOL_INK,
-							getSize: 10,
-							getTextAnchor: 'end',
-							getAlignmentBaseline: 'bottom',
-							getPixelOffset: [-6, -5],
-							background: true,
-							getBackgroundColor: [...PAPER.slice(0, 3), 220] as RGBA,
-							backgroundPadding: [2, 1],
-							fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
-							characterSet: 'auto'
-						})
-					]
-				: [])
-		];
-	}
+
 	/** The stack a pick belongs to: a stacked bus, a stack's ring, or the symbol of a branch
 	 * between two buses of one stack (a pole transformer, drawn on the stack's point). */
 	function pickedStack(info: PickingInfo): number | null {
@@ -1592,23 +698,6 @@
 		}
 		return null;
 	}
-	function stackCardRows(g: number) {
-		return (stacks?.groups[g] ?? []).map((i) => {
-			const bus = graph.buses[i];
-			const kinds = new Set(
-				Object.values(bus.terminal_attachments ?? {}).flatMap((list) => list.map((a) => a.kind))
-			);
-			const note = voltageNote(i);
-			return {
-				i,
-				id: bus.id,
-				level: zoneMv[zones.busZone[i]] ? 'MV' : 'LV',
-				attached: [...kinds].join(', '),
-				voltage: note ? note.replace(/^Worst voltage /, '').replace(/, (within|outside).*/, '') : ''
-			};
-		});
-	}
-
 	/** The route a pick belongs to, if it is shared. */
 	function pickedGroup(info: PickingInfo): number | null {
 		if (!equipment || info.index < 0 || !info.layer) return null;
@@ -1707,7 +796,7 @@
 				});
 			}
 		labels = placeLabels(candidates, { width, height, budget: 60 });
-		if (zoomedOut && landmarksOn && landmarkPool.length) {
+		if (zoomedOut && landmarksPref.value && landmarkPool.length) {
 			const placed = placeLandmarks(landmarkPool, screen, { width, height });
 			marks = { placed, strokes: landmarkStrokes(placed, 8 / scale) };
 		} else marks = null;
@@ -1762,45 +851,45 @@
 						}
 						if (next?.kind !== mc.hovered?.kind || next?.id !== mc.hovered?.id) mc.hovered = next;
 						const g = symbolsOn ? pickedGroup(info) : null;
-						if (g !== null) openGroup(g);
-						else leaveGroup();
+						if (g !== null) routePin.open(g);
+						else routePin.leave();
 						const sg = pickedStack(info);
-						if (sg !== null) openStack(sg);
-						else leaveStack();
+						if (sg !== null) stackPin.open(sg);
+						else stackPin.leave();
 					},
 					onClick: (info: PickingInfo) => {
 						if (info.index < 0 || !info.layer) {
 							// A click on empty canvas closes a pinned shared route or stack.
-							pinnedGroup = null;
-							pinnedStack = null;
+							routePin.pinned = null;
+							stackPin.pinned = null;
 							return;
 						}
 						if (info.layer.id === 'stack-rings') {
-							pinnedStack = (info.object as { g: number }).g;
+							stackPin.pinned = (info.object as { g: number }).g;
 							return;
 						}
 						// A stacked bus is ambiguous while its stack is closed: open it instead of guessing.
 						const stack = pickedStack(info);
 						if (stack !== null && !spreadStacks.includes(stack)) {
-							pinnedStack = stack;
+							stackPin.pinned = stack;
 							return;
 						}
-						if (stack !== null) pinnedStack = stack;
+						if (stack !== null) stackPin.pinned = stack;
 						if (info.layer.id === 'route-badges') {
-							pinnedGroup = (info.object as { g: number }).g;
+							routePin.pinned = (info.object as { g: number }).g;
 							return;
 						}
 						if (info.layer.id === 'fan-branches') {
 							pickedHere = true;
 							setTimeout(() => (pickedHere = false));
-							pinnedGroup = pickedGroup(info);
+							routePin.pinned = pickedGroup(info);
 							onselectedge(graph.edges[fanEdgeAt(info.index)].id);
 							return;
 						}
 						// A shared route is ambiguous when collapsed: open its members instead of guessing.
 						const shared = info.layer.id.startsWith('branches-') ? pickedGroup(info) : null;
-						if (shared !== null && !separateAll) {
-							pinnedGroup = shared;
+						if (shared !== null && !separatePref.value) {
+							routePin.pinned = shared;
 							return;
 						}
 						// Skip the fly-to for this selection; cleared after effects run, as a click on the
@@ -1829,32 +918,11 @@
 						}
 					},
 					getTooltip: (info: PickingInfo) =>
-						// A stack's ring opens its card, which says the rest; inside an open stack the
-						// card names the buses, and a tooltip would cover them.
-						info.index >= 0 &&
-						(info.layer?.id === 'stack-rings' ||
-							(activeStack !== null && pickedStack(info) === activeStack))
-							? null
-							: info.index >= 0 && info.layer?.id === 'fan-branches'
-								? null
-								: info.index >= 0 && info.layer?.id === 'route-badges'
-									? `${(info.object as { n: number }).n} branches share this route. Hover to separate them; click to keep them open.`
-									: info.index >= 0 && info.layer?.id === 'landmark-halos'
-										? landmarkTip(info.object as Landmark)
-										: info.index >= 0 && info.layer?.id.startsWith('zones')
-											? `${zoneLabel((info.object as { z: number }).z)}. Click to fit.`
-											: info.index >= 0 && info.layer?.id.startsWith('buses-')
-												? busTip(info.object as number)
-												: info.index >= 0 && info.layer?.id.startsWith('branches-')
-													? // A shared route's card names its branches; its hidden true route stays silent.
-														equipment &&
-														symbolsOn &&
-														equipment.routeOf[drawn.segmentEdge[info.index]] >= 0
-														? null
-														: branchTip(drawn.segmentEdge[info.index])
-													: info.index >= 0 && info.layer?.id === 'equipment-hits'
-														? itemLabel(info.object as EquipmentItem)
-														: null
+						tooltip(info, text, {
+							inOpenStack: (pick) => activeStack !== null && pickedStack(pick) === activeStack,
+							segmentEdge: (index) => drawn.segmentEdge[index],
+							symbolsOn
+						})
 				});
 				// Open where the user just was: the case's own positions (the map they were looking at),
 				// when it has them. The schematic is laid out meanwhile, so switching to it is quick.
@@ -1873,6 +941,8 @@
 	});
 	$effect(() => () => {
 		if (morph) cancelAnimationFrame(morph.raf);
+		stackPin.dispose();
+		routePin.dispose();
 		deck?.finalize();
 	});
 
@@ -1908,7 +978,7 @@
 	$effect(() => {
 		void [
 			camera,
-			landmarksOn,
+			landmarksPref.value,
 			landmarkPool,
 			zoomedOut,
 			colour,
@@ -2143,24 +1213,24 @@
 			const next = members.indexOf(tabEdge) + 1;
 			if (next >= members.length) {
 				tabEdge = -1;
-				pinnedGroup = null;
+				routePin.pinned = null;
 				return;
 			}
 			e.preventDefault();
 			tabEdge = members[next];
-			pinnedGroup = equipment.routeOf[tabEdge];
+			routePin.pinned = equipment.routeOf[tabEdge];
 			mc.hovered = { kind: 'branch', id: graph.edges[tabEdge].id };
-			announcement = `${branchTip(tabEdge)}. Enter selects; Tab for the next.`;
+			announcement = `${text.branch(tabEdge)}. Enter selects; Tab for the next.`;
 		} else if (e.key === 'Enter' && tabEdge >= 0) {
 			e.preventDefault();
 			onselectedge(graph.edges[tabEdge].id);
 		} else if (e.key === 'Enter' && cursor >= 0) {
 			e.preventDefault();
 			onselectbus(graph.buses[cursor].id);
-		} else if (e.key === 'Escape' && pinnedStack !== null) {
-			pinnedStack = null;
-		} else if (e.key === 'Escape' && pinnedGroup !== null) {
-			pinnedGroup = null;
+		} else if (e.key === 'Escape' && stackPin.pinned !== null) {
+			stackPin.pinned = null;
+		} else if (e.key === 'Escape' && routePin.pinned !== null) {
+			routePin.pinned = null;
 			tabEdge = -1;
 		} else if (e.key === 'Escape' && cursor >= 0) {
 			cursor = -1;
@@ -2201,41 +1271,10 @@
 			exported: new Date().toISOString()
 		});
 	}
-	const fileStem = () => `${mc.label.replace(/[^\w.-]+/g, '_')}-schematic`;
-	function download(blob: Blob, name: string) {
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = name;
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
-	}
-	function exportPng() {
+	async function exportPng() {
 		if (!deck || !canvas) return;
-		// Read the drawing buffer in the same task as a forced draw, before it is cleared.
-		deck.redraw('export');
-		const k = canvas.width / canvas.clientWidth;
-		const out = document.createElement('canvas');
-		const ctx = out.getContext('2d');
-		if (!ctx) return;
-		out.width = canvas.width;
-		out.height = canvas.height + TITLE_BLOCK_HEIGHT * k;
-		ctx.fillStyle = 'rgb(252 251 247)';
-		ctx.fillRect(0, 0, out.width, out.height);
-		ctx.drawImage(canvas, 0, 0);
-		const t = exportTitle();
-		for (const [col, lines] of [t.left, t.right].entries())
-			lines.forEach((line, i) => {
-				const lead = col === 0 && i === 0;
-				ctx.font = `${lead ? '600 ' : ''}${(lead ? 12 : 11) * k}px "IBM Plex Mono", monospace`;
-				ctx.fillStyle = lead ? 'rgb(32 36 43)' : 'rgb(77 81 86)';
-				ctx.fillText(
-					fitText(line, canvas!.clientWidth / 2),
-					(col * out.width) / 2 + 12 * k,
-					canvas!.height + (18 + i * 15) * k
-				);
-			});
-		out.toBlob((blob) => blob && download(blob, `${fileStem()}.png`), 'image/png');
+		const blob = await canvasPng(deck, canvas, exportTitle());
+		if (blob) download(blob, `${fileStem(mc.label)}.png`);
 	}
 	/** The schematic as a PowerIO diagram layer: load it with the case to reuse the layout. */
 	function exportLayer() {
@@ -2243,80 +1282,12 @@
 			strategy,
 			version: geometry.version ?? 0
 		});
-		download(new Blob([layer], { type: 'application/geo+json' }), `${fileStem()}.geo.json`);
+		download(new Blob([layer], { type: 'application/geo+json' }), `${fileStem(mc.label)}.geo.json`);
 	}
 	function exportSvg() {
-		const g = geometry;
-		const scale = 2 ** camera.zoom;
-		const x0 = camera.target[0] - width / 2 / scale;
-		const y0 = camera.target[1] - height / 2 / scale;
-		const css = (c: RGBA) => `rgb(${c[0]} ${c[1]} ${c[2]})`;
 		try {
-			const svg = viewportSvg({
-				bounds: [x0, y0, x0 + width / scale, y0 + height / scale],
-				scale,
-				width: Math.round(width),
-				height: Math.round(height),
-				background: css(PAPER),
-				ink: css(INK),
-				muted: 'rgb(77 81 86)',
-				lineSets: [
-					{
-						sources: drawn.sources,
-						targets: drawn.targets,
-						colors: segmentColours(drawn),
-						count: drawn.segmentEdge.length,
-						widths: segmentWidths(drawn)
-					},
-					...(symbolsOn && equipment
-						? [
-								{
-									sources: equipment.sources,
-									targets: equipment.targets,
-									colors: strokeColours(equipment.owner),
-									count: equipment.sources.length / 3,
-									width: 1.25
-								},
-								...(ticksOn
-									? [
-											{
-												sources: equipment.ticks.sources,
-												targets: equipment.ticks.targets,
-												colors: strokeColours(equipment.ticks.edge),
-												count: equipment.ticks.edge.length,
-												width: 1
-											}
-										]
-									: [])
-							]
-						: [])
-				],
-				points: {
-					positions: g.positions,
-					colors: Uint8Array.from(busColours.flat()),
-					count: graph.buses.length,
-					radius: 2.6
-				},
-				markers:
-					selectedBus >= 0
-						? [
-								{
-									position: g.positions.subarray(selectedBus * 3, selectedBus * 3 + 2),
-									radius: 7,
-									stroke: css(ACCENT)
-								}
-							]
-						: [],
-				texts: labels.map((l) => ({
-					position: l.position,
-					text: l.text,
-					dx: 6,
-					dy: -8,
-					color: css(l.state === 'violation' ? DANGER : l.state === 'warning' ? WARNING : INK)
-				})),
-				title: exportTitle()
-			});
-			download(new Blob([svg], { type: 'image/svg+xml' }), `${fileStem()}.svg`);
+			const svg = sceneSvg(scene(), { camera, width, height }, exportTitle());
+			download(new Blob([svg], { type: 'image/svg+xml' }), `${fileStem(mc.label)}.svg`);
 		} catch (e) {
 			status = e instanceof Error ? e.message : String(e);
 			setTimeout(() => (status = null), 4000);
@@ -2367,8 +1338,8 @@
 			<label class="check" title="Map tiles under the geographic positions, as on the main map"
 				><input
 					type="checkbox"
-					checked={basemapOn}
-					onchange={(e) => rememberBasemap(e.currentTarget.checked)}
+					checked={basemapPref.value}
+					onchange={(e) => basemapPref.set(e.currentTarget.checked)}
 				/> Basemap</label
 			>
 		{/if}
@@ -2436,18 +1407,18 @@
 			class="key"
 			style:bottom="{panels.compact ? app.sheetInset + 12 : 24}px"
 			style:left="{toolLeft}px"
-			open={keyOpen}
-			ontoggle={(e) => rememberKey(e.currentTarget.open)}
+			open={keyPref.value}
+			ontoggle={(e) => keyPref.set(e.currentTarget.open)}
 		>
 			<summary>Key</summary>
 			<label class="toggle"
 				><input
 					type="checkbox"
-					checked={landmarksOn}
-					onchange={(e) => rememberLandmarks(e.currentTarget.checked)}
+					checked={landmarksPref.value}
+					onchange={(e) => landmarksPref.set(e.currentTarget.checked)}
 				/> Landmarks</label
 			>
-			{#if landmarksOn}
+			{#if landmarksPref.value}
 				<ul class="symbols" aria-label="Landmarks">
 					{#each [['source', 'source, always shown'], ['generator', 'generator'], ['ibr', 'large inverter-based resource'], ['transformer', 'transformer']] as [kind, label] (kind)}
 						{#if landmarkPool.some((l) => l.kind === kind)}
@@ -2468,8 +1439,8 @@
 			class="key"
 			style:bottom="{panels.compact ? app.sheetInset + 12 : 24}px"
 			style:left="{toolLeft}px"
-			open={keyOpen}
-			ontoggle={(e) => rememberKey(e.currentTarget.open)}
+			open={keyPref.value}
+			ontoggle={(e) => keyPref.set(e.currentTarget.open)}
 		>
 			<summary>Key</summary>
 			<ul class="symbols" aria-label="Symbols">
@@ -2478,8 +1449,8 @@
 						<label class="toggle"
 							><input
 								type="checkbox"
-								checked={separateAll}
-								onchange={(e) => rememberSeparate(e.currentTarget.checked)}
+								checked={separatePref.value}
+								onchange={(e) => separatePref.set(e.currentTarget.checked)}
 							/> Separate overlapping buses and lines</label
 						>
 					</li>
@@ -2519,117 +1490,63 @@
 		</details>
 	{/if}
 	{#if activeStack !== null && stacks && shown}
-		{@const first = stacks.groups[activeStack][0]}
+		{@const members = stacks.groups[activeStack]}
 		{@const k = 2 ** camera.zoom}
-		{@const gap = stackRadius(stacks.groups[activeStack].length) + 10}
-		{@const sx = (shown.positions[first * 3] - camera.target[0]) * k + width / 2}
-		{@const sy = (shown.positions[first * 3 + 1] - camera.target[1]) * k + height / 2}
-		<!-- svelte-ignore a11y_no_static_element_interactions (Pointer bookkeeping only: the rows are buttons.) -->
-		<div
-			class="route-card"
-			style:left={sx + 460 < width ? `${sx + gap}px` : null}
-			style:right={sx + 460 < width ? null : `${width - sx + gap}px`}
-			style:top={sy + 180 < height ? `${sy + gap}px` : null}
-			style:bottom={sy + 180 < height ? null : `${height - sy + gap}px`}
-			onpointerenter={() => {
-				stackCardHovered = true;
-				if (stackTimer) clearTimeout(stackTimer);
-				stackTimer = null;
-			}}
-			onpointerleave={() => {
-				stackCardHovered = false;
-				leaveStack();
-			}}
-			onkeydown={(e) => {
-				if (e.key === 'Escape') {
-					pinnedStack = null;
-					hoverStack = null;
-				}
+		<PickCard
+			x={(shown.positions[members[0] * 3] - camera.target[0]) * k + width / 2}
+			y={(shown.positions[members[0] * 3 + 1] - camera.target[1]) * k + height / 2}
+			stage={{ width, height }}
+			gap={stackRadius(members.length) + 10}
+			reach={460}
+			heading="{members.length} buses at this point"
+			label="Buses at this point"
+			rows={text.stackRows(members)}
+			pin={stackPin}
+			selected={(row) => selectedBus === row.i}
+			onhover={(row) => (mc.hovered = row ? { kind: 'bus', id: row.id } : null)}
+			onpick={(row) => {
+				stackPin.pinned = activeStack;
+				onselectbus(row.id);
 			}}
 		>
-			<p>
-				{stacks.groups[activeStack].length} buses at this point{pinnedStack !== null
-					? ''
-					: ' · click to keep open'}
-			</p>
-			<ul aria-label="Buses at this point">
-				{#each stackCardRows(activeStack) as row (row.i)}
-					<li>
-						<button
-							aria-pressed={selectedBus === row.i}
-							onpointerenter={() => (mc.hovered = { kind: 'bus', id: row.id })}
-							onpointerleave={() => (mc.hovered = null)}
-							onclick={() => {
-								pinnedStack = activeStack;
-								onselectbus(row.id);
-							}}
-						>
-							<span class="id" title={row.id}>{row.id}</span>
-							<span>{row.level}</span>
-							<span>{row.attached || '—'}</span>
-							{#if row.voltage}<span>{row.voltage}</span>{/if}
-						</button>
-					</li>
-				{/each}
-			</ul>
-		</div>
+			{#snippet cells(row)}
+				<span class="id" title={row.id}>{row.id}</span>
+				<span>{row.level}</span>
+				<span>{row.attached || '—'}</span>
+				{#if row.voltage}<span>{row.voltage}</span>{/if}
+			{/snippet}
+		</PickCard>
 	{/if}
 	{#if activeGroup !== null && equipment}
-		{@const middle = routeMiddle(equipment.routeGroups[activeGroup], equipment.host, geometry)}
+		{@const members = equipment.routeGroups[activeGroup]}
+		{@const middle = routeMiddle(members, equipment.host, geometry)}
 		{#if middle}
 			{@const k = 2 ** camera.zoom}
-			{@const sx = (middle[0] - camera.target[0]) * k + width / 2}
-			{@const sy = (middle[1] - camera.target[1]) * k + height / 2}
-			<!-- svelte-ignore a11y_no_static_element_interactions (Pointer bookkeeping only: the rows are buttons.) -->
-			<div
-				class="route-card"
-				style:left={sx + 440 < width ? `${sx + 16}px` : null}
-				style:right={sx + 440 < width ? null : `${width - sx + 16}px`}
-				style:top={sy + 180 < height ? `${sy + 16}px` : null}
-				style:bottom={sy + 180 < height ? null : `${height - sy + 16}px`}
-				onpointerenter={() => {
-					cardHovered = true;
-					if (collapseTimer) clearTimeout(collapseTimer);
-					collapseTimer = null;
-				}}
-				onpointerleave={() => {
-					cardHovered = false;
-					leaveGroup();
-				}}
-				onkeydown={(e) => {
-					if (e.key === 'Escape') {
-						pinnedGroup = null;
-						hoverGroup = null;
-					}
+			<PickCard
+				x={(middle[0] - camera.target[0]) * k + width / 2}
+				y={(middle[1] - camera.target[1]) * k + height / 2}
+				stage={{ width, height }}
+				gap={16}
+				reach={440}
+				heading="{members.length} branches on this route"
+				label="Branches on this route"
+				rows={text.routeRows(members)}
+				pin={routePin}
+				selected={(row) => selectedEdges.has(row.k)}
+				onhover={(row) => (mc.hovered = row ? { kind: 'branch', id: row.id } : null)}
+				onpick={(row) => {
+					routePin.pinned = activeGroup;
+					onselectedge(row.id);
 				}}
 			>
-				<p>
-					{equipment.routeGroups[activeGroup].length} branches on this route{pinnedGroup !== null
-						? ''
-						: ' · click to keep open'}
-				</p>
-				<ul aria-label="Branches on this route">
-					{#each routeCardRows(activeGroup) as row (row.k)}
-						<li>
-							<button
-								aria-pressed={selectedEdges.has(row.k)}
-								onpointerenter={() => (mc.hovered = { kind: 'branch', id: row.id })}
-								onpointerleave={() => (mc.hovered = null)}
-								onclick={() => {
-									pinnedGroup = activeGroup;
-									onselectedge(row.id);
-								}}
-							>
-								<span class="id" title={row.id}>{row.id}</span>
-								<span>{row.kind}</span>
-								<span>{row.level}</span>
-								<span>{row.wires}</span>
-								{#if row.loading}<span class={row.state}>{row.loading}</span>{/if}
-							</button>
-						</li>
-					{/each}
-				</ul>
-			</div>
+				{#snippet cells(row)}
+					<span class="id" title={row.id}>{row.id}</span>
+					<span>{row.kind}</span>
+					<span>{row.level}</span>
+					<span>{row.wires}</span>
+					{#if row.loading}<span class={row.state}>{row.loading}</span>{/if}
+				{/snippet}
+			</PickCard>
 		{/if}
 	{/if}
 	{#if basemapOpacity > 0}
@@ -2754,57 +1671,6 @@
 		display: flex;
 		gap: 4px;
 		align-items: center;
-	}
-	.route-card {
-		position: absolute;
-		z-index: 2;
-		width: max-content;
-		min-width: 280px;
-		max-width: 420px;
-		padding: 4px 6px;
-		font: 10px var(--font-mono);
-		color: var(--text-secondary);
-		background: var(--paper);
-		border: 1px solid var(--line);
-		border-radius: 3px;
-		box-shadow: var(--elev-1);
-	}
-	.route-card p {
-		margin: 0 0 3px;
-	}
-	.route-card ul {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.route-card button {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto auto auto;
-		gap: 8px;
-		width: 100%;
-		padding: 2px 4px;
-		font: inherit;
-		text-align: left;
-		color: var(--ink);
-		background: none;
-		border: 0;
-		border-radius: 2px;
-		cursor: pointer;
-	}
-	.route-card button:hover,
-	.route-card button[aria-pressed='true'] {
-		background: var(--accent-soft);
-	}
-	.route-card .id {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.route-card .violation {
-		color: var(--text-danger);
-	}
-	.route-card .warning {
-		color: var(--accent);
 	}
 	.key .toggle {
 		display: flex;
