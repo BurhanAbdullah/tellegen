@@ -634,7 +634,7 @@
 						['transformer', branchGlyph('transformer', true), 'transformer'],
 						['switch', branchGlyph('switch', true), 'switch, closed'],
 						['switch', branchGlyph('switch', false), 'switch, open'],
-						...(['source', 'generator', 'ibr', 'load', 'shunt'] as const).map(
+						...(['source', 'generator', 'ibr', 'load', 'shunt', 'earth'] as const).map(
 							(k) => [k, attachmentGlyph(k), ATTACHMENT_NAMES[k]] as const
 						)
 					] as [EquipmentItem['kind'], Glyph | null, string][]

@@ -65,8 +65,11 @@ export function branchGlyph(kind: string, closed: boolean): Glyph | null {
 /** Attachment glyphs, connected at the origin and extending along +x. A load is a demand arrow, a
  * generator a machine circle with a G, an external source an AC supply circle with a sinusoid, an
  * inverter-based resource a converter box (DC bar, diagonal, AC wave), and a shunt a general
- * admittance block: BMOPF shunts can be conductive, so no capacitor is asserted. */
-export function attachmentGlyph(kind: DistAttachmentKind): Glyph {
+ * admittance block: BMOPF shunts can be conductive, so no capacitor is asserted. A shunt on a bus's
+ * neutral and nothing else is a neutral earth through an impedance (an MEN electrode, say): drawn
+ * as an impedance box in series with the IEC 60617 earth (three shrinking bars), not as a solid
+ * earth, since a shunt always has finite admittance. */
+export function attachmentGlyph(kind: SymbolKind): Glyph {
 	const lead: [number, number][] = [
 		[0, 0],
 		[0.4, 0]
@@ -108,6 +111,37 @@ export function attachmentGlyph(kind: DistAttachmentKind): Glyph {
 					[1.1, -0.5]
 				],
 				sine(1.75, 0.5, 0.3, 0.18, 8)
+			];
+		case 'earth':
+			return [
+				[
+					[0, 0],
+					[0.3, 0]
+				],
+				[
+					[0.3, -0.22],
+					[1.1, -0.22],
+					[1.1, 0.22],
+					[0.3, 0.22],
+					[0.3, -0.22]
+				],
+				[
+					[1.1, 0],
+					[1.4, 0],
+					[1.4, 0.3]
+				],
+				[
+					[1.0, 0.3],
+					[1.8, 0.3]
+				],
+				[
+					[1.15, 0.55],
+					[1.65, 0.55]
+				],
+				[
+					[1.3, 0.8],
+					[1.5, 0.8]
+				]
 			];
 		case 'shunt':
 			return [
@@ -158,25 +192,44 @@ export function conductorSet(graph: DistGraph, k: number): { phases: number; neu
 	return { phases: edge.conductors.length - (neutral ? 1 : 0), neutral };
 }
 
-/** Drawing order of attachment kinds below a bus. */
-export const ATTACHMENT_ORDER: DistAttachmentKind[] = [
+/** Attachment symbols: the PowerIO kinds, plus `earth` for a shunt on a bus's neutral alone. */
+export type SymbolKind = DistAttachmentKind | 'earth';
+
+/** Drawing order of attachment kinds below a bus. A neutral earth shares the shunt slot (the
+ * engine layout reserves one slot per PowerIO kind). */
+export const ATTACHMENT_ORDER: SymbolKind[] = [
 	'source',
 	'generator',
 	'ibr',
 	'load',
-	'shunt'
+	'shunt',
+	'earth'
 ];
-export const ATTACHMENT_NAMES: Record<DistAttachmentKind, string> = {
+export const ATTACHMENT_NAMES: Record<SymbolKind, string> = {
 	source: 'source',
 	generator: 'generator',
 	ibr: 'inverter-based resource',
 	load: 'load',
-	shunt: 'shunt'
+	shunt: 'shunt',
+	earth: 'neutral earth'
 };
+
+/** Shunts of `bus` connected to its neutral terminal and to nothing else: neutral earths. */
+export function neutralEarths(bus: DistGraph['buses'][number]): Set<string> {
+	const neutral = bus.neutral_terminal;
+	const out = new Set<string>();
+	if (!neutral) return out;
+	const elsewhere = new Set<string>();
+	for (const [terminal, list] of Object.entries(bus.terminal_attachments ?? {}))
+		for (const a of list)
+			if (a.kind === 'shunt') (terminal === neutral ? out : elsewhere).add(a.id);
+	for (const id of elsewhere) out.delete(id);
+	return out;
+}
 
 /** One symbol: what it stands for and where to pick it. */
 export interface EquipmentItem {
-	kind: DistAttachmentKind | 'transformer' | 'switch';
+	kind: SymbolKind | 'transformer' | 'switch';
 	/** Branch index for inline symbols, bus index for attachments. */
 	edge: number;
 	bus: number;
@@ -388,33 +441,40 @@ export function schematicEquipment(
 	});
 
 	graph.buses.forEach((bus, i) => {
-		const byKind = new Map<DistAttachmentKind, Set<string>>();
+		const earths = neutralEarths(bus);
+		const byKind = new Map<SymbolKind, Set<string>>();
 		for (const list of Object.values(bus.terminal_attachments ?? {}))
 			for (const a of list) {
-				const ids = byKind.get(a.kind) ?? new Set<string>();
+				const kind: SymbolKind = a.kind === 'shunt' && earths.has(a.id) ? 'earth' : a.kind;
+				const ids = byKind.get(kind) ?? new Set<string>();
 				ids.add(a.id);
-				byKind.set(a.kind, ids);
+				byKind.set(kind, ids);
 			}
 		if (!byKind.size) return;
 		const [bx, by] = [geometry.positions[i * 3], geometry.positions[i * 3 + 1]];
 		const present = ATTACHMENT_ORDER.filter((kind) => byKind.has(kind));
+		// A neutral earth takes the shunt slot; with a real shunt too, it sits beside it.
+		const slots = present.filter((k) => !(k === 'earth' && byKind.has('shunt')));
 		const owner = -(i + 1);
 		// Riser from the bus down to the last slot.
 		src.push(bx, by, 0);
-		dst.push(bx, by + present.length * gap, 0);
+		dst.push(bx, by + slots.length * gap, 0);
 		own.push(owner);
-		present.forEach((kind, slot) => {
+		present.forEach((kind) => {
+			const beside = kind === 'earth' && byKind.has('shunt');
+			const slot = slots.indexOf(beside ? 'shunt' : kind);
 			const y = by + (slot + 1) * gap;
-			src.push(bx, y, 0);
-			dst.push(bx + unit * 0.6, y, 0);
+			const x0 = bx + unit * (beside ? 2.9 : 0.6);
+			src.push(beside ? bx + unit * 2.6 : bx, y, 0);
+			dst.push(x0, y, 0);
 			own.push(owner);
-			stroke(attachmentGlyph(kind), bx + unit * 0.6, y, 1, 0, owner);
+			stroke(attachmentGlyph(kind), x0, y, 1, 0, owner);
 			items.push({
 				kind,
 				edge: -1,
 				bus: i,
 				ids: [...byKind.get(kind)!],
-				x: bx + unit * 1.8,
+				x: x0 + unit * 1.2,
 				y
 			});
 			kinds.add(kind);

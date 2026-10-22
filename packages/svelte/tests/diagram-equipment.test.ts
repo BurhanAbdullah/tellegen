@@ -13,6 +13,7 @@ import {
 	displayTree,
 	conductorSet,
 	conductorTicks,
+	neutralEarths,
 	energisation,
 	shortNames,
 	distinctiveCores,
@@ -150,8 +151,44 @@ describe('schematic equipment symbols', () => {
 		expect(open.at(-1)!.at(-1)![1]).toBeLessThan(-0.5);
 	});
 
+	it('draws a shunt on the neutral alone as a neutral earth, any other shunt as a shunt', () => {
+		const b = {
+			...bus('N', [
+				['n', 'shunt', 'men'],
+				['1', 'shunt', 'cap'],
+				['n', 'shunt', 'cap']
+			]),
+			neutral_terminal: 'n'
+		};
+		// `men` connects only the neutral; `cap` also a phase, so it stays a general shunt.
+		expect([...neutralEarths(b)]).toEqual(['men']);
+		expect(neutralEarths({ ...b, neutral_terminal: null }).size).toBe(0);
+		const g: DistGraph = { buses: [{ ...b, has_source: true }], edges: [] };
+		const one = schematicEquipment(
+			g,
+			fromEngineLayout({
+				...layout,
+				positions: [0, 0],
+				segments: [],
+				segment_edge: [],
+				role: [],
+				parent: [0],
+				parent_edge: [-1],
+				depth: [0],
+				roots: [0],
+				attachment_slots: [1]
+			})
+		);
+		const kinds = one.items.map((d) => [d.kind, d.ids, d.y]);
+		// Both share the one shunt slot the engine reserved, the earth beside the shunt.
+		expect(kinds).toEqual([
+			['shunt', ['cap'], 22],
+			['earth', ['men'], 22]
+		]);
+	});
+
 	it('gives every attachment kind a distinct glyph connected at its origin', () => {
-		const kinds = ['load', 'generator', 'source', 'ibr', 'shunt'] as const;
+		const kinds = ['load', 'generator', 'source', 'ibr', 'shunt', 'earth'] as const;
 		const paths = kinds.map((k) => glyphPath(attachmentGlyph(k), 10));
 		expect(new Set(paths).size).toBe(kinds.length);
 		for (const k of kinds) expect(attachmentGlyph(k)[0][0]).toEqual([0, 0]);

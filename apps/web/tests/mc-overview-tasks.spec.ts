@@ -110,7 +110,7 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 		'active power flow',
 		'source',
 		'load',
-		'shunt'
+		'neutral earth'
 	]);
 	// Zoomed far out, symbols would be specks: the plain lines carry the drawing instead.
 	await page.getByRole('application', { name: 'Schematic diagram' }).focus();
@@ -143,7 +143,7 @@ test('the schematic can be walked bus by bus from the keyboard', async ({ page }
 	await schematic.focus();
 	const spoken = schematic.locator('[aria-live]');
 	await page.keyboard.press('ArrowRight');
-	await expect(spoken).toHaveText(/^src: source bus\. 1 branch onward\. 1 source, 1 shunt/);
+	await expect(spoken).toHaveText(/^src: source bus\. 1 branch onward\. 1 source, 1 neutral earth/);
 	await page.keyboard.press('ArrowRight');
 	await expect(spoken).toHaveText(
 		/^lb: 1 step from src, fed by line l1\. 0 branches onward\. 3 loads\. Worst voltage c–n 203\.4 V, outside 207\.0 V to 253\.0 V/

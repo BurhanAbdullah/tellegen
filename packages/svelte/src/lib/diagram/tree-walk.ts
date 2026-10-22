@@ -1,6 +1,6 @@
 import type { DistGraph } from '@tellegen/engine';
 import type { DisplayTree } from './display-tree.js';
-import { ATTACHMENT_NAMES, ATTACHMENT_ORDER } from './schematic-equipment.js';
+import { ATTACHMENT_NAMES, ATTACHMENT_ORDER, neutralEarths } from './schematic-equipment.js';
 
 export type WalkKey = 'parent' | 'child' | 'previous' | 'next' | 'root';
 
@@ -78,8 +78,12 @@ export function describeBus(
 			: '';
 	const onward = walk.children[i].length;
 	const counts = new Map<string, Set<string>>();
+	const earths = neutralEarths(bus);
 	for (const list of Object.values(bus.terminal_attachments ?? {}))
-		for (const a of list) counts.set(a.kind, (counts.get(a.kind) ?? new Set()).add(a.id));
+		for (const a of list) {
+			const kind = a.kind === 'shunt' && earths.has(a.id) ? 'earth' : a.kind;
+			counts.set(kind, (counts.get(kind) ?? new Set()).add(a.id));
+		}
 	const attached = ATTACHMENT_ORDER.filter((k) => counts.has(k)).map((k) => {
 		const c = counts.get(k)!.size;
 		return `${c} ${ATTACHMENT_NAMES[k]}${c === 1 ? '' : 's'}`;
