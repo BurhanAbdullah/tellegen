@@ -46,7 +46,7 @@ In *Geographic*, the schematic draws over the same basemap as the main map (CART
 
 For a selected branch, a multi-wire view draws every conductor between the two buses' terminal rails, so a crossed terminal map shows as crossing wires, with grounded terminals, terminal attachments and each conductor's current. A transformer is drawn as a winding box with wires meeting it from each side: its windings couple magnetically, with no conductor continuity across them.
 
-Once a study is saved, the address bar records it with the selection and view (`?study=…&sel=bus:…&view=schematic`), and *Copy link* copies that address. The link reopens the study in a browser that holds it, saved there or imported from an export; it does not carry the data itself.
+Once a study is saved, the address bar records it with the selection and view (`?study=…&sel=bus:…&view=schematic`), and *Copy view link* copies that address. The link reopens the study in a browser that holds it, saved there or imported from an export; it does not carry the data itself.
 
 Search finds buses and branches by ID. The bus and branch tables sort, filter to issues, and follow the selection; arrow keys move it. CSV exports keep full precision and begin with the case and solve that produced them. Cases with more than 25,000 buses compute the overview when asked rather than after every load edit, because reading a full result of that size takes a noticeable fraction of a second ([evidence](https://github.com/eigenergy/tellegen/tree/main/evidence/diagram)).
 

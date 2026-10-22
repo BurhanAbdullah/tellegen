@@ -182,8 +182,7 @@ test('typed distribution case runs inside Studies and survives saved reopen', as
 	await expect(
 		study.locator('dt').filter({ hasText: 'Source P / Q' }).locator('..').locator('dd')
 	).toHaveText(`${(source.re / 1000).toFixed(3)} / ${(source.im / 1000).toFixed(3)} kW / kvar`);
-	// The overview's results grid is labelled "Bus results" too; pick the bus selector.
-	await study.locator('select').and(study.getByLabel('Bus result')).selectOption('lb');
+	await study.getByLabel('Bus result').selectOption('lb');
 	await study.getByText('Voltages to neutral', { exact: true }).click();
 	type Terminal = { bus: string; terminal: string; voltage: { re: number; im: number } };
 	const terminals = (result.terminals as Terminal[]).filter((row) => row.bus === 'lb');
@@ -293,10 +292,7 @@ test('built-in four-wire demo solves and a three-wire case omits neutral-relativ
 	await expect(threeWireStudy.getByText('Converged', { exact: true })).toBeVisible({
 		timeout: 60_000
 	});
-	await threeWireStudy
-		.locator('select')
-		.and(threeWireStudy.getByLabel('Bus result'))
-		.selectOption('lb');
+	await threeWireStudy.getByLabel('Bus result').selectOption('lb');
 	await expect(threeWireStudy.getByText('Voltages to neutral', { exact: true })).toHaveCount(0);
 });
 

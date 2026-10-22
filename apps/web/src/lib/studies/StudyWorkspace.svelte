@@ -518,9 +518,9 @@
 						onclick={() => void attempt(() => workspace.saveMulti())}>Save result</button
 					>
 					{#if linkable}<button
-							title="Links reopen this saved study, its selection and view in a browser that holds it"
+							title="A link back to this saved study, its selection and view. It opens only in a browser that holds the study, saved there or imported from an export; it does not carry the data."
 							onclick={() => void attempt(copyLink)}
-							>{linkCopied ? 'Link copied' : 'Copy link'}</button
+							>{linkCopied ? 'Link copied' : 'Copy view link'}</button
 						>{/if}
 				</div>
 				{#if !multi.mcPfSupported}<button

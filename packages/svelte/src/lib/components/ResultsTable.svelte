@@ -97,7 +97,7 @@
 	<div
 		class="scroll"
 		role="grid"
-		aria-label="{model.kind === 'bus' ? 'Bus' : 'Branch'} results"
+		aria-label="Results by {model.kind === 'bus' ? 'bus' : 'branch'}"
 		aria-rowcount={rows.length}
 		tabindex="0"
 		style:height="{HEIGHT}px"

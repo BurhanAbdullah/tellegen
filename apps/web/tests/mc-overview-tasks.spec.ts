@@ -173,7 +173,9 @@ test('8. a link reopens the saved study with its selection and view', async ({ p
 	await overview.locator('.issues button').first().click();
 	await overview.getByRole('button', { name: 'Show schematic' }).click();
 	await page.getByRole('button', { name: 'Save result' }).click();
-	await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByRole('button', { name: 'Copy view link' })).toBeVisible({
+		timeout: 30_000
+	});
 	await expect(page).toHaveURL(/[?&]study=[^&]+.*sel=bus%3Alb|sel=bus%3Alb.*study=/);
 	await expect(page).toHaveURL(/view=schematic/);
 
@@ -198,7 +200,7 @@ test('the overview works from the keyboard alone', async ({ page }) => {
 
 	// The table grid follows the shared selection and moves it with arrow keys.
 	await overview.getByText('Results table').click();
-	const grid = overview.getByRole('grid', { name: 'Bus results' });
+	const grid = overview.getByRole('grid', { name: 'Results by bus' });
 	await grid.focus();
 	await page.keyboard.press('Home');
 	await expect(grid.locator('[role=row][aria-selected=true]')).toHaveCount(1);
@@ -341,7 +343,7 @@ test('a center-tap transformer (one id, several graph edges) does not break the 
 	const overview = page.getByRole('region', { name: 'Operating point overview' });
 	await expect(overview.getByRole('heading', { name: /^Issues/ })).toBeVisible({ timeout: 60_000 });
 	await page.getByText('Equipment currents and power').click();
-	const equipment = page.locator('select').and(page.getByLabel('Branch result'));
+	const equipment = page.getByLabel('Branch result');
 	await expect(equipment.locator('option', { hasText: 't1' })).toHaveCount(1);
 	await overview.getByRole('button', { name: 'Show schematic' }).click();
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();

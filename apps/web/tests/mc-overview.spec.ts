@@ -53,7 +53,7 @@ test('multiconductor overview ranks declared-limit issues and links them to the 
 
 	await overview.getByText('Results table').click();
 	await overview.getByRole('tab', { name: 'Branches' }).click();
-	const table = overview.getByRole('grid', { name: 'Branch results' });
+	const table = overview.getByRole('grid', { name: 'Results by branch' });
 	await expect(table.locator('[role=row][aria-selected=true]')).toContainText('l1');
 
 	const download = page.waitForEvent('download');
