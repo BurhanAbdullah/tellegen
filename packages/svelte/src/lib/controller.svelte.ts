@@ -2450,6 +2450,54 @@ export class Controller {
 		return full ? mcPfResultDetail(full, query, summary.solve_count) : null;
 	};
 
+	/** Above this many buses, reading and indexing the whole operating point takes a noticeable
+	 * fraction of a second (evidence/diagram), so the overview is computed on request instead of
+	 * after every solve. */
+	static readonly AUTO_OVERVIEW_MAX_BUSES = 25_000;
+	private overviewSeq = 0;
+
+	/** Whether this case computes its overview only on request. */
+	overviewOnRequest = (c: MulticonductorCase) =>
+		(c.graph?.buses.length ?? 0) > Controller.AUTO_OVERVIEW_MAX_BUSES;
+
+	/** Read the whole operating point into `c.overviewResult` for the overview and the diagram. The
+	 * previous result stays visible until the read lands; a newer read supersedes it. */
+	readOverview = (c: MulticonductorCase) => this.startOverviewRead(c, ++this.overviewSeq);
+
+	private startOverviewRead(c: MulticonductorCase, seq: number) {
+		c.overviewLoading = true;
+		this.multiFullResult(c).then(
+			(full) => {
+				if (seq !== this.overviewSeq) return;
+				if (full) c.overviewResult = full;
+				c.overviewLoading = false;
+			},
+			() => {
+				if (seq === this.overviewSeq) c.overviewLoading = false;
+			}
+		);
+	}
+
+	/** Follow the active case's solves: read its operating point once load edits settle, or clear it
+	 * for a case that computes the overview on request. Call from an effect that tracks the case's
+	 * `result` and `mcFullResult`; the returned function cancels a pending read. */
+	followOverview = (c: MulticonductorCase | null): (() => void) | undefined => {
+		const seq = ++this.overviewSeq;
+		if (!c) return;
+		if (c.result?.solve_count === undefined || this.overviewOnRequest(c)) {
+			c.overviewResult = null;
+			c.overviewLoading = false;
+			return;
+		}
+		c.overviewLoading = true;
+		const timer = setTimeout(() => this.startOverviewRead(c, seq), 300);
+		return () => {
+			clearTimeout(timer);
+			// A read still in flight is superseded by the next one, so this case is no longer loading.
+			c.overviewLoading = false;
+		};
+	};
+
 	/** The complete operating point for whole-network views: the stored result, or one read from
 	 * the live session. Null when there is no result or it changed before the read finished. */
 	multiFullResult = async (c: MulticonductorCase): Promise<McPfResult | null> => {
