@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getController } from '../context.svelte.js';
 	import { fmt, signed } from '../format.js';
+	import { sliderKeyValue } from '../slider.js';
 
 	const ctrl = getController();
 
@@ -64,7 +65,15 @@
 				bind:value={ctrl.ratingSliderCurrent, ctrl.setRatingPreview}
 				aria-label="rating delta at selected line"
 				onpointerdown={() => ctrl.setRatingPreview(ctrl.ratingSliderValue)}
-				onkeydown={() => ctrl.setRatingPreview(ctrl.ratingSliderValue)}
+				onkeydown={(e) => {
+					const next = sliderKeyValue(e.key, ctrl.ratingSliderValue, bounds.min, bounds.max);
+					if (next === null) {
+						ctrl.setRatingPreview(ctrl.ratingSliderValue);
+						return;
+					}
+					e.preventDefault();
+					ctrl.setRatingPreview(next);
+				}}
 				onpointerup={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}
 				onkeyup={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}
 				onchange={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}

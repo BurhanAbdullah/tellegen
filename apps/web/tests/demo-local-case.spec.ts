@@ -98,6 +98,44 @@ test('slider drag shows the scaled LMP preview legend', async ({ page }) => {
 	expect(parseShift(await labels.innerText()) / atFull).toBeLessThan(0.6);
 });
 
+test('arrow keys commit a demand step on a bus under 50 MW', async ({ page }) => {
+	await page.route('**/api/cases', (route) => {
+		void route.fulfill({ json: [] });
+	});
+
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type="file"]').setInputFiles([
+		{
+			name: 'case14-coords.csv',
+			mimeType: 'text/csv',
+			buffer: Buffer.from(CASE14_COORDS)
+		},
+		{
+			name: 'case14synthetic.m',
+			mimeType: 'text/plain',
+			buffer: Buffer.from(CASE14)
+		}
+	]);
+	await expect(page.locator('.solvecard')).toContainText('OPF solve', { timeout: 60_000 });
+
+	// Bus 11 carries 3.5 MW, so its nearby range spans 8 MW. The native 1%
+	// arrow step of 0.08 MW stayed inside the 0.25 MW dead zone and committed
+	// nothing.
+	const lookup = page.locator('#bus-lookup-input');
+	await lookup.fill('11');
+	await lookup.press('Enter');
+	await expect(page.locator('.chip', { hasText: '∂LMP/∂d' })).toBeVisible({ timeout: 30_000 });
+	const slider = page.getByLabel('demand delta at selected bus');
+	await slider.press('ArrowRight');
+	await expect(page.locator('.slider-head .val')).toHaveText('+0.5 MW');
+	await expect(page.getByRole('button', { name: 'reset demand' })).toBeVisible({
+		timeout: 30_000
+	});
+	await expect(page.getByRole('group', { name: 'demand range' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'full range of demand' })).toHaveText('full range');
+});
+
 test('network and solver panel text is at least 12 px', async ({ page }) => {
 	await page.route('**/api/cases', (route) => {
 		void route.fulfill({ json: [] });

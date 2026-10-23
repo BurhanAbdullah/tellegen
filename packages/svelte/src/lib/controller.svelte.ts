@@ -65,6 +65,7 @@ import {
 	type SensTarget
 } from '@tellegen/engine';
 import { errorText, extent, formulationLabel, rgbaCss } from './format.js';
+import { DEAD_ZONE_MW } from './slider.js';
 
 const HIDDEN_DEFAULT_CASES_KEY = 'tellegen.hiddenDefaultCases.v1';
 // Open on South Carolina by default: it has the most interesting price action.
@@ -614,7 +615,7 @@ export class Controller {
 	// reads as "no change at this bus".
 	previewDeltas(c: SolvableCase, bus: number, value: number) {
 		const deltas = { ...this.caseDeltas(c) };
-		if (Math.abs(value) < 0.25) delete deltas[bus];
+		if (Math.abs(value) < DEAD_ZONE_MW) delete deltas[bus];
 		else deltas[bus] = value;
 		return deltas;
 	}
@@ -873,9 +874,9 @@ export class Controller {
 			this.activeSolvable?.solving ||
 			this.app.previewActive ||
 			(this.app.previewDeltaMw !== null &&
-				Math.abs(this.sliderValue - this.committedDelta) >= 0.25) ||
+				Math.abs(this.sliderValue - this.committedDelta) >= DEAD_ZONE_MW) ||
 			(this.app.previewRatingMw !== null &&
-				Math.abs(this.ratingSliderValue - this.committedRating) >= 0.25)
+				Math.abs(this.ratingSliderValue - this.committedRating) >= DEAD_ZONE_MW)
 		)
 	);
 
@@ -1949,7 +1950,7 @@ export class Controller {
 
 	finishDemandInput = (value: number) => {
 		if (this.sliderDisabled) return;
-		if (Math.abs(value - this.committedDelta) < 0.25) {
+		if (Math.abs(value - this.committedDelta) < DEAD_ZONE_MW) {
 			if (!this.activeSolvable?.solving) {
 				this.app.previewActive = false;
 				this.app.previewDeltaMw = null;
@@ -3075,7 +3076,7 @@ export class Controller {
 		const col = c.sensitivity;
 		if (col && col.bus === bus) {
 			const committedAtBus = this.caseDeltas(c)[bus] ?? 0;
-			const step = (Math.abs(value) < 0.25 ? 0 : value) - committedAtBus;
+			const step = (Math.abs(value) < DEAD_ZONE_MW ? 0 : value) - committedAtBus;
 			const delta = new Map<number, number>();
 			for (const v of col.values) delta.set(v.bus, v.value * step);
 			this.app.previewPrices = {
@@ -3169,7 +3170,7 @@ export class Controller {
 	// tiny nudge reads as "no change at this line".
 	previewRatings(c: SolvableCase, branch: number, value: number): BranchRatingDeltas {
 		const ratings = { ...this.caseRatings(c) };
-		if (Math.abs(value) < 0.25) delete ratings[branch];
+		if (Math.abs(value) < DEAD_ZONE_MW) delete ratings[branch];
 		else ratings[branch] = value;
 		return ratings;
 	}
@@ -3183,7 +3184,7 @@ export class Controller {
 	runRatingPreview = (c: SolvableCase, branch: number, value: number) => {
 		if (c.formulation === 'acpf') return;
 		const committedAtBranch = this.caseRatings(c)[branch] ?? 0;
-		const step = (Math.abs(value) < 0.25 ? 0 : value) - committedAtBranch;
+		const step = (Math.abs(value) < DEAD_ZONE_MW ? 0 : value) - committedAtBranch;
 		const col = c.sensitivity;
 		if (col && col.branch === branch) {
 			const delta = new Map<number, number>();
@@ -3284,7 +3285,7 @@ export class Controller {
 	};
 
 	finishRatingInput = (value: number) => {
-		if (Math.abs(value - this.committedRating) < 0.25) {
+		if (Math.abs(value - this.committedRating) < DEAD_ZONE_MW) {
 			if (!this.activeSolvable?.solving) {
 				this.app.previewActive = false;
 				this.app.previewRatingMw = null;

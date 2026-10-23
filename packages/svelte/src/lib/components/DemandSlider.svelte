@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getAppState, getController } from '../context.svelte.js';
 	import { fmt, signed } from '../format.js';
+	import { sliderKeyValue } from '../slider.js';
 
 	const app = getAppState();
 	const ctrl = getController();
@@ -37,7 +38,7 @@
 			<span class="val">{signed(ctrl.sliderValue)} MW</span>
 		</div>
 		<div class="range-mode">
-			<div class="segment mono" aria-label="demand range">
+			<div class="segment mono" role="group" aria-label="demand range">
 				<button
 					type="button"
 					class:active={app.demandRangeMode === 'local'}
@@ -51,7 +52,7 @@
 					type="button"
 					class:active={app.demandRangeMode === 'full'}
 					aria-pressed={app.demandRangeMode === 'full'}
-					aria-label="full demand range"
+					aria-label="full range of demand"
 					{disabled}
 					title="range from zero load to the local physical limit"
 					onclick={() => ctrl.setDemandRangeMode('full')}>full range</button
@@ -79,7 +80,15 @@
 				bind:value={ctrl.sliderCurrent, ctrl.setSliderPreview}
 				aria-label="demand delta at selected bus"
 				onpointerdown={() => ctrl.setSliderPreview(ctrl.sliderValue)}
-				onkeydown={() => ctrl.setSliderPreview(ctrl.sliderValue)}
+				onkeydown={(e) => {
+					const next = sliderKeyValue(e.key, ctrl.sliderValue, ctrl.sliderMin, ctrl.sliderMax);
+					if (next === null) {
+						ctrl.setSliderPreview(ctrl.sliderValue);
+						return;
+					}
+					e.preventDefault();
+					ctrl.setSliderPreview(next);
+				}}
 				onpointerup={(e) => ctrl.finishDemandInput(Number(e.currentTarget.value))}
 				onkeyup={(e) => ctrl.finishDemandInput(Number(e.currentTarget.value))}
 				onchange={(e) => ctrl.finishDemandInput(Number(e.currentTarget.value))}
