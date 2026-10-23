@@ -182,6 +182,9 @@ session.free();
   package and loads once per worker.
 - **Types.** Request and report types are generated from Rust under
   `@tellegen/engine/synth`.
+- **Coordinates.** The ingest payload has `coords_kind: "synthetic"` and
+  `coords_method: "generated"`: the buses are sites chosen on real
+  geography, not a topology layout, and the case panel says so.
 
 From the command line:
 

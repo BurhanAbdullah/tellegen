@@ -89,6 +89,7 @@ fn with_module_json(
     mut payload: serde_json::Value,
     module: powerio::PioModule<PioValue>,
 ) -> Result<serde_json::Value, String> {
+    mark_generated_coords(&mut payload, &module);
     if matches!(module.value(), PioValue::AcPfInstance(_)) {
         payload["formulation"] = serde_json::json!("acpf");
     }
@@ -101,6 +102,24 @@ fn with_module_json(
             serde_json::Value::String(module_json),
         );
     Ok(payload)
+}
+
+/// History entry a tellegen-synth module records (`tellegen_synth::HISTORY_NAME`).
+const SYNTH_HISTORY_NAME: &str = "tellegen-synth.generate";
+
+/// Add `coords_method: "generated"` to a payload whose `synthetic`
+/// coordinates a generator sited on real geography, as the module's history
+/// records, so the panel does not call them a topology layout. Tellegen's own
+/// stamped layouts record no such step.
+fn mark_generated_coords<T>(payload: &mut serde_json::Value, module: &powerio::PioModule<T>) {
+    if payload["coords_kind"] == "synthetic"
+        && module
+            .history()
+            .iter()
+            .any(|entry| entry.name() == SYNTH_HISTORY_NAME)
+    {
+        payload["coords_method"] = serde_json::json!("generated");
+    }
 }
 
 /// The balanced network owned by a stored value that can start a browser
@@ -181,6 +200,7 @@ fn ingest_json_drop_value(bytes: &[u8]) -> Result<IngestedJsonDrop, String> {
             let diagnostics = module.diagnostics().to_vec();
             let payload = if let Some(network) = balanced_study_network(module.value()) {
                 let mut payload = ingest_value(network, &diagnostics, Vec::new(), None)?;
+                mark_generated_coords(&mut payload, &module);
                 if matches!(module.value(), PioValue::AcPfInstance(_)) {
                     payload["formulation"] = serde_json::json!("acpf");
                 }

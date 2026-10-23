@@ -105,7 +105,8 @@ invalidate the retained interactive Study.
   - `preview()` returns transferred typed arrays for binary map layers;
   - `report()`, `takeModule()` (pio-ir with bus locations and branch routes),
     `ingest()` (the `IngestedCase` a dropped `.pio.json` of that module
-    produces), and `exportGridfm()`;
+    produces; `coords_method: "generated"` marks its synthetic
+    coordinates as sites on real geography), and `exportGridfm()`;
   - `cancel(reason?)` terminates the synthetic worker (interactive studies
     are untouched), and `free()` releases the session;
   - `hostKind` is `"worker"`, or `"direct"` when the page runs it.

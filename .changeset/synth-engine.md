@@ -21,4 +21,7 @@ the bundled Natural Earth places table, now shipped as
 `SynthEngineError` and its `code` (for example `osm_insufficient`). Request
 and report types are generated from Rust and exported from
 `@tellegen/engine/synth`. `EngineHost` gains `kind` (`"worker"` or
-`"direct"`). The wasm module grows by about 0.6 MB.
+`"direct"`). Ingest payloads gain `coords_method`, which is
+`"generated"` when the module's history records a synthetic generation,
+so a generated grid's coordinates are not taken for a topology layout.
+The wasm module grows by about 0.6 MB.

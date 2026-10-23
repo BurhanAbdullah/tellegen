@@ -175,6 +175,8 @@ mod tests {
             serde_json::from_str(&ingest_impl(&session).unwrap()).unwrap();
         assert_eq!(ingest["has_coords"], true);
         assert_eq!(ingest["coords_kind"], "synthetic");
+        assert_eq!(ingest["coords_method"], "generated");
+        assert_eq!(crate::SYNTH_HISTORY_NAME, tellegen_synth::HISTORY_NAME);
         assert_eq!(ingest["n_bus"], 40);
         let branches = ingest["view"]["branches"].as_array().unwrap();
         assert!(!branches.is_empty());
@@ -186,6 +188,8 @@ mod tests {
         let module = module_impl(&session).unwrap();
         let drop = crate::ingest_json_drop_value(module.as_bytes()).unwrap();
         assert_eq!(drop.kind, "module");
+        assert_eq!(drop.payload["coords_kind"], "synthetic");
+        assert_eq!(drop.payload["coords_method"], "generated");
 
         let gridfm: serde_json::Value =
             serde_json::from_str(&export_gridfm_impl(&session).unwrap()).unwrap();
@@ -225,6 +229,7 @@ mod tests {
             serde_json::from_str(&generate_impl(&request, Some(osm.to_owned())).unwrap()).unwrap();
         assert_eq!(out["ingest"]["has_coords"], true);
         assert_eq!(out["ingest"]["coords_kind"], "file");
+        assert!(out["ingest"].get("coords_method").is_none());
         assert_eq!(out["report"]["dc_opf"]["status"], "optimal");
         assert_eq!(
             out["report"]["provenance"]["osm"]["counts"]["hvdc_links"],

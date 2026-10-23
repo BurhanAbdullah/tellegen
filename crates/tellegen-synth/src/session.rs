@@ -37,6 +37,11 @@ use crate::validate::{apply_dispatch, run_ac_pf, run_dc_opf, Clock, DcOpfRun};
 /// Producer name written into generated modules.
 pub const PRODUCER_NAME: &str = "tellegen-synth";
 
+/// Name (and id) of the history entry a generated module records. Readers
+/// take it as the sign that the module's `synthetic` coordinates are sites
+/// the generator chose on real geography, not a topology layout.
+pub const HISTORY_NAME: &str = "tellegen-synth.generate";
+
 #[derive(Default)]
 struct State {
     context: Option<ContextData>,
@@ -699,8 +704,7 @@ impl Generator {
         let producer = Producer::new(PRODUCER_NAME, crate::VERSION)
             .map_err(|e| SynthError::Build(e.to_string()))?;
         let mut module = PioModule::new(net.clone()).with_producer(producer);
-        let id = HistoryId::new("tellegen-synth.generate")
-            .map_err(|e| SynthError::Build(e.to_string()))?;
+        let id = HistoryId::new(HISTORY_NAME).map_err(|e| SynthError::Build(e.to_string()))?;
         let mut parameters = BTreeMap::new();
         parameters.insert(
             "request_sha256".to_owned(),
@@ -708,7 +712,7 @@ impl Generator {
         );
         parameters.insert("seed".to_owned(), serde_json::json!(self.request.seed));
         parameters.insert("source".to_owned(), serde_json::json!(self.request.source));
-        let entry = HistoryEntry::new(id, HistoryKind::Transform, "tellegen-synth.generate")
+        let entry = HistoryEntry::new(id, HistoryKind::Transform, HISTORY_NAME)
             .and_then(|entry| entry.with_parameters(parameters))
             .map_err(|e| SynthError::Build(e.to_string()))?;
         module

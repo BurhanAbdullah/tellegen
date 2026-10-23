@@ -118,6 +118,8 @@
 			<p class="footnote mono">
 				no coordinates in this file: click the map or drop a geographic file
 			</p>
+		{:else if lc.coordsKind === 'synthetic' && lc.summary.coords_method === 'generated'}
+			<p class="footnote mono">coordinates: synthetic grid sited on real geography</p>
 		{:else if lc.coordsKind === 'synthetic' || lc.coordsKind === 'manual'}
 			<p class="footnote mono">
 				coordinates: {lc.coordsKind} topology layout centered where it was placed

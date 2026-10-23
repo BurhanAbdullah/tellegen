@@ -99,6 +99,11 @@ export interface CaseFileSummary {
    * package echoes the kind it was saved with), `synthetic_pending` when the
    * case awaits placement. */
   coords_kind: "file" | "synthetic_pending" | "synthetic" | "manual";
+  /** How `synthetic` coordinates were made, when the module records it:
+   * `generated` for a grid a generator sited on real geography (the module's
+   * history holds `tellegen-synth.generate`). Absent for a stamped topology
+   * layout. */
+  coords_method?: "generated";
   /** Findings produced while PowerIO parsed the retained module. */
   diagnostics: PowerIoDiagnostic[];
   /** Tellegen display notes, such as omitted unlocated analysis rows. */

@@ -49,7 +49,7 @@ pub use request::{
     CalibrationOptions, CalibrationTargets, DemandSpec, Density, FarIslandPolicy, Fidelity, Fuel,
     IslandOptions, Limits, OsmIslands, OsmOptions, Region, Source, SynthRequest, ValidationOptions,
 };
-pub use session::{generate, Generator};
+pub use session::{generate, Generator, HISTORY_NAME};
 
 /// The crate version written into module producers and report provenance.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
