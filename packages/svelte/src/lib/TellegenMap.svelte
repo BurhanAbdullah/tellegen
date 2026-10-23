@@ -576,9 +576,9 @@
 		terminals.forEach((t, k) => {
 			const cy = top + k * STACK_DY;
 			const grounded = bus.grounded.includes(t);
-			const fill = isPhaseTerminal(t) ? col(phaseColor(t)) : col([120, 114, 102, 255]);
+			const fill = isPhaseTerminal(t) ? col(phaseColor(t)) : col(palette.neutral);
 			if (grounded) stack += groundGlyph(sx - 14, cy);
-			stack += `<circle cx="${sx.toFixed(1)}" cy="${cy.toFixed(1)}" r="6" fill="${fill}" stroke="#20242b" stroke-width="1.2"/>`;
+			stack += `<circle class="mc-terminal" cx="${sx.toFixed(1)}" cy="${cy.toFixed(1)}" r="6" fill="${fill}"/>`;
 			stack += `<text class="mc-term" x="${(sx + 11).toFixed(1)}" y="${(cy + 3.5).toFixed(1)}">${esc(t)}</text>`;
 			// Attachment squares for elements landing on this terminal.
 			const kinds = [...new Set((bus.terminalAttachments[t] ?? []).map((a) => a.kind))];
@@ -1562,6 +1562,11 @@
 	.multi-detail :global(.mc-ground line) {
 		stroke: var(--mc-ground-stroke);
 		stroke-width: 1.3;
+	}
+
+	.multi-detail :global(.mc-terminal) {
+		stroke: var(--ink);
+		stroke-width: 1.2;
 	}
 
 	.multi-detail :global(.mc-term) {
