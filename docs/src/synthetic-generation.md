@@ -21,8 +21,8 @@ per iteration.
 
 | Stage | Work |
 | --- | --- |
-| `context` | parse and measure the region (spherical area, landmasses, island groups); resolve bus count, peak demand and fuel mix |
-| `site_buses` | anchor buses on the most populous places, fill the rest with blue noise; allocate population-weighted loads |
+| `context` | parse and measure the region (spherical area, landmasses, island groups); resolve peak demand from the national demand table, the bus count and the fuel mix |
+| `site_buses` | anchor buses on the most populous places, fill the rest with blue noise; allocate demand-weighted loads, holding every bus at or below the top level's load cap |
 | `topology` | per island, a minimum spanning tree, a tree over the highest-voltage buses, a Gabriel mesh up to the branch factor, and high-voltage loops, all from one Delaunay triangulation |
 | `electrify` | site generation; design every corridor; run the corridor plan and the reactive plan; build the PowerIO network |
 | `dc_opf` | the engine's DC OPF per island |
@@ -35,10 +35,52 @@ filesystem and no platform randomness. Each stage draws from its own ChaCha8
 stream seeded from the request seed, so the same request and places table
 give the same module, byte for byte, natively and in wasm.
 
+## Demand and bus count
+
+- **National demand.** By default each populated place draws its country's
+  peak per person of the places table: the country's annual demand from
+  Ember's Yearly Electricity Data (via Our World in Data's energy dataset,
+  CC BY 4.0) as an average load, times a peak factor of 1.3, divided by the
+  population of every place of that country. A region holding every place
+  of a country therefore reproduces that country's peak, and a region across
+  several countries weights each place by its own country. The table is
+  `crates/tellegen-synth/data/national_demand.json`, derived by
+  `scripts/derive-national-demand.py` from `owid-energy-data.csv`; 196 of
+  212 countries report 2024. A place whose country has no entry draws the
+  world average and raises `demand_fallback`. `demand.per_capita_kw` sets
+  one average per person for every place instead, and a `total_mw` demand
+  states the total. The report lists the countries behind the demand
+  (`context.demand_by_country`) and the table's hashes
+  (`provenance.demand_table`).
+- **Peak factor.** Annual load factors run from 0.58 to 0.77 in the
+  systems surveyed (OCCTO, ENTSO-E, PJM, ERCOT, NEA, India's Ministry of
+  Power), a peak factor of 1.3 to 1.72. Ember's demand counts losses and
+  self-supplied use that operators' peak series leave out, so the factor
+  applied to it is the low end, 1.3. It is a modelling choice within that
+  range.
+- **Places at the coast.** Generalised country outlines leave out harbours
+  and estuaries: at 1:50m, New York lies 1.9 km outside the United States
+  and Lisbon 1.6 km outside Portugal. A place up to 15 km outside the region
+  joins it, moved onto its edge, when the region holds at least half of
+  that country's place population counting such places
+  (`context.places_snapped`). A drawn box around one city never snaps the
+  cities beyond its edges.
+- **Bus count.** Without `target_bus_count`, the count follows the region's
+  area and density and is then moved into the range that keeps peak load
+  per bus between 30 and 150 MW. Those are the scales of transmission
+  models down to 110–220 kV (PEGASE, RTE) and of substation-level models at
+  220 kV and above (PyPSA-Eur, SciGRID). `limits.max_bus_count` (3000)
+  still caps it, and `bus_count_capped` says by how much.
+- **Load cap.** No bus carries more than the load cap of the highest
+  requested level (7 GW at 500 kV). The excess of a metropolitan bus moves
+  to the nearest buses of its island with room, and
+  `buses_load_capped` and `load_spilled_mw` count it.
+
 ## Parameters
 
 Every constant lives in `crates/tellegen-synth/src/electrical/params.rs`
-with a `source:` comment.
+with a `source:` comment, apart from the demand and siting constants, which
+sit beside the code that uses them.
 
 Line classes. Representative ACSR bundles from Glover, Overbye and Sarma,
 *Power System Analysis and Design*; SIL from Kundur, *Power System Stability
@@ -70,8 +112,14 @@ and Control*, Table 6.1:
   load, with an 18% default margin. No bus collects more generation than
   its class can evacuate: 400 MW at 115–161 kV, 1.2 GW at 230 kV, 2.7 GW at
   345 kV and 4 GW at 500 kV, following the interconnection voltages of the
-  largest U.S. plants. Shares above a cap spill onto other units or onto
-  the next ranked bus.
+  largest U.S. plants.
+- **Regional adequacy.** An island's units are grouped into adequacy
+  areas of about 10 GW of the load nearest them, the scale of the Lower
+  48's 66 balancing authorities. Each area holds the reserve-margin capacity
+  of its own load, shared among its units by their drawn sizes, so the
+  network carries balancing transfers between neighbours rather than one
+  side of a country's demand to the other. A share above a bus cap spills
+  onto the area's other units, then onto the area's next ranked bus.
 
 ## Planning before validation
 
@@ -84,16 +132,30 @@ a solve.
   flow: the grounded Laplacian, solved by Jacobi-preconditioned conjugate
   gradients.
 - **Voltage class by power and distance.** A corridor that would need more
-  than two circuits at its voltage raises its ends to the next level.
+  than two circuits at its voltage raises its ends to the next level. Above
+  the highest requested level the plan may add 765 kV (`added_level_kv`,
+  warning `voltage_level_added`).
+- **Circuit cap.** A corridor holds at most four circuits: double and
+  quadruple circuit lines are common in Germany, India, Japan and China, and
+  in the OpenStreetMap-based European grid no line at 220 kV and above
+  carries more than four per voltage level. A corridor that would need more
+  raises its ends instead. One that still needs more at 765 kV is counted
+  in `capped_corridors` and reported.
 - **Capacity.** Circuits are added until no circuit runs above 90% of its
   rating in the planning case; this is Garver's flow-driven expansion under
   the NERC TPL-001 base-case requirement. A transformer corridor first takes
   a larger bank, up to the rating of its line.
 - **Stability margin.** Each line within its own St. Clair rating can still
-  add up to too wide an angle along a chain. So the plan holds every
+  add up to too wide an angle along a chain. So the plan aims to hold every
   island's angle spread to asin(0.7) ≈ 44.4°, the St. Clair curve's 30%
   steady-state margin, reinforcing the corridors a first-order spread
-  sensitivity ranks highest.
+  sensitivity ranks highest. It raises buses within the requested levels
+  until 35% of them sit at the highest one, and only then onto 765 kV. It
+  adds circuits only up to 1.6 branches per bus, about a tenth above the
+  densest North American systems (1.2–1.5, Birchfield et al. 2017). The
+  last quarter of the planning rounds only adds capacity. A spread still too
+  wide is reported as `planning_incomplete`, not met by a network denser
+  than real ones.
 - **Branch factor.** Circuits the requested branch factor still leaves go
   where the planned loading is heaviest. The plan exceeds the factor only
   when capacity or the margin needs more, and then raises the
@@ -108,7 +170,9 @@ a solve.
   share resistance moves to the receiving end.
 
 The plan is recorded in `GenerationReport.planning`: rounds, promoted
-buses, capacity, stiffening and filler circuits, enlarged banks, angle
+buses, the added level, the most circuits on one corridor
+(`max_parallel_circuits`) against the cap (`circuit_cap`), capped
+corridors, capacity, stiffening and filler circuits, enlarged banks, angle
 spread, and banks and MVAr installed. Each circuit is its own branch row;
 its annotation in `GenerationReport.elements` gives the corridor's circuit
 count (`circuits`) and the branch's 1-based place among them
@@ -179,7 +243,8 @@ session.free();
   Cancelling one terminates only that worker, so interactive studies are
   untouched.
 - **Places table.** The Natural Earth table (public domain) ships in the
-  package and loads once per worker.
+  package and loads once per worker. The national demand table is compiled
+  into the module.
 - **Types.** Request and report types are generated from Rust under
   `@tellegen/engine/synth`.
 - **Coordinates.** The ingest payload has `coords_kind: "synthetic"` and
@@ -200,17 +265,23 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
 
 ## Limits
 
-- Requests are capped at 3000 buses. Generation of 3000 buses takes about
-  350 ms natively end to end.
+- Requests are capped at 3000 buses, which the automatic count reaches for
+  the largest countries. The United States and China at 3000 buses take
+  about 1.0–1.2 s natively and 1.3–1.4 s in wasm (Node, Apple M5 Pro), end
+  to end with both validations; a 500-bus country takes under 0.1 s.
+  `evidence/synth` records the measurements.
 - Clustering in generated grids runs higher than in the ACTIVSg200 and
   GOC500 references, because the Gabriel mesh is rich in triangles. Their
   highest nodal degree is also lower, since the mesh caps it at 8.
   `evidence/synth` measures both against the references.
-- Very heavy aggregation (for example 190 GW on a few hundred buses with a
-  500 kV ceiling) can exhaust the corridor plan. The report then raises
-  `planning_incomplete`, and the AC power flow may not converge; both are
-  reported as such.
+- Continental regions span several thousand kilometres as one AC island.
+  Their planning-case angle spread stays well above 44° within the branch
+  budget, so the plan reports `planning_incomplete`. Real systems of that
+  size split into synchronous areas joined by HVDC, which the generator does
+  not model yet; very long corridors, such as across the Nullarbor or
+  between Indonesian islands, stay AC.
 - The engine's AC power flow starts from a flat profile. On long, weakly
-  coupled systems it can settle on a second, high-voltage solution even
-  when the planned operating point is valid. A warm start from the stored
-  case state, once the engine offers it, removes this.
+  coupled systems it can fail to converge, or settle on a second solution
+  outside the voltage band, even when the planned operating point is valid.
+  A warm start from the stored case state, once the engine offers it,
+  removes this.

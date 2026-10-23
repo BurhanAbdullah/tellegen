@@ -8,14 +8,16 @@ Given a GeoJSON region, a seed and a handful of planning parameters, the
 generator:
 
 1. measures the region and its populated places (Natural Earth, public
-   domain) and resolves the bus count, peak demand and fuel mix;
+   domain), sizes peak demand from each place's country (Ember's national
+   demand via Our World in Data, CC BY 4.0, bundled as
+   `data/national_demand.json`), and resolves the bus count and fuel mix;
 2. sites buses on the most populous places plus blue-noise fill, and
-   allocates population weighted loads;
+   allocates demand weighted loads;
 3. wires each electrical island with a minimum spanning tree, a spanning
    tree over the highest voltage buses, a Gabriel proximity mesh and a few
    high-voltage loops, all from one Delaunay triangulation (O(n log n));
-4. sites reserve-margin generation (no bus collects more than its voltage
-   class can evacuate), designs every corridor from cited line and
+4. sites reserve-margin generation area by area (no bus collects more
+   than its voltage class can evacuate), designs every corridor from cited line and
    transformer class tables with St. Clair loadability, and plans the
    network before validating it: corridor voltage by power and distance,
    circuits for the peak economic dispatch, an island angle spread inside

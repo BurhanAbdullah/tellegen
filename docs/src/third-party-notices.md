@@ -36,6 +36,15 @@ longitude, latitude, `pop_max` and country of the Natural Earth 1:10m
 populated places. Natural Earth data is in the public domain
 ([naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/)).
 
+It also ships `crates/tellegen-synth/data/national_demand.json`, compiled
+into the engine: each country's annual electricity demand and population,
+derived by `scripts/derive-national-demand.py` from Our World in Data's
+energy dataset ([github.com/owid/energy-data](https://github.com/owid/energy-data)),
+whose `electricity_demand` column comes from Ember's Yearly Electricity Data.
+Both are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+Ember, *Yearly Electricity Data*; Our World in Data, *Energy dataset*. The
+table records the SHA-256 of the CSV it was derived from.
+
 ## Demo Case Data
 
 The demo data is staged by the operator and is not vendored in this repository.
