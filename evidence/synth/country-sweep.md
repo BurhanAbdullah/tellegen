@@ -1,25 +1,27 @@
-15 of 18 regions valid (DC OPF optimal and AC power flow converged inside 0.9–1.1 pu); DC OPF optimal 18, AC power flow converged 17; peak within ±25% of the reference for 14 of the 14 regions whose reference scope matches.
+16 of 18 regions valid (DC OPF optimal and AC power flow converged inside 0.9–1.1 pu); DC OPF optimal 18, AC power flow converged 16; peak within ±25% of the reference for 14 of the 14 regions whose reference scope matches.
 
-| Region | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |
-| --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |
-| PRT | 94 | 8,162 | 9,395 (2025) | 0.87 | within | 1.48 | 2 | optimal | converged | 1.019–1.028 | 14 |
-| ESP | 266 | 38,469 | 39,957 (2025) | 0.96 | within | 1.59 | 4 | optimal | converged | 1.019–1.023 | 34 |
-| DEU | 517 | 77,504 | 75,635 (2025) | 1.02 | within | 1.53 | 3 | optimal | converged | 1.004–1.022 | 47 |
-| FRA | 467 | 67,896 | 88,000 (2025) | 0.77 | within | 1.51 | 3 | optimal | converged | 1.019–1.025 | 45 |
-| GBR | 314 | 47,095 | 48,141 (2025) | 0.98 | within | 1.53 | 3 | optimal | converged | 0.948–1.020 | 29 |
-| TEXAS-BOX | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.59 | 4 | optimal | converged | 1.007–1.021 | 49 |
-| USA | 3000 | 647,597 | 759,180 (2025) | 0.85 | within | 1.61 | 4 | optimal | converged | 0.998–1.138 | 1,011 |
-| IND | 2013 | 301,683 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | optimal | converged | 1.015–1.024 | 542 |
-| CHN | 3000 | 1,484,029 | 1,508,000 (2025) | 0.98 | within | 1.70 | 4 | optimal | converged | 0.598–1.083 | 1,093 |
-| RUS | 1182 | 176,021 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | optimal | converged | 0.987–1.061 | 343 |
-| BRA | 750 | 111,478 | 106,532 (2025) | 1.05 | within | 1.60 | 4 | optimal | converged | 1.017–1.050 | 147 |
-| JPN | 1006 | 150,834 | 162,600 (2025) | 0.93 | within | 1.60 | 4 | optimal | converged | 1.009–1.026 | 173 |
-| AUS | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 4 | optimal | converged | 1.020–1.037 | 42 |
-| ZAF | 312 | 36,539 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | optimal | converged | 1.010–1.037 | 32 |
-| NGA | 174 | 5,233 | 5,802 (2025) | 0.90 | not comparable | 1.47 | 2 | optimal | converged | 1.020–1.050 | 12 |
-| EGY | 312 | 35,021 | 39,800 (2025) | 0.88 | within | 1.57 | 4 | optimal | converged | 1.017–1.021 | 28 |
-| CHL | 268 | 13,151 | 13,093 (2025) | 1.00 | within | 1.60 | 3 | optimal | converged | 1.015–1.050 | 31 |
-| IDN | 369 | 54,111 | 61,288 (2024) | 0.88 | flagged | 1.60 | 4 | optimal | not_converged |  | 87 |
+Levels are the national ladder of the region's dominant country, highest first; a `+` marks a higher level in service there that the corridor plan raised buses to.
+
+| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |
+| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |
+| PRT | 400/220/150 | 94 | 8,162 | 9,395 (2025) | 0.87 | within | 1.48 | 2 | optimal | converged | 1.012–1.031 | 16 |
+| ESP | 400/220 | 266 | 38,469 | 39,957 (2025) | 0.96 | within | 1.66 | 3 | optimal | converged | 1.016–1.022 | 35 |
+| DEU | 380/220 | 517 | 77,504 | 75,635 (2025) | 1.02 | within | 1.62 | 4 | optimal | converged | 1.009–1.025 | 53 |
+| FRA | 400/225 | 467 | 67,896 | 88,000 (2025) | 0.77 | within | 1.60 | 4 | optimal | converged | 1.016–1.022 | 50 |
+| GBR | 400/275 | 314 | 47,095 | 48,141 (2025) | 0.98 | within | 1.60 | 4 | optimal | converged | 0.996–1.029 | 30 |
+| TEXAS-BOX | +765/500/345/230 | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.60 | 4 | optimal | converged | 1.013–1.042 | 60 |
+| USA | +765/500/345/230 | 3000 | 647,597 | 759,180 (2025) | 0.85 | within | 1.61 | 4 | optimal | not_converged |  | 1,867 |
+| IND | +765/400/220 | 2013 | 301,683 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | optimal | converged | 1.012–1.023 | 605 |
+| CHN | +1000/500/220 | 3000 | 1,484,029 | 1,508,000 (2025) | 0.98 | within | 1.64 | 4 | optimal | converged | 1.019–1.020 | 1,035 |
+| RUS | +750/500/220 | 1181 | 175,955 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | optimal | not_converged |  | 570 |
+| BRA | +765/500/230 | 750 | 111,478 | 106,532 (2025) | 1.05 | within | 1.60 | 4 | optimal | converged | 1.017–1.050 | 158 |
+| JPN | 500/275 | 1006 | 150,834 | 162,600 (2025) | 0.93 | within | 1.60 | 4 | optimal | converged | 1.017–1.031 | 221 |
+| AUS | +500/330/275/220 | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 3 | optimal | converged | 1.017–1.061 | 50 |
+| ZAF | +765/400/275 | 312 | 36,539 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | optimal | converged | 1.009–1.025 | 34 |
+| NGA | 330/132 | 174 | 5,233 | 5,802 (2025) | 0.90 | not comparable | 1.55 | 3 | optimal | converged | 0.981–1.025 | 13 |
+| EGY | 500/220 | 312 | 35,021 | 39,800 (2025) | 0.88 | within | 1.60 | 4 | optimal | converged | 1.013–1.020 | 32 |
+| CHL | 500/220 | 268 | 13,151 | 13,093 (2025) | 1.00 | within | 1.60 | 3 | optimal | converged | 1.016–1.072 | 33 |
+| IDN | 500/150 | 369 | 54,111 | 61,288 (2024) | 0.88 | flagged | 1.60 | 3 | optimal | converged | 1.018–1.021 | 39 |
 
 | Region | Reference scope | Source |
 | --- | --- | --- |

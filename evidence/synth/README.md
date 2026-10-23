@@ -120,46 +120,58 @@ reference's scope matches the modelled region:
   UES without its isolated systems, and Japan's is the 10-area coincident
   peak.
 
-**Result.** 15 of 18 regions are valid, all 18 DC OPFs are optimal, and 17
+**Levels.** Each region is modelled at its dominant country's national
+ladder (`crates/tellegen-synth/data/voltage_ladders.json`, with sources),
+shown in the table's Levels column. A `+` marks a higher level in service
+that the plan raised buses to: 765 kV in the United States, India, Brazil
+and South Africa, 750 kV in Russia, 1000 kV in China, and 500 kV in
+Australia. Germany, France, Great Britain, Spain, Portugal, Japan,
+Nigeria, Egypt, Chile and Indonesia have no higher AC level, and the plan
+adds none.
+
+**Result.** 16 of 18 regions are valid, all 18 DC OPFs are optimal, and 16
 AC power flows converge. All 14 scored peaks lie within ±25% of their
 reference, from 0.77 (France) to 1.21 (India). Branches per bus run from
-1.47 to 1.70, and no corridor holds more than four circuits.
+1.48 to 1.66, and no corridor holds more than four circuits.
 
 **Failures, as the engine reported them:**
 
-- **Indonesia.** The AC power flow does not converge (best mismatch
-  3.4e-4 pu over 5 starts). The generator joins 26 landmasses into one AC
-  island over sea crossings of up to 250 km, while PLN runs separate
-  systems. Newton stalls at the same 0.03 MW mismatch from both a flat and
-  a DC start, at Jayapura, a remote pocket at the AC transfer limit of its
-  corridor. Splitting such islands into synchronous areas joined by HVDC is
-  not modelled.
-- **United States.** The AC power flow converges, but 8 buses lie above
-  1.1 pu (highest 1.138). The Lower 48 is one AC island in the model; in
-  reality it is three interconnections joined by DC ties. Its planning
-  angle spread stays at 232° within the branch budget, and the plan reports
-  `planning_incomplete`.
-- **China.** The AC power flow converges, but 6 buses lie below 0.9 pu
-  (lowest 0.598). The plan spread is 266°, and two corridors remain above
-  their rating at four 765 kV circuits (`capped_corridors`). China's 1000 kV
-  AC and its UHVDC lines are outside the line classes.
+- **United States.** The AC power flow does not converge (5 starts). From
+  its own DC angles a Newton solve stalls at a 2 MW mismatch in a 230 kV
+  pocket in Nevada: a remote area at the AC transfer limit of its corridor.
+  The Lower 48 is one AC island in the model, where in reality it is three
+  interconnections joined by DC ties; the planning spread stays at 205°.
+- **Russia.** The AC power flow does not converge. From its DC angles Newton
+  stalls at 1.4 MW in a 220 kV pocket in central Siberia; the planning
+  spread is 72°.
 
-`planning_incomplete` is also raised for India, Russia, Brazil, Australia and
-Indonesia, whose spreads (51–66°) stay above the 44° target within 1.6
-branches per bus. The plan adds the 765 kV level in 14 of 18 regions,
-including a few buses (0.6–1.5%) in Spain, Germany, France and Great
-Britain, whose grids stop at 380–400 kV.
+Splitting continental islands into synchronous areas joined by HVDC is not
+modelled. `planning_incomplete` is raised for 13 of the 18 regions. Where
+the country has no higher level, corridors stay at its ceiling and the
+angle spread is reported instead of met: Spain 81°, Germany 64°, Great
+Britain 55°, France 49°, Japan 94° (two corridors short of capacity at four
+500 kV circuits), Chile 92° and Indonesia 171°.
+
+**Compared with the run before national ladders** (500/230 kV everywhere,
+with 765 kV above): China and Indonesia became valid and Russia stopped
+converging, so valid regions went from 15 to 16. Branches per bus in Spain,
+Germany, France and Great Britain rose from 1.51–1.59 to 1.60–1.66, since
+380/400 kV circuits carry less than 500 kV ones and no higher level is left
+to promote to.
 
 **Time.** The automatic bus count reaches the 3000-bus limit for the United
 States and China. End to end, with both validations, a run takes:
 
 | Region | Buses | Native CLI (Apple M5 Pro) | wasm in Node 26 (same machine) |
 | --- | ---: | ---: | ---: |
-| United States | 3000 | 1.0–1.1 s | 1.3 s |
-| China | 3000 | 1.1–1.2 s | 1.4 s |
-| India | 2013 | 0.54–0.66 s | 0.64 s |
-| Russia | 1182 | 0.34–0.39 s | 0.42 s |
-| Germany | 517 | 0.05–0.07 s | 0.07 s |
+| United States | 3000 | 1.6–1.9 s | 2.2 s |
+| China | 3000 | 1.0–1.1 s | 1.3 s |
+| India | 2013 | 0.58–0.61 s | 0.67 s |
+| Russia | 1181 | 0.56–0.57 s | 0.72 s |
+| Germany | 517 | 0.05 s | 0.07 s |
 
+The United States and Russia spend about 1 s and 0.3 s in wasm on AC power
+flows that do not converge over five starts; the United States is over the
+2 s aim for that reason.
 The corridor plan takes half to two thirds of each large run. Lower bus caps
 (1500–2500) made the United States and China fail AC, and were no faster.

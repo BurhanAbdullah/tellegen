@@ -199,6 +199,9 @@ def sweep_row(spec, report, references, tolerance):
         'plan_converged': plan.get('converged'),
         'angle_spread_deg': plan.get('angle_spread_deg'),
         'max_angle_difference_deg': plan.get('max_angle_difference_deg'),
+        'voltage_basis': context.get('voltage_basis'),
+        'voltage_country': context.get('voltage_country'),
+        'voltage_levels_kv': context['voltage_levels_kv'],
         'peak_mw': context['peak_demand_mw'],
         'demand_basis': context['demand_basis'],
         'places_in_region': context['places_in_region'],
@@ -226,6 +229,14 @@ def sweep_markdown(packet):
         lo, hi = r['vm']
         return f'{lo:.3f}–{hi:.3f}' if lo is not None else ''
 
+    def levels(r):
+        added = r['added_level_kv']
+        shown = [f"{kv:g}" for kv in r['voltage_levels_kv']]
+        if added is not None and shown and shown[0] == f'{added:g}':
+            shown[0] = '+' + shown[0]
+        text = '/'.join(shown)
+        return text + ('' if r['voltage_basis'] == 'country' else f" ({r['voltage_basis']})")
+
     summary = packet['summary']
     lines = [
         f"{summary['valid']} of {summary['regions']} regions valid (DC OPF optimal and AC power flow "
@@ -233,15 +244,18 @@ def sweep_markdown(packet):
         f"converged {summary['ac_converged']}; peak within ±{packet['tolerance']:.0%} of the reference "
         f"for {summary['peak_within']} of the {summary['peak_scored']} regions whose reference scope matches.",
         '',
-        '| Region | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |',
-        '| --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |',
+        'Levels are the national ladder of the region\'s dominant country, highest first; a `+` marks a '
+        'higher level in service there that the corridor plan raised buses to.',
+        '',
+        '| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |',
+        '| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |',
     ]
     for r in packet['rows']:
         ref = r['reference']
         shown = f"{ref['reference_mw']:,.0f} ({ref['year']})" if ref else ''
         ratio = f"{r['peak_ratio']:.2f}" if r['peak_ratio'] is not None else ''
         lines.append(
-            f"| {r['region'].upper()} | {r['buses']} | {r['peak_mw']:,.0f} | {shown} | {ratio} | "
+            f"| {r['region'].upper()} | {levels(r)} | {r['buses']} | {r['peak_mw']:,.0f} | {shown} | {ratio} | "
             f"{r['peak_verdict']} | {r['branch_bus_ratio']:.2f} | {r['max_parallel_circuits']} | "
             f"{r['dc_opf']} | {r['ac_pf']} | {vm(r)} | {r['engine_ms']:,.0f} |")
     lines += ['', '| Region | Reference scope | Source |', '| --- | --- | --- |']
