@@ -601,6 +601,54 @@
       ],
       "type": "object"
     },
+    "CountryDemand": {
+      "description": "One country's part of a region's demand under the national basis.",
+      "properties": {
+        "code": {
+          "description": "Country code of the places table (Natural Earth `adm0_a3`).",
+          "type": "string"
+        },
+        "national_peak_mw": {
+          "description": "The country's national peak (annual average load × peak factor), MW;\n`peak_mw` equals it when the region holds every place of the country.\nAbsent for the world fallback.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "peak_mw": {
+          "description": "Peak demand of those places, MW.",
+          "format": "double",
+          "type": "number"
+        },
+        "places": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "population": {
+          "description": "Sum of `pop_max` over those places.",
+          "format": "double",
+          "type": "number"
+        },
+        "year": {
+          "description": "Year of the national figure; absent when the country has no entry and\nits places drew the world average.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "places",
+        "population",
+        "peak_mw"
+      ],
+      "type": "object"
+    },
     "DcOpfReport": {
       "description": "The DC OPF verdict from the tellegen engine.",
       "properties": {
@@ -769,8 +817,13 @@
       "description": "How the demand figure was obtained.",
       "oneOf": [
         {
+          "const": "national",
+          "description": "Each place draws its country's peak per head of the places table, from\nthe national demand table (`RegionContext::demand_by_country`,\n`Provenance::demand_table`).",
+          "type": "string"
+        },
+        {
           "const": "population",
-          "description": "Population of the places inside the region × per-capita × peak factor.",
+          "description": "Population of the places inside the region × the stated per-capita\ndraw × peak factor.",
           "type": "string"
         },
         {
@@ -789,21 +842,23 @@
       "description": "Peak demand of the region.",
       "oneOf": [
         {
-          "description": "Peak MW = population of the places inside the region × average per-capita\ndraw (kW) × peak-to-average factor.",
+          "description": "Peak MW from the population of the places inside the region. Each place\ndraws its country's average load per head of the places table (the\nnational demand table, [`crate::demand::NationalDemand`]) times\n`peak_factor`, so a whole country reproduces its national peak; a place\nwhose country has no entry draws the world average per person. With\n`per_capita_kw`, every person of every place draws that average load\ninstead.",
           "properties": {
             "kind": {
               "const": "population",
               "type": "string"
             },
             "peak_factor": {
-              "default": 1.6,
+              "default": 1.3,
               "format": "double",
               "type": "number"
             },
             "per_capita_kw": {
-              "default": 1.4,
               "format": "double",
-              "type": "number"
+              "type": [
+                "number",
+                "null"
+              ]
             }
           },
           "required": [
@@ -830,6 +885,49 @@
           "type": "object"
         }
       ]
+    },
+    "DemandTableProvenance": {
+      "description": "The national demand table behind a national demand basis.",
+      "properties": {
+        "licence": {
+          "type": "string"
+        },
+        "peak_factor": {
+          "description": "Peak demand as a multiple of the annual average load.",
+          "format": "double",
+          "type": "number"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the bundled table.",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "source_sha256": {
+          "description": "SHA-256 of the dataset the table was derived from.",
+          "type": "string"
+        },
+        "year": {
+          "description": "The year most entries report.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema",
+        "year",
+        "source",
+        "licence",
+        "sha256",
+        "source_sha256",
+        "peak_factor"
+      ],
+      "type": "object"
     },
     "Density": {
       "description": "Bus count per unit area when `target_bus_count` is not given.",
@@ -1396,6 +1494,14 @@
     "PlanningReport": {
       "description": "The corridor and reactive plan the electrify stage made before any\nvalidation ran: what the corridors were sized for and what was installed.",
       "properties": {
+        "added_level_kv": {
+          "description": "A level the plan added above the requested ones (765 kV) because\ncorridors at the highest requested level needed more than two\ncircuits; absent when the requested levels sufficed.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "angle_spread_deg": {
           "description": "Widest island angle spread of the planning case (DC), degrees.",
           "format": "double",
@@ -1429,6 +1535,18 @@
           "minimum": 0,
           "type": "integer"
         },
+        "capped_corridors": {
+          "description": "Corridors at the cap whose planning flow still needs more circuits.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "circuit_cap": {
+          "description": "Parallel circuits one corridor may hold.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "converged": {
           "description": "False when the plan stopped at its round or circuit cap.",
           "type": "boolean"
@@ -1447,6 +1565,12 @@
           "description": "Largest angle difference across one branch in the AC solution of the\nplanning case at the planned voltage profile, degrees.",
           "format": "double",
           "type": "number"
+        },
+        "max_parallel_circuits": {
+          "description": "Most parallel circuits on one corridor.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
         },
         "max_planning_loading": {
           "description": "Highest circuit loading in the planning case.",
@@ -1505,6 +1629,9 @@
         "rounds",
         "converged",
         "promoted_buses",
+        "max_parallel_circuits",
+        "circuit_cap",
+        "capped_corridors",
         "branch_target",
         "branches",
         "capacity_circuits",
@@ -1621,6 +1748,16 @@
     "Provenance": {
       "description": "Everything needed to reproduce or audit the run.",
       "properties": {
+        "demand_table": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DemandTableProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "fallback_from": {
           "anyOf": [
             {
@@ -1804,6 +1941,13 @@
         "demand_basis": {
           "$ref": "#/$defs/DemandBasis"
         },
+        "demand_by_country": {
+          "description": "The countries behind the demand, largest peak first (national basis\nonly).",
+          "items": {
+            "$ref": "#/$defs/CountryDemand"
+          },
+          "type": "array"
+        },
         "frame": {
           "$ref": "#/$defs/BBox",
           "description": "Continuous longitude frame of the region."
@@ -1864,6 +2008,12 @@
           "minimum": 0,
           "type": "integer"
         },
+        "places_snapped": {
+          "description": "Places counted in the region although just outside its polygons:\nwithin 15 km of its edge, of a country it already holds, and moved\nonto that edge (harbours and estuaries the polygons leave out).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "population_in_region": {
           "description": "Sum of `pop_max` over the populated places inside the region.",
           "format": "double",
@@ -1901,6 +2051,7 @@
         "landmasses",
         "population_in_region",
         "places_in_region",
+        "places_snapped",
         "target_bus_count",
         "peak_demand_mw",
         "demand_basis",
@@ -2076,8 +2227,7 @@
           "$ref": "#/$defs/DemandSpec",
           "default": {
             "kind": "population",
-            "peak_factor": 1.6,
-            "per_capita_kw": 1.4
+            "peak_factor": 1.3
           }
         },
         "density": {
@@ -2501,5 +2651,5 @@
   ],
   "title": "SynthContract",
   "type": "object",
-  "x-rust-source-sha256": "732ffd4c1452b8ffce40f53b4bed94a697182b3b910ba396e29673195c40dff6"
+  "x-rust-source-sha256": "93f072b38ca579bad2f4e6ba2335bb204385d483a82ff7bd5556c8a2b7111448"
 }
