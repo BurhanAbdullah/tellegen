@@ -46,13 +46,17 @@
     "./contracts": {
       "types": "./dist/generated/contracts.d.ts",
       "default": "./dist/generated/contracts.js"
+    },
+    "./synth": {
+      "types": "./dist/generated/synth-contracts.d.ts",
+      "default": "./dist/generated/synth-contracts.js"
     }
   },
   "scripts": {
     "contracts": "node scripts/generate-contracts.mjs",
     "contracts:check": "node scripts/generate-contracts.mjs --check",
     "build": "npm run contracts:check && tsc -p tsconfig.json && node scripts/copy-wasm-assets.mjs",
-    "wasm": "wasm-pack build ../../crates/tellegen-wasm --target web --out-dir ../../packages/engine/src/wasm-pkg --out-name tellegen -- --features conic",
+    "wasm": "wasm-pack build ../../crates/tellegen-wasm --target web --out-dir ../../packages/engine/src/wasm-pkg --out-name tellegen -- --features conic,synth && node scripts/copy-synth-places.mjs",
     "check": "npm run contracts:check && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json && npm test",
     "test": "vitest run",
     "test:import": "node scripts/import-smoke.mjs",
