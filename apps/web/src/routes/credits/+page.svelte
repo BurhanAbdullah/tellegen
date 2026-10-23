@@ -74,12 +74,15 @@
 				provides the solver, sensitivity, and visualization framework.
 			</li>
 			<li>
-				Map tiles and attribution are provided by
-				<a href="https://carto.com/" target="_blank" rel="noreferrer">CARTO</a>
-				and
+				The basemap is served by
+				<a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a>, using
+				the <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a>
+				schema and data from
 				<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
 					>OpenStreetMap contributors</a
-				>.
+				>. When that style cannot be loaded the map falls back to
+				<a href="https://carto.com/" target="_blank" rel="noreferrer">CARTO</a>. Your browser
+				requests tiles directly from the provider on screen; the attribution control names it.
 			</li>
 		</ul>
 	</section>

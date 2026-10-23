@@ -28,8 +28,23 @@ export default defineConfig({
 					'script-src': ['self', 'wasm-unsafe-eval', 'https://cloud.umami.is'],
 					// Svelte and maplibre both write inline style attributes.
 					'style-src': ['self', 'unsafe-inline'],
-					'img-src': ['self', 'data:', 'blob:', 'https://*.cartocdn.com'],
-					'connect-src': ['self', 'https://*.cartocdn.com', 'https://gateway.umami.is'],
+					// Basemap: OpenFreeMap is the primary (style, vector tiles, glyphs and
+					// sprites all come from tiles.openfreemap.org over fetch, so connect-src
+					// carries them); CARTO is the fallback style. img-src lists both for
+					// any image the styles may request.
+					'img-src': [
+						'self',
+						'data:',
+						'blob:',
+						'https://tiles.openfreemap.org',
+						'https://*.cartocdn.com'
+					],
+					'connect-src': [
+						'self',
+						'https://tiles.openfreemap.org',
+						'https://*.cartocdn.com',
+						'https://gateway.umami.is'
+					],
 					// The engine worker and maplibre's workers load from blob URLs.
 					'worker-src': ['self', 'blob:'],
 					'child-src': ['self', 'blob:'],

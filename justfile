@@ -145,6 +145,18 @@ web-smoke:
 web-browser:
     npm run test:browser
 
+# Build wasm, the engine and the Svelte package, then `npm pack` both into
+# `dest` for a downstream app to install from tarballs (`npm install
+# ./dest/*.tgz`). Tarballs, not `npm link`: a linked Svelte 5 package resolves
+# a second copy of svelte and deck.gl in the consumer and the map stays blank.
+pack-local dest:
+    npm run wasm
+    npm run build:engine
+    npm run build:svelte
+    mkdir -p {{dest}}
+    npm --workspace @tellegen/engine pack --pack-destination {{dest}}
+    npm --workspace @tellegen/svelte pack --pack-destination {{dest}}
+
 # ---- release ----
 
 # Record an npm package change; commit the file it writes. The crate needs none.

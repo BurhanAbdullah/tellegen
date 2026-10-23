@@ -201,7 +201,13 @@ not mutate proxy config files.
 The sample route sets HSTS, CSP, permissions policy, referrer policy, frame
 ancestor denial, and content type sniffing protection. The CSP allows the
 current SvelteKit bootstrap, WebAssembly compilation, MapLibre blob workers, and
-CARTO tile images.
+the basemap hosts: `https://tiles.openfreemap.org` (the OpenFreeMap style,
+vector tiles, fonts and sprites, all fetched, so `connect-src` must carry it)
+and `https://*.cartocdn.com` (the CARTO fallback), in both `img-src` and
+`connect-src`. The policy that ships with the build lives in
+`apps/web/vite.config.ts`; a proxy policy must list the same hosts or the map
+stays blank behind it. A deployment that points `TellegenMap` at another style
+adds that host in both places.
 
 A Caddy image with `github.com/mholt/caddy-ratelimit` is needed for the sample
 rate limits; stock Caddy does not include that module. The tellegen backend also

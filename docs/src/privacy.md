@@ -11,11 +11,13 @@ does not upload those files to the tellegen backend.
 - The tellegen backend receives ordinary page and API requests for the bundled
   demo cases.
 - There is no analytics product wired to uploaded case contents.
-- The map basemap comes from CARTO (`*.basemaps.cartocdn.com`). Your browser
-  requests those tiles directly, so CARTO receives your IP address, your user
-  agent, and the map area you view. Your case file is never sent, but the map
-  area shows where a locally parsed case sits. Nothing else on the page loads
-  from a third party.
+- The map basemap comes from OpenFreeMap (`tiles.openfreemap.org`). When that
+  style cannot be loaded, the page switches to CARTO
+  (`*.basemaps.cartocdn.com`). Your browser requests the style, tiles, fonts
+  and sprites directly from whichever provider is on screen, so that provider
+  receives your IP address, your user agent, and the map area you view. Your
+  case file is never sent, but the map area shows where a locally parsed case
+  sits. Nothing else on the page loads from a third party.
 
 ## Future Opt In Sharing
 

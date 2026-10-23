@@ -78,11 +78,16 @@
 	<section>
 		<h2>Map tiles</h2>
 		<p>
-			The geographic basemap loads directly from CARTO. Tile requests reveal the map area, IP
-			address, and browser details to that service. Case files and equipment data are not included.
-			The plain diagram view does not request a basemap.
+			The geographic basemap loads directly from OpenFreeMap; when that style cannot be loaded, the
+			map switches to CARTO. Your browser requests the style, tiles, fonts and sprites from
+			whichever provider is on screen, so that provider sees the map area, IP address, and browser
+			details. Case files and equipment data are not included. The plain diagram view does not
+			request a basemap.
 		</p>
-		<p><a href="https://carto.com/privacy" rel="noreferrer">CARTO privacy policy</a></p>
+		<p>
+			<a href="https://openfreemap.org/" rel="noreferrer">OpenFreeMap</a> ·
+			<a href="https://carto.com/privacy" rel="noreferrer">CARTO privacy policy</a>
+		</p>
 	</section>
 </main>
 
