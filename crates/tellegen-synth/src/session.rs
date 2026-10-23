@@ -14,6 +14,7 @@ use powerio::{BalancedNetwork, HistoryEntry, HistoryId, HistoryKind, PioModule, 
 use crate::build::{build_network, BuiltNetwork};
 use crate::calibrate::Calibrator;
 use crate::context::{resolve_context, ContextData};
+use crate::demand::NationalDemand;
 use crate::electrical::branches::{draw_corridors, expand_circuits, spread_sigma, DraftBranch};
 use crate::electrical::generators::{place_generators, DraftGenerator};
 use crate::electrical::loads::assign_loads;
@@ -24,11 +25,11 @@ use crate::error::SynthError;
 use crate::geom::wrap_lon;
 use crate::places::Places;
 use crate::report::{
-    AcPfOutcome, GenerationReport, PlacesProvenance, PlanningReport, Preview, PreviewArrays,
-    PreviewBranch, PreviewBus, Provenance, SolveOutcome, Stage, StageRecord, StepOutcome, Warning,
-    REPORT_SCHEMA,
+    AcPfOutcome, DemandBasis, DemandTableProvenance, GenerationReport, PlacesProvenance,
+    PlanningReport, Preview, PreviewArrays, PreviewBranch, PreviewBus, Provenance, SolveOutcome,
+    Stage, StageRecord, StepOutcome, Warning, REPORT_SCHEMA,
 };
-use crate::request::{Source, SynthRequest};
+use crate::request::{DemandSpec, Source, SynthRequest};
 use crate::rng::{Stream, StreamTag};
 use crate::site::{site_buses, DraftBus};
 use crate::topology::{build_topology, Corridor};
@@ -112,6 +113,7 @@ impl Generator {
                 count: places.len(),
                 sha256: places.sha256().to_owned(),
             }),
+            demand_table: None,
             osm: None,
             fallback_from: request.fallback_from.clone(),
         };
@@ -278,6 +280,20 @@ impl Generator {
         counts: &mut BTreeMap<String, u64>,
     ) -> Result<(), SynthError> {
         let (context, data) = resolve_context(&self.request, &self.places, warnings)?;
+        if let (DemandBasis::National, DemandSpec::Population { peak_factor, .. }) =
+            (context.demand_basis, &self.request.demand)
+        {
+            let table = NationalDemand::bundled();
+            self.report.provenance.demand_table = Some(DemandTableProvenance {
+                schema: crate::demand::SCHEMA.to_owned(),
+                year: table.year,
+                source: table.source.clone(),
+                licence: table.licence.clone(),
+                sha256: table.sha256.clone(),
+                source_sha256: table.source_sha256.clone(),
+                peak_factor: *peak_factor,
+            });
+        }
         counts.insert("places_in_region".into(), data.cities.len() as u64);
         counts.insert("landmasses".into(), context.landmasses as u64);
         counts.insert("islands".into(), data.group_count as u64);

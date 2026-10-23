@@ -130,11 +130,16 @@ impl Fuel {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DemandSpec {
-    /// Peak MW = population of the places inside the region × average per-capita
-    /// draw (kW) × peak-to-average factor.
+    /// Peak MW from the population of the places inside the region. Each place
+    /// draws its country's average load per head of the places table (the
+    /// national demand table, [`crate::demand::NationalDemand`]) times
+    /// `peak_factor`, so a whole country reproduces its national peak; a place
+    /// whose country has no entry draws the world average per person. With
+    /// `per_capita_kw`, every person of every place draws that average load
+    /// instead.
     Population {
-        #[serde(default = "default_per_capita_kw")]
-        per_capita_kw: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        per_capita_kw: Option<f64>,
         #[serde(default = "default_peak_factor")]
         peak_factor: f64,
     },
@@ -142,18 +147,14 @@ pub enum DemandSpec {
     TotalMw { mw: f64 },
 }
 
-fn default_per_capita_kw() -> f64 {
-    1.4
-}
-
 fn default_peak_factor() -> f64 {
-    1.6
+    crate::demand::DEFAULT_PEAK_FACTOR
 }
 
 impl Default for DemandSpec {
     fn default() -> Self {
         DemandSpec::Population {
-            per_capita_kw: default_per_capita_kw(),
+            per_capita_kw: None,
             peak_factor: default_peak_factor(),
         }
     }
@@ -596,7 +597,7 @@ impl SynthRequest {
                 per_capita_kw,
                 peak_factor,
             } => {
-                if !(per_capita_kw.is_finite() && *per_capita_kw > 0.0) {
+                if per_capita_kw.is_some_and(|kw| !(kw.is_finite() && kw > 0.0)) {
                     return bad("demand.per_capita_kw must be positive".into());
                 }
                 if !(peak_factor.is_finite() && *peak_factor >= 1.0) {

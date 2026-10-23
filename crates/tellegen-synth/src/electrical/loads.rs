@@ -1,5 +1,5 @@
 //! Load allocation. At high fidelity each bus is weighted by the inverse
-//! distance weighted population of places within 25 km, with a floor so a
+//! distance weighted demand of places within 25 km, with a floor so a
 //! bus with no place nearby still carries some load; at low fidelity (or
 //! without a population signal) weights are a floor plus a skewed random
 //! draw. Weights are normalised to the context's peak demand and reactive
@@ -7,7 +7,7 @@
 
 use crate::context::ContextData;
 use crate::electrical::params::{bus_load_cap_mw, LOAD_FLOOR_MEDIAN_FRACTION, LOAD_IDW_RADIUS_KM};
-use crate::places::population_idw;
+use crate::places::demand_idw;
 use crate::report::RegionContext;
 use crate::request::Fidelity;
 use crate::rng::Stream;
@@ -43,7 +43,7 @@ pub fn assign_loads(
     }
     let points: Vec<(f64, f64)> = buses.iter().map(|b| (b.lon, b.lat)).collect();
     let raw = if fidelity == Fidelity::High {
-        population_idw(&points, &data.cities, LOAD_IDW_RADIUS_KM)
+        demand_idw(&points, &data.cities, LOAD_IDW_RADIUS_KM)
     } else {
         vec![0.0; buses.len()]
     };

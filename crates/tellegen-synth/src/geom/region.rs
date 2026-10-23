@@ -276,6 +276,49 @@ impl RegionShape {
         false
     }
 
+    /// A point inside the region within `max_km` of a point just outside it:
+    /// the nearest point of an outer ring, stepped a few metres inward.
+    /// `None` when no outer ring comes that close.
+    pub fn inside_near(&self, lon: f64, lat: f64, max_km: f64) -> Option<(f64, f64)> {
+        let margin_lat = max_km / 111.0;
+        let margin_lon = margin_lat / lat.to_radians().cos().abs().max(0.05);
+        // The nearest point and the two ends of its segment.
+        let mut best: Option<[(f64, f64); 3]> = None;
+        let mut best_km = f64::INFINITY;
+        for poly in &self.polygons {
+            let bb = poly.bbox();
+            if lon < bb.west - margin_lon
+                || lon > bb.east + margin_lon
+                || lat < bb.south - margin_lat
+                || lat > bb.north + margin_lat
+            {
+                continue;
+            }
+            for w in poly.rings[0].windows(2) {
+                let (d, q) = nearest_on_segment(lon, lat, w[0], w[1]);
+                if d <= max_km && d < best_km {
+                    best = Some([q, w[0], w[1]]);
+                    best_km = d;
+                }
+            }
+        }
+        let [q, a, b] = best?;
+        // Step off the segment along its normal, on whichever side is inside.
+        let k = q.1.to_radians().cos().abs().max(0.05);
+        let (dx, dy) = ((b.0 - a.0) * k, b.1 - a.1);
+        let len = dx.hypot(dy).max(1e-12);
+        let (nx, ny) = (-dy / len / k, dx / len);
+        for step in [1e-4, 5e-4, 2e-3, 1e-2] {
+            for side in [1.0, -1.0] {
+                let p = (q.0 + side * nx * step, q.1 + side * ny * step);
+                if self.contains(p.0, p.1) {
+                    return Some(p);
+                }
+            }
+        }
+        None
+    }
+
     /// Whether a polyline stays inside the region: eight samples per segment,
     /// enough to tag a corridor that leaves the selection.
     pub fn polyline_inside(&self, line: &[(f64, f64)]) -> bool {
@@ -340,7 +383,13 @@ fn sample_polygon_point(poly: &Polygon, rng: &mut Stream) -> Option<(f64, f64)> 
 /// Planar point-to-segment distance in km with a cos(lat) longitude
 /// correction: adequate for a border buffer of a few km.
 pub fn point_segment_km(plon: f64, plat: f64, a: (f64, f64), b: (f64, f64)) -> f64 {
-    let k = plat.to_radians().cos();
+    nearest_on_segment(plon, plat, a, b).0
+}
+
+/// The point of segment `a`-`b` nearest `(plon, plat)` and its distance in
+/// km, with the same planar cos(lat) correction as [`point_segment_km`].
+fn nearest_on_segment(plon: f64, plat: f64, a: (f64, f64), b: (f64, f64)) -> (f64, (f64, f64)) {
+    let k = plat.to_radians().cos().abs().max(1e-6);
     let (px, py) = (plon * k, plat);
     let (ax, ay) = (a.0 * k, a.1);
     let (bx, by) = (b.0 * k, b.1);
@@ -351,7 +400,10 @@ pub fn point_segment_km(plon: f64, plat: f64, a: (f64, f64), b: (f64, f64)) -> f
         (((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0)
     };
     let (cx, cy) = (ax + t * dx, ay + t * dy);
-    ((px - cx).powi(2) + (py - cy).powi(2)).sqrt() * 111.0
+    (
+        ((px - cx).powi(2) + (py - cy).powi(2)).sqrt() * 111.0,
+        (cx / k, cy),
+    )
 }
 
 /// Great-circle distance between two frame points (longitudes may exceed 180).

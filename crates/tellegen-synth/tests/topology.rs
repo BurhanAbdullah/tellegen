@@ -76,8 +76,9 @@ fn structure_matches_reference_ranges_across_sizes() {
 
 #[test]
 fn heavy_demand_adds_circuits_keeps_ratings_physical_and_says_so() {
-    // The Iraq box's population on 30 buses: over 1 GW per bus.
+    // 15 GW on 30 buses: 500 MW per bus.
     let mut req = common::request(common::iraq_box(), 2026, Some(30));
+    req.demand = DemandSpec::TotalMw { mw: 15_000.0 };
     req.validation.run_ac_pf = false;
     req.validation.run_dc_opf = false;
     let (module, report) = generate(req, common::places(), None).unwrap();

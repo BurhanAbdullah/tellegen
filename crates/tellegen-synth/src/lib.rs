@@ -22,6 +22,7 @@
 pub mod build;
 pub mod calibrate;
 pub mod context;
+pub mod demand;
 pub mod electrical;
 pub mod error;
 pub mod export;

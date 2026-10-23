@@ -204,12 +204,39 @@ pub struct BBox {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DemandBasis {
-    /// Population of the places inside the region × per-capita × peak factor.
+    /// Each place draws its country's peak per head of the places table, from
+    /// the national demand table (`RegionContext::demand_by_country`,
+    /// `Provenance::demand_table`).
+    National,
+    /// Population of the places inside the region × the stated per-capita
+    /// draw × peak factor.
     Population,
     /// The request stated the peak MW.
     TotalMw,
     /// No place fell inside the region: a per-bus default was used.
     DefaultPerBus,
+}
+
+/// One country's part of a region's demand under the national basis.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct CountryDemand {
+    /// Country code of the places table (Natural Earth `adm0_a3`).
+    pub code: String,
+    /// Year of the national figure; absent when the country has no entry and
+    /// its places drew the world average.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year: Option<u32>,
+    pub places: usize,
+    /// Sum of `pop_max` over those places.
+    pub population: f64,
+    /// Peak demand of those places, MW.
+    pub peak_mw: f64,
+    /// The country's national peak (annual average load × peak factor), MW;
+    /// `peak_mw` equals it when the region holds every place of the country.
+    /// Absent for the world fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub national_peak_mw: Option<f64>,
 }
 
 /// The region as the generator resolved it.
@@ -229,9 +256,17 @@ pub struct RegionContext {
     /// Sum of `pop_max` over the populated places inside the region.
     pub population_in_region: f64,
     pub places_in_region: usize,
+    /// Places counted in the region although just outside its polygons:
+    /// within 15 km of its edge, of a country it already holds, and moved
+    /// onto that edge (harbours and estuaries the polygons leave out).
+    pub places_snapped: usize,
     pub target_bus_count: u32,
     pub peak_demand_mw: f64,
     pub demand_basis: DemandBasis,
+    /// The countries behind the demand, largest peak first (national basis
+    /// only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub demand_by_country: Vec<CountryDemand>,
     pub fuel_mix: BTreeMap<Fuel, f64>,
     /// Branches per bus the topology aims at.
     pub branch_factor: f64,
@@ -623,6 +658,23 @@ pub struct PlacesProvenance {
     pub sha256: String,
 }
 
+/// The national demand table behind a national demand basis.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct DemandTableProvenance {
+    pub schema: String,
+    /// The year most entries report.
+    pub year: u32,
+    pub source: String,
+    pub licence: String,
+    /// SHA-256 of the bundled table.
+    pub sha256: String,
+    /// SHA-256 of the dataset the table was derived from.
+    pub source_sha256: String,
+    /// Peak demand as a multiple of the annual average load.
+    pub peak_factor: f64,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct OsmProvenance {
@@ -649,6 +701,8 @@ pub struct Provenance {
     pub spread_sigma: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub places: Option<PlacesProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demand_table: Option<DemandTableProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm: Option<OsmProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

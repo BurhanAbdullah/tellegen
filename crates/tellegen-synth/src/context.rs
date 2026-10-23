@@ -5,11 +5,12 @@
 
 use std::collections::BTreeMap;
 
+use crate::demand::NationalDemand;
 use crate::error::SynthError;
 use crate::geom::region::RegionShape;
 use crate::geom::{haversine_km, wrap_lon};
 use crate::places::{PlacedCity, Places};
-use crate::report::{DemandBasis, RegionContext, Warning};
+use crate::report::{CountryDemand, DemandBasis, RegionContext, Warning};
 use crate::request::{DemandSpec, Density, FarIslandPolicy, SynthRequest};
 
 /// Everything later stages need from the context stage that is not in the
@@ -35,7 +36,40 @@ pub fn density_bus_count(density: Density, area_km2: f64) -> u32 {
         Density::High => 78.0,
     };
     let area_factor = ((area_km2.max(100.0) / 10_000.0).sqrt() / 2.5).clamp(0.8, 4.0);
-    (base * area_factor).round().clamp(14.0, 400.0) as u32
+    (base * area_factor).round().clamp(MIN_BUS_COUNT, 400.0) as u32
+}
+
+/// Fewest buses a count from area or demand gives.
+const MIN_BUS_COUNT: f64 = 14.0;
+
+/// Peak load per bus the default bus count keeps within, MW (low, high).
+/// source: average load per bus in transmission models falls with the lowest
+/// voltage they include. Models down to 110–220 kV carry about 30–55 MW per
+/// bus (case1888rte 31 MW, case2869pegase 46 MW, case1354pegase 54 MW, from
+/// the MATPOWER 8.1 data; Josz et al., arXiv:1603.01533), substation-level
+/// models at 220 kV and above about 100–140 MW (PyPSA-Eur: 0.51 TW over 4,977
+/// buses, 102 MW per bus and 139 MW per substation, Hörsch et al., *Energy
+/// Strategy Reviews* 22, 2018; SciGRID Germany about 129 MW per bus at the
+/// 2024 German peak). The band runs from the first scale to the second,
+/// rounded up to 150 MW.
+pub const MW_PER_BUS_BAND: (f64, f64) = (30.0, 150.0);
+
+/// Bus count from density, area and peak demand when the request states
+/// none: the area law of [`density_bus_count`], moved into the range that
+/// keeps each bus within [`MW_PER_BUS_BAND`] of peak load. A country-scale
+/// region then aggregates its demand the way transmission models do instead
+/// of loading a few hundred buses with gigawatts each, and a large but empty
+/// region does not spread a small demand over hundreds of buses.
+pub fn demand_bus_count(density: Density, area_km2: f64, peak_mw: f64) -> u32 {
+    let area = density_bus_count(density, area_km2) as f64;
+    if !(peak_mw.is_finite() && peak_mw > 0.0) {
+        return area as u32;
+    }
+    let fewest = (peak_mw / MW_PER_BUS_BAND.1).ceil();
+    let most = (peak_mw / MW_PER_BUS_BAND.0).floor().max(MIN_BUS_COUNT);
+    area.max(fewest)
+        .min(most.max(fewest))
+        .min(f64::from(u32::MAX)) as u32
 }
 
 /// Branches per bus by density when the request states none. source:
@@ -75,11 +109,31 @@ pub fn resolve_context(
             "region polygons enclose no area".to_owned(),
         ));
     }
-    let n = req
-        .target_bus_count
-        .unwrap_or_else(|| density_bus_count(req.density, shape.area_km2))
-        .min(req.limits.max_bus_count)
-        .max(1);
+    // Bus count: the request's, else area and demand. Demand for sizing counts
+    // every place inside the region; the participation rules below may drop
+    // a few polygons, which only lowers the demand the count was sized for.
+    let (wanted, sizing_peak) = match req.target_bus_count {
+        Some(count) => (count, None),
+        None => {
+            let mut sizing = places.in_region(&shape);
+            let peak = size_demand(&req.demand, places, &mut sizing).peak_mw;
+            (
+                demand_bus_count(req.density, shape.area_km2, peak),
+                Some(peak),
+            )
+        }
+    };
+    let n = wanted.min(req.limits.max_bus_count).max(1);
+    if let Some(peak) = sizing_peak.filter(|_| wanted > n) {
+        warnings.push(Warning::new(
+            "bus_count_capped",
+            format!(
+                "a {peak:.0} MW peak needs {wanted} buses to stay within {:.0} MW per bus; limits.max_bus_count holds the network at {n} buses, {:.0} MW per bus",
+                MW_PER_BUS_BAND.1,
+                peak / n as f64
+            ),
+        ));
+    }
     if let Some(g) = req.generator_count {
         if g > n {
             return Err(SynthError::InvalidRequest(format!(
@@ -158,7 +212,7 @@ pub fn resolve_context(
     }
 
     // Places: only inside retained polygons.
-    let cities: Vec<PlacedCity> = places
+    let mut cities: Vec<PlacedCity> = places
         .in_region(&shape)
         .into_iter()
         .filter(|c| {
@@ -169,26 +223,36 @@ pub fn resolve_context(
         .collect();
     let population: f64 = cities.iter().map(|c| c.place.population).sum();
 
-    let (peak_demand_mw, demand_basis) = match &req.demand {
-        DemandSpec::TotalMw { mw } => (*mw, DemandBasis::TotalMw),
-        DemandSpec::Population {
-            per_capita_kw,
-            peak_factor,
-        } => {
-            if population > 0.0 {
-                (
-                    population * per_capita_kw * peak_factor / 1000.0,
-                    DemandBasis::Population,
-                )
-            } else {
-                warnings.push(Warning::new(
-                    "no_population_signal",
-                    "no populated place lies inside the region; demand uses a per-bus default and loads spread uniformly",
-                ));
-                (DEFAULT_MW_PER_BUS * n as f64, DemandBasis::DefaultPerBus)
-            }
-        }
+    let sized = size_demand(&req.demand, places, &mut cities);
+    let (peak_demand_mw, demand_basis) = if sized.basis == DemandBasis::TotalMw
+        || sized.peak_mw > 0.0
+    {
+        (sized.peak_mw, sized.basis)
+    } else {
+        warnings.push(Warning::new(
+                "no_population_signal",
+                "no populated place lies inside the region; demand uses a per-bus default and loads spread uniformly",
+            ));
+        (DEFAULT_MW_PER_BUS * n as f64, DemandBasis::DefaultPerBus)
     };
+    let fallback: Vec<&CountryDemand> = sized
+        .by_country
+        .iter()
+        .filter(|c| c.year.is_none())
+        .collect();
+    if let (DemandSpec::Population { peak_factor, .. }, false) = (&req.demand, fallback.is_empty())
+    {
+        let codes: Vec<&str> = fallback.iter().map(|c| c.code.as_str()).collect();
+        warnings.push(Warning::new(
+            "demand_fallback",
+            format!(
+                "{} place(s) of {} have no national demand entry and draw the world average load per person ({:.2} kW at peak)",
+                fallback.iter().map(|c| c.places).sum::<usize>(),
+                if codes.is_empty() { "unknown countries".to_owned() } else { codes.join(", ") },
+                NationalDemand::bundled().world_intensity(*peak_factor) * 1000.0
+            ),
+        ));
+    }
 
     let levels = req.resolved_voltage_levels();
     let classes: Vec<f64> = levels
@@ -210,9 +274,11 @@ pub fn resolve_context(
         landmasses: polygon_group.iter().filter(|g| g.is_some()).count(),
         population_in_region: population,
         places_in_region: cities.len(),
+        places_snapped: cities.iter().filter(|c| c.snapped).count(),
         target_bus_count: n,
         peak_demand_mw,
         demand_basis,
+        demand_by_country: sized.by_country,
         fuel_mix: req.resolved_fuel_mix(),
         branch_factor: req
             .branch_factor
@@ -230,6 +296,81 @@ pub fn resolve_context(
             group_count,
         },
     ))
+}
+
+/// A region's peak demand from its places, with each place's demand weight
+/// set to its share.
+struct DemandSizing {
+    peak_mw: f64,
+    basis: DemandBasis,
+    by_country: Vec<CountryDemand>,
+}
+
+/// Size demand from `spec`. Under the national basis each place draws its
+/// country's peak per head of `places` ([`NationalDemand::place_intensity`])
+/// and a place whose country has no entry the world average per person;
+/// with `per_capita_kw` every person draws that average; a stated total
+/// leaves the population weights as they are.
+fn size_demand(spec: &DemandSpec, places: &Places, cities: &mut [PlacedCity]) -> DemandSizing {
+    let (per_capita_kw, peak_factor) = match spec {
+        DemandSpec::TotalMw { mw } => {
+            return DemandSizing {
+                peak_mw: *mw,
+                basis: DemandBasis::TotalMw,
+                by_country: Vec::new(),
+            }
+        }
+        DemandSpec::Population {
+            per_capita_kw,
+            peak_factor,
+        } => (*per_capita_kw, *peak_factor),
+    };
+    if let Some(kw) = per_capita_kw {
+        for city in cities.iter_mut() {
+            city.demand_weight = city.place.population * kw * peak_factor / 1000.0;
+        }
+        return DemandSizing {
+            peak_mw: cities.iter().map(|c| c.demand_weight).sum(),
+            basis: DemandBasis::Population,
+            by_country: Vec::new(),
+        };
+    }
+    let table = NationalDemand::bundled();
+    let intensity = table.place_intensity(places, peak_factor);
+    let world = table.world_intensity(peak_factor);
+    let mut by_country: BTreeMap<String, CountryDemand> = BTreeMap::new();
+    for city in cities.iter_mut() {
+        let code = table.canonical(&city.place.iso_a3);
+        let national = table
+            .country(code)
+            .zip(intensity.get(code))
+            .map(|(entry, &k)| (entry, k));
+        city.demand_weight = city.place.population * national.map_or(world, |(_, k)| k);
+        let share = by_country
+            .entry(code.to_owned())
+            .or_insert_with(|| CountryDemand {
+                code: code.to_owned(),
+                year: national.map(|(entry, _)| entry.year),
+                places: 0,
+                population: 0.0,
+                peak_mw: 0.0,
+                national_peak_mw: national.map(|(entry, _)| entry.average_mw() * peak_factor),
+            });
+        share.places += 1;
+        share.population += city.place.population;
+        share.peak_mw += city.demand_weight;
+    }
+    let mut by_country: Vec<CountryDemand> = by_country.into_values().collect();
+    by_country.sort_by(|a, b| {
+        b.peak_mw
+            .total_cmp(&a.peak_mw)
+            .then_with(|| a.code.cmp(&b.code))
+    });
+    DemandSizing {
+        peak_mw: cities.iter().map(|c| c.demand_weight).sum(),
+        basis: DemandBasis::National,
+        by_country,
+    }
 }
 
 /// Single-linkage groups of the kept polygons: two polygons join when some
@@ -284,6 +425,7 @@ fn landmass_groups(shape: &RegionShape, kept: &[usize], max_km: f64) -> Vec<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::demand::DEFAULT_PEAK_FACTOR;
     use crate::request::Region;
 
     #[test]
@@ -330,16 +472,78 @@ mod tests {
     }
 
     #[test]
+    fn a_region_holding_every_place_of_a_country_reproduces_its_national_peak() {
+        let places = Places::parse(include_bytes!("../data/populated_places.json")).unwrap();
+        // Mainland Portugal, the Azores and Madeira, with parts of Spain and
+        // Morocco: one polygon, so no island is cut.
+        let req = SynthRequest::new(Region::bbox(-31.5, 32.3, -6.0, 42.2, "Portugal box"));
+        let (ctx, _) = resolve_context(&req, &places, &mut Vec::new()).unwrap();
+        assert_eq!(ctx.demand_basis, DemandBasis::National);
+        let prt = ctx
+            .demand_by_country
+            .iter()
+            .find(|c| c.code == "PRT")
+            .unwrap();
+        let table = NationalDemand::bundled();
+        let national = table.country("PRT").unwrap().average_mw() * DEFAULT_PEAK_FACTOR;
+        assert_eq!(prt.national_peak_mw, Some(national));
+        assert!((prt.peak_mw - national).abs() < 1e-6 * national, "{prt:?}");
+        assert_eq!(prt.year, Some(table.country("PRT").unwrap().year));
+        let total: f64 = ctx.demand_by_country.iter().map(|c| c.peak_mw).sum();
+        assert!((total - ctx.peak_demand_mw).abs() < 1e-6 * total);
+    }
+
+    #[test]
+    fn a_country_without_an_entry_draws_the_world_average_and_says_so() {
+        let places = Places::parse(
+            br#"[{"n":"A","lo":10.2,"la":10.2,"p":2000000,"c":"ZZZ"},
+                 {"n":"B","lo":10.5,"la":10.6,"p":500000,"c":"PRT"}]"#,
+        )
+        .unwrap();
+        let req = SynthRequest::new(Region::bbox(10.0, 10.0, 11.0, 11.0, "box"));
+        let mut warnings = Vec::new();
+        let (ctx, _) = resolve_context(&req, &places, &mut warnings).unwrap();
+        let fallback = warnings
+            .iter()
+            .find(|w| w.code == "demand_fallback")
+            .expect("a fallback warning");
+        assert!(fallback.message.contains("ZZZ"), "{}", fallback.message);
+        let zzz = ctx
+            .demand_by_country
+            .iter()
+            .find(|c| c.code == "ZZZ")
+            .unwrap();
+        assert_eq!((zzz.year, zzz.national_peak_mw), (None, None));
+        let world = NationalDemand::bundled().world_intensity(DEFAULT_PEAK_FACTOR);
+        assert!((zzz.peak_mw - 2_000_000.0 * world).abs() < 1e-6 * zzz.peak_mw);
+        // PRT's only place here carries all of Portugal's peak.
+        let prt = ctx
+            .demand_by_country
+            .iter()
+            .find(|c| c.code == "PRT")
+            .unwrap();
+        assert!((prt.peak_mw - prt.national_peak_mw.unwrap()).abs() < 1e-6 * prt.peak_mw);
+    }
+
+    #[test]
     fn population_demand_and_default_fallback() {
         let places = Places::parse(include_bytes!("../tests/fixtures/places_small.json")).unwrap();
         let req = SynthRequest::new(Region::bbox(42.1, 31.1, 48.5, 36.8, "Iraq box"));
         let mut w = Vec::new();
         let (ctx, data) = resolve_context(&req, &places, &mut w).unwrap();
-        assert_eq!(ctx.demand_basis, DemandBasis::Population);
+        assert_eq!(ctx.demand_basis, DemandBasis::National);
         assert!(ctx.population_in_region > 5_000_000.0);
-        assert!(ctx.peak_demand_mw > 5_000.0);
         assert_eq!(data.cities[0].place.name, "Baghdad");
-        assert_eq!(ctx.target_bus_count, 191);
+        // Every Iraqi place of the table lies in the box, so the box carries
+        // Iraq's national peak.
+        let irq = ctx
+            .demand_by_country
+            .iter()
+            .find(|c| c.code == "IRQ")
+            .unwrap();
+        let national = irq.national_peak_mw.unwrap();
+        assert!((irq.peak_mw - national).abs() < 1e-6 * national);
+        assert!(ctx.peak_demand_mw / ctx.target_bus_count as f64 <= MW_PER_BUS_BAND.1 + 1e-9);
 
         let req = SynthRequest::new(Region::bbox(-30.0, -50.0, -10.0, -30.0, "South Atlantic"));
         let mut w = Vec::new();
