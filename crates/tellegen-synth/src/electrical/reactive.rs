@@ -186,7 +186,8 @@ mod tests {
     fn line(from: usize, to: usize, r: f64, x: f64, b: f64) -> DraftBranch {
         DraftBranch {
             corridor: 0,
-            circuit: 1,
+            circuits: 1,
+            circuit_index: 1,
             from,
             to,
             kv: 230.0,

@@ -30,6 +30,8 @@ pub struct DraftHvdc {
     pub to: usize,
     pub rating_mw: f64,
     pub setpoint_mw: f64,
+    /// Circuits of the mapped DC ways joined into this link.
+    pub circuits: u32,
     pub osm_ids: Vec<i64>,
 }
 
@@ -162,7 +164,8 @@ pub fn build_network(
                 "is_transformer": br.is_transformer,
                 "transformer_mva": br.transformer_mva.map(round3),
                 "winding_ratio": br.winding_ratio,
-                "circuit": br.circuit,
+                "circuits": br.circuits,
+                "circuit_index": br.circuit_index,
                 "rating_basis": br.rating_basis,
                 "osm_ids": osm_ids,
             }),
@@ -205,7 +208,7 @@ pub fn build_network(
         row.pt = link.setpoint_mw;
         row.extras.insert(
             EXTRAS_KEY.to_owned(),
-            serde_json::json!({ "osm_ids": link.osm_ids, "source": "osm" }),
+            serde_json::json!({ "osm_ids": link.osm_ids, "source": "osm", "circuits": link.circuits }),
         );
         hvdc_rows.push(row);
     }
@@ -288,7 +291,8 @@ fn annotate(
                     }
                     _ => buses[br.from].source,
                 },
-                circuits: br.circuit,
+                circuits: br.circuits,
+                circuit_index: br.circuit_index,
                 rating_basis: br.rating_basis.to_owned(),
                 osm_ids: branch_osm_ids
                     .and_then(|ids| ids.get(k))
@@ -327,7 +331,8 @@ fn annotate(
             is_transformer: false,
             is_hvdc: true,
             source: crate::report::ElementSource::Osm,
-            circuits: 1,
+            circuits: link.circuits,
+            circuit_index: 1,
             rating_basis: "osm".to_owned(),
             osm_ids: link.osm_ids.clone(),
         });

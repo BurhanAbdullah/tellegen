@@ -86,6 +86,14 @@ fn the_fixture_maps_to_a_grid_that_solves() {
         .collect();
     assert_eq!(ad.len(), 3);
     assert!(ad.iter().all(|b| b.osm_ids.contains(&311)));
+    assert!(ad.iter().all(|b| b.circuits == 3));
+    let mut ad_index: Vec<u32> = ad.iter().map(|b| b.circuit_index).collect();
+    ad_index.sort_unstable();
+    assert_eq!(ad_index, [1, 2, 3]);
+    assert!(common::check_circuit_annotations(net, &report) > 0);
+    let hvdc: Vec<_> = elements.branches.iter().filter(|b| b.is_hvdc).collect();
+    assert_eq!(hvdc.len(), 1);
+    assert_eq!((hvdc[0].circuits, hvdc[0].circuit_index), (1, 1));
 
     // Mapped plants: 2x600 MW coal at A, 300 MW wind at B, an untagged solar
     // generator at E (estimated); makeup covers the rest of the reserve margin.

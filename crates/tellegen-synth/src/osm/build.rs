@@ -566,9 +566,11 @@ impl OsmBuild {
                     to: from.max(to),
                     rating_mw: 0.0,
                     setpoint_mw: 0.0,
+                    circuits: 0,
                     osm_ids: Vec::new(),
                 });
             link.rating_mw += HVDC_MW_PER_CIRCUIT * line.circuits as f64;
+            link.circuits += line.circuits;
             link.osm_ids.extend(line.ids.iter().copied());
         }
         self.hvdc = dc.into_values().collect();

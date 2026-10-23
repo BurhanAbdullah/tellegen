@@ -90,6 +90,7 @@ fn heavy_demand_adds_circuits_keeps_ratings_physical_and_says_so() {
         .iter()
         .any(|w| w.code == "branch_target_exceeded"));
     assert!(plan.capacity_circuits + plan.stiffening_circuits > 0);
+    assert!(common::check_circuit_annotations(net, &report) > 0);
     assert!(plan.converged, "{plan:?}");
     assert!(plan.max_planning_loading <= PLANNING_UTILISATION + 1e-9);
     assert!(plan.angle_spread_deg <= MAX_ANGLE_SPREAD_RAD.to_degrees() + 1e-9);

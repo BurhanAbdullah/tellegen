@@ -109,7 +109,10 @@ a solve.
 
 The plan is recorded in `GenerationReport.planning`: rounds, promoted
 buses, capacity, stiffening and filler circuits, enlarged banks, angle
-spread, and banks and MVAr installed.
+spread, and banks and MVAr installed. Each circuit is its own branch row;
+its annotation in `GenerationReport.elements` gives the corridor's circuit
+count (`circuits`) and the branch's 1-based place among them
+(`circuit_index`).
 
 ## Validation and calibration
 

@@ -44,3 +44,37 @@ pub fn request(region: Region, seed: u64, buses: Option<u32>) -> SynthRequest {
     req.target_bus_count = buses;
     req
 }
+
+/// Check the circuit annotations against the built rows: the branches between
+/// one bus pair form a corridor, each reports the corridor's circuit count,
+/// and their indices run `1..=count`. Returns how many corridors carry more
+/// than one circuit.
+pub fn check_circuit_annotations(
+    net: &powerio::BalancedNetwork,
+    report: &tellegen_synth::GenerationReport,
+) -> usize {
+    let branches = &report.elements.as_ref().unwrap().branches;
+    let mut corridors: std::collections::BTreeMap<(usize, usize), Vec<(u32, u32)>> =
+        std::collections::BTreeMap::new();
+    for (row, annotation) in net.branches().iter().zip(branches) {
+        let key = (row.from.0.min(row.to.0), row.from.0.max(row.to.0));
+        corridors
+            .entry(key)
+            .or_default()
+            .push((annotation.circuits, annotation.circuit_index));
+    }
+    for (key, members) in &corridors {
+        let n = members.len() as u32;
+        assert!(
+            members.iter().all(|&(count, _)| count == n),
+            "corridor {key:?}: {members:?}"
+        );
+        let mut indices: Vec<u32> = members.iter().map(|&(_, index)| index).collect();
+        indices.sort_unstable();
+        assert_eq!(indices, (1..=n).collect::<Vec<_>>(), "corridor {key:?}");
+    }
+    corridors
+        .values()
+        .filter(|members| members.len() > 1)
+        .count()
+}

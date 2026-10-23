@@ -67,7 +67,10 @@ impl CircuitDesign {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DraftBranch {
     pub corridor: usize,
-    pub circuit: u32,
+    /// Parallel circuits in this branch's corridor, this one included.
+    pub circuits: u32,
+    /// 1-based position of this branch among them.
+    pub circuit_index: u32,
     pub from: usize,
     pub to: usize,
     pub kv: f64,
@@ -251,7 +254,8 @@ pub fn expand_circuits(corridors: &[Corridor], designs: &[CircuitDesign]) -> Vec
             }
             out.push(DraftBranch {
                 corridor: ci,
-                circuit,
+                circuits: c.circuits,
+                circuit_index: circuit,
                 from: d.from,
                 to: d.to,
                 kv: d.kv,

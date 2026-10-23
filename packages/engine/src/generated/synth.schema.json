@@ -122,7 +122,14 @@
           "description": "`internal`, `tie_line` (leaves the region), `interconnect`, `transformer`.",
           "type": "string"
         },
+        "circuit_index": {
+          "description": "1-based position of this branch among its corridor's circuits\n(`1..=circuits`); 1 for an HVDC link.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "circuits": {
+          "description": "Parallel circuits in this branch's corridor, this branch included;\nevery branch of a corridor carries the same count. It is the corridor\nplan's count for a synthetic corridor and for the transformers and\nconnections OpenStreetMap mode adds, and the summed `circuits` tags\n(else `cables / 3`) of the joined ways for a mapped OpenStreetMap\ncorridor. An HVDC link is one row for all of its circuits.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -175,6 +182,7 @@
         "is_hvdc",
         "source",
         "circuits",
+        "circuit_index",
         "rating_basis"
       ],
       "type": "object"
@@ -2493,5 +2501,5 @@
   ],
   "title": "SynthContract",
   "type": "object",
-  "x-rust-source-sha256": "43fd558d54af084e60ae6110582e78449c7822ef07607d5ae273fc2dcbcf760c"
+  "x-rust-source-sha256": "732ffd4c1452b8ffce40f53b4bed94a697182b3b910ba396e29673195c40dff6"
 }

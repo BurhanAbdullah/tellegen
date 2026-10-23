@@ -571,7 +571,16 @@ pub struct BranchAnnotation {
     pub is_transformer: bool,
     pub is_hvdc: bool,
     pub source: ElementSource,
+    /// Parallel circuits in this branch's corridor, this branch included;
+    /// every branch of a corridor carries the same count. It is the corridor
+    /// plan's count for a synthetic corridor and for the transformers and
+    /// connections OpenStreetMap mode adds, and the summed `circuits` tags
+    /// (else `cables / 3`) of the joined ways for a mapped OpenStreetMap
+    /// corridor. An HVDC link is one row for all of its circuits.
     pub circuits: u32,
+    /// 1-based position of this branch among its corridor's circuits
+    /// (`1..=circuits`); 1 for an HVDC link.
+    pub circuit_index: u32,
     /// `thermal`, `loadability` (St. Clair), `transformer`, `calibrated`.
     pub rating_basis: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

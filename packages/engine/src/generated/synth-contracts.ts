@@ -1,5 +1,5 @@
 // Generated from Rust by synth_contract and generate-synth-contracts.mjs.
-// Source SHA256: 43fd558d54af084e60ae6110582e78449c7822ef07607d5ae273fc2dcbcf760c
+// Source SHA256: 732ffd4c1452b8ffce40f53b4bed94a697182b3b910ba396e29673195c40dff6
 
 export type AcPfOutcome = "converged" | "not_converged" | "skipped";
 
@@ -7,7 +7,7 @@ export type AcPfReport = { "buses_outside_emergency_band": number; "buses_outsid
 
 export type BBox = { "east": number; "north": number; "south": number; "west": number; };
 
-export type BranchAnnotation = { /** `internal`, `tie_line` (leaves the region), `interconnect`, `transformer`. */ "boundary_role": string; "circuits": number; "class_kv": number; /** 1-based branch position. */ "id": number; "is_hvdc": boolean; "is_transformer": boolean; "length_km": number; "osm_ids"?: Array<number>; /** `thermal`, `loadability` (St. Clair), `transformer`, `calibrated`. */ "rating_basis": string; "source": ElementSource; "uid": string; };
+export type BranchAnnotation = { /** `internal`, `tie_line` (leaves the region), `interconnect`, `transformer`. */ "boundary_role": string; /** 1-based position of this branch among its corridor's circuits (`1..=circuits`); 1 for an HVDC link. */ "circuit_index": number; /** Parallel circuits in this branch's corridor, this branch included; every branch of a corridor carries the same count. It is the corridor plan's count for a synthetic corridor and for the transformers and connections OpenStreetMap mode adds, and the summed `circuits` tags (else `cables / 3`) of the joined ways for a mapped OpenStreetMap corridor. An HVDC link is one row for all of its circuits. */ "circuits": number; "class_kv": number; /** 1-based branch position. */ "id": number; "is_hvdc": boolean; "is_transformer": boolean; "length_km": number; "osm_ids"?: Array<number>; /** `thermal`, `loadability` (St. Clair), `transformer`, `calibrated`. */ "rating_basis": string; "source": ElementSource; "uid": string; };
 
 export type BusAnnotation = { "base_kv": number; "confidence": number; "id": number; /** Index of the electrical island (0 = largest). */ "island": number; "kind": BusKind; "name": string; "place"?: string | null; "population_weight": number; "source": ElementSource; /** 0 = highest voltage level. */ "tier": number; "uid": string; };
 
