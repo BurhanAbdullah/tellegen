@@ -102,6 +102,8 @@
 		onmultiedgeclick={ctrl.selectMultiEdge}
 		onplacecase={ctrl.placeCase}
 		onmapclick={ctrl.clearSelection}
+		theme={config.theme}
+		cartoApiKey={config.cartoApiKey || undefined}
 	/>
 
 	<AppHeader />

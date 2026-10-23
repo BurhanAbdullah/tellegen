@@ -43,6 +43,10 @@ COPY examples/browser-minimal examples/browser-minimal
 COPY examples/svelte-minimal examples/svelte-minimal
 COPY crates/tellegen/src crates/tellegen/src
 COPY --from=wasm /out/wasm-pkg ./packages/engine/src/wasm-pkg
+# Optional CARTO basemap key. It is public by design, because the browser
+# sends it with every tile request, so restrict it to the deployment's hosts
+# on CARTO's side. Empty leaves OpenFreeMap as the primary basemap.
+ARG PUBLIC_CARTO_BASEMAP_KEY=""
 RUN npm run build:engine && npm run build:web && npm run smoke:web
 
 # ---- tellegen backend (cargo-chef: dependency compile is a cacheable layer) ----

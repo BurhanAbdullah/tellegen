@@ -141,51 +141,109 @@ collapsed disclosure.
 
 ## Basemap
 
-The map loads an [OpenFreeMap](https://openfreemap.org/) style by default
-(`positron` for the light theme, `dark` for the dark theme) and switches to the
-matching CARTO vector style when that style cannot be fetched, when its tiles
-answer 401, 403 or 429, or when tile fetches keep failing with nothing arriving.
-Label layers are hidden by default, so the light default looks like the
-previous CARTO no-labels basemap. The attribution control is always on and
+CARTO's vector styles suit a network overlay best: quiet roads, flat land and
+clear water. CARTO's basemap terms ask for an API key, which you can get from
+[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey). No account is
+needed, and non-commercial use (personal projects, research, teaching,
+non-profits) is free up to 5 million requests a month. The browser sends the
+key with every style, tile, glyph and sprite request as `?key=`, so it is
+public by design: restrict it to the hosts that serve your app in CARTO's key
+dashboard, and use one key per project.
+
+The default order depends on the key:
+
+- **With `cartoApiKey`:** the map loads the CARTO style. That is
+  `positron-nolabels` for the light theme and `dark-matter-nolabels` for the
+  dark theme, or the labelled styles with `hideBasemapLabels={false}`. It
+  falls back to the matching [OpenFreeMap](https://openfreemap.org/) style.
+- **Without a key:** the map loads the OpenFreeMap style (`positron` or
+  `dark`) and falls back to the keyless CARTO style.
+
+The map switches to the fallback in three cases:
+
+- the primary style cannot be fetched;
+- its tiles answer 401, 403 or 429;
+- tile fetches keep failing with nothing arriving.
+
+Whenever an OpenFreeMap style renders, as primary or as fallback,
+`openFreeMapEdits` tunes it towards CARTO's look. Road lines start at zoom 8.
+In the dark theme, water and waterways take Dark Matter's colours and land
+fills take one tone. The edits match layers by `source-layer`, not by id.
+
+Label layers are hidden by default. The attribution control is always on and
 shows the credits of the style on screen.
 
-`TellegenMap` (also exported from `@tellegen/svelte/map`) accepts, besides its
-click callbacks:
+`TellegenMap` (also exported from `@tellegen/svelte/map`) accepts these props
+besides its click callbacks:
 
-- `mapStyle`: a style URL or inline `StyleSpecification`; default, the
-  OpenFreeMap style for `theme`
+- `mapStyle`: a style URL or inline `StyleSpecification`. Default: the CARTO
+  style for `theme` with a key, else the OpenFreeMap style.
 - `fallbackMapStyle`: the style used when the primary fails; `null` disables
-  the switch; default, the CARTO style for `theme`
-- `theme`: `'light'` (default) or `'dark'`; picks the default styles and the
-  overlay palette (`MAP_PALETTE`)
-- `projection`: `'mercator'` (default) or `'globe'`; re-applied after every
-  style load, so a basemap switch keeps it
-- `initialCamera`: `{ center, zoom, bearing, pitch }`, read once per mount
-- `hideBasemapLabels`: default `true`
-- `extraLayers`: deck.gl layers drawn after tellegen's own, in the same overlay
-- `attribution`: `'compact'` (default) or `'full'`; there is no off switch
-- `onMapReady(map, overlay)`: the MapLibre map and deck overlay once they
-  exist; may return a cleanup, and fires again after a context-loss or basemap
-  rebuild
-- `onBasemapFallback(reason)` and `onBasemapError(reason)`: the switch
-  happened, or no basemap can be shown (the network layers still draw)
+  the switch. Default: whichever of the two is not the primary.
+- `cartoApiKey`: the CARTO key; empty or absent means none.
+- `theme`: `'light'` (default) or `'dark'`. Picks the default styles and the
+  overlay palette (`MAP_PALETTE`).
+- `projection`: `'mercator'` (default) or `'globe'`. Re-applied after every
+  style load, so a basemap switch keeps it.
+- `initialCamera`: `{ center, zoom, bearing, pitch }`, read once per mount.
+- `hideBasemapLabels`: default `true`.
+- `extraLayers`: deck.gl layers drawn after tellegen's own, in the same
+  overlay.
+- `attribution`: `'compact'` (default) or `'full'`. There is no off switch.
+- `onMapReady(map, overlay)`: called with the MapLibre map and the deck
+  overlay once they exist. It may return a cleanup, and it fires again after
+  a context-loss or basemap rebuild.
+- `onBasemapFallback(reason)`: the switch to the fallback happened.
+- `onBasemapError(reason)`: no basemap can be shown. The network layers
+  still draw.
 
-Changing `mapStyle`, `fallbackMapStyle`, `theme`, `hideBasemapLabels` or
-`attribution` rebuilds the map in place and keeps the camera. The helpers
-behind the defaults are exported too: `OPENFREEMAP_STYLES`, `CARTO_STYLES`,
-`cartoStyleUrl(url, apiKey)`, `defaultBasemap(theme)`, `resolveBasemap(props)`
-and `attachBasemapFallback(map, spec, handlers)`.
+`TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
+together with `theme`, to the default shell's map. A SvelteKit 3 host can
+declare the key as an optional public build-time variable:
+
+```ts
+// src/env.ts
+import { defineEnvVars } from "@sveltejs/kit/env";
+
+export const variables = defineEnvVars({
+  PUBLIC_CARTO_BASEMAP_KEY: { public: true, static: true, schema: (value) => value ?? "" }
+});
+```
+
+```svelte
+<script lang="ts">
+  import { TellegenProvider } from "@tellegen/svelte";
+  import { PUBLIC_CARTO_BASEMAP_KEY } from "$app/env/public";
+</script>
+
+<TellegenProvider cartoApiKey={PUBLIC_CARTO_BASEMAP_KEY}>...</TellegenProvider>
+```
+
+On SvelteKit 2, import it from `$env/static/public` instead; that module
+needs the variable defined at build time, even if empty.
+
+Changing `mapStyle`, `fallbackMapStyle`, `theme`, `hideBasemapLabels`,
+`cartoApiKey` or `attribution` rebuilds the map in place and keeps the camera.
+
+The helpers behind the defaults are exported too:
+
+- `OPENFREEMAP_STYLES` and `CARTO_STYLES`;
+- `cartoStyleUrl(url, apiKey)`;
+- `defaultBasemap(theme, { cartoApiKey })` and `resolveBasemap(props)`;
+- `attachBasemapFallback(map, spec, handlers)`;
+- `isOpenFreeMapStyle(style)` and `openFreeMapEdits(style, theme)`.
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
-`https://*.cartocdn.com` in `connect-src` and `img-src`: the style, vector
+`https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
 tiles, fonts and sprites are all fetched.
 
 ## Dark theme
 
 `<TellegenProvider theme="dark">` (or `<TellegenViewer theme="dark">`) sets
 `data-theme="dark"` on the document root while mounted, which switches every
-token in `styles.css`. Pass `theme="dark"` to `TellegenMap` as well so the
-basemap and the overlay palette follow. A server-rendered host can put the
+token in `styles.css`. The default shell passes the theme to its map, so the
+basemap and the overlay palette follow. A custom shell passes
+`theme="dark"` to `TellegenMap` itself. A server-rendered host can put the
 attribute in its template to avoid a light first paint. Text tokens keep at
 least 7:1 against the panel on either ground.
 

@@ -64,6 +64,12 @@ async function paintedFraction(page: Page, rgb: [number, number, number]) {
 	);
 }
 
+// The keyed dev server from playwright.config.ts.
+const keyedUrl = `http://127.0.0.1:${
+	process.env.TELLEGEN_KEYED_PORT ?? Number(process.env.TELLEGEN_PREVIEW_PORT ?? 4173) + 2
+}/`;
+const CARTO_STYLE = /^https:\/\/basemaps\.cartocdn\.com\/gl\/[^/]+\/style\.json/;
+
 async function stubApi(page: Page) {
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.route('**/api/compute', (route) => route.fulfill({ json: { enabled: false } }));
@@ -98,4 +104,42 @@ test('the CARTO fallback paints, with its credit, when OpenFreeMap cannot be fet
 	await expect.poll(() => paintedFraction(page, [200, 20, 50])).toBeGreaterThan(0.25);
 	// Attribution follows the style that is actually on screen.
 	await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('CARTO');
+});
+
+test('with a CARTO key, the keyed CARTO style leads', async ({ page }) => {
+	await stubApi(page);
+	const requested: string[] = [];
+	await page.route(CARTO_STYLE, (route: Route) => {
+		requested.push(route.request().url());
+		return route.fulfill({
+			json: stubStyle('#2864c8', '© <a href="https://carto.com/attributions">CARTO</a>')
+		});
+	});
+	await page.route('https://tiles.openfreemap.org/**', (route: Route) => route.abort('failed'));
+
+	await page.goto(keyedUrl);
+	await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 60_000 });
+	await expect
+		.poll(() => paintedFraction(page, [40, 100, 200]), { timeout: 60_000 })
+		.toBeGreaterThan(0.25);
+	expect(requested.length).toBeGreaterThan(0);
+	expect(new URL(requested[0]).searchParams.get('key')).toBe('e2e-key');
+	await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('CARTO');
+});
+
+test('with a CARTO key, OpenFreeMap paints, with its credit, when CARTO cannot be fetched', async ({
+	page
+}) => {
+	await stubApi(page);
+	await page.route(CARTO_STYLE, (route: Route) => route.abort('failed'));
+	await page.route('https://tiles.openfreemap.org/styles/*', (route: Route) =>
+		route.fulfill({ json: stubStyle('#14c864', '© OpenFreeMap') })
+	);
+
+	await page.goto(keyedUrl);
+	await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 60_000 });
+	await expect
+		.poll(() => paintedFraction(page, [20, 200, 100]), { timeout: 60_000 })
+		.toBeGreaterThan(0.25);
+	await expect(page.locator('.maplibregl-ctrl-attrib')).toContainText('OpenFreeMap');
 });
