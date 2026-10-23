@@ -212,6 +212,15 @@ a solve.
   Reactive power does not travel far (Kundur §11.2), so it is supplied where
   it is used. This plan covers line charging, series absorption and the
   share resistance moves to the receiving end.
+- **Voltage support.** A loaded bus farther than 480 km of corridor from
+  any generator gets a synchronous condenser, farthest first: no active
+  power, and a reactive range of 0.5 MVAr per MW of the load nearest it.
+  480 km is where the St. Clair curve falls to 1.0 SIL and voltage-drop and
+  stability limits replace the thermal one. Without one, a remote pocket fed
+  over long lines has nothing to hold its voltage, and its AC power flow can
+  stall while the lines are well inside their ratings. Condensers are
+  flagged in the generator annotations (`condenser`) and counted in the
+  `electrify` stage (`condensers`); a mapped OSM network gets none.
 
 The plan is recorded in `GenerationReport.planning`: rounds, promoted
 buses, the added level, the most circuits on one corridor
@@ -310,16 +319,16 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
 ## Limits
 
 - Requests are capped at 3000 buses, which the automatic count reaches for
-  the largest countries. China at 3000 buses takes about 1.0–1.3 s natively
+  the largest countries. China at 3000 buses takes about 1.0–1.2 s natively
   and 1.5 s in wasm (Node, Apple M5 Pro), end to end with both validations;
-  the United States takes 1.6–1.8 s and 2.1 s, about half of it an AC power
+  the United States takes 1.4–1.5 s and 2.0 s, about 0.9 s of it an AC power
   flow that does not converge over five starts. A 500-bus country takes
   under 0.1 s. `evidence/synth` records the measurements.
 - Whether the AC power flow converges inside the band depends on the seed
   for several countries. `evidence/synth` sweeps three seeds on two
   outlines (Natural Earth 1:50m and the MapToGrid app's 1:110m layer):
-  83% and 80% of the runs pass AC, every run passes DC, and Russia fails at
-  every seed.
+  91% and 92% of the runs pass AC, every run passes DC, and the United
+  States fails at every seed.
 - Clustering in generated grids runs higher than in the ACTIVSg200 and
   GOC500 references, because the Gabriel mesh is rich in triangles. Their
   highest nodal degree is also lower, since the mesh caps it at 8.
