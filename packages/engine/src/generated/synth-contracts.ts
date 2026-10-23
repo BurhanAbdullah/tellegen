@@ -1,5 +1,5 @@
 // Generated from Rust by synth_contract and generate-synth-contracts.mjs.
-// Source SHA256: 6651ecdfcab4e1dbea571d07f48dbdc7bc90d9a195b822d125fd316c4703c18d
+// Source SHA256: 88b06fa7d48944718c254433a835ffde1bf727bd52e1d33714be5958d7ff66f6
 
 export type AcPfOutcome = "converged" | "not_converged" | "skipped";
 
@@ -57,7 +57,7 @@ export type Fuel = "gas" | "coal" | "nuclear" | "hydro" | "wind" | "solar" | "st
 
 export type GenerationReport = { "ac_pf"?: (AcPfReport) | (null); "calibration"?: (CalibrationReport) | (null); "context"?: (RegionContext) | (null); "dc_opf"?: (DcOpfReport) | (null); "elements"?: (ElementAnnotations) | (null); "planning"?: (PlanningReport) | (null); "provenance": Provenance; "request": SynthRequest; "schema": string; "stages": Array<StageRecord>; "stats"?: (TopologyStats) | (null); "warnings": Array<Warning>; };
 
-export type GeneratorAnnotation = { "bus": number; "cost": CostCoefficients; "fuel": Fuel; "makeup": boolean; "pmax_mw": number; "slack": boolean; "uid": string; };
+export type GeneratorAnnotation = { "bus": number; /** A synchronous condenser the plan placed for voltage support in a remote pocket: no active power, reactive range only. */ "condenser"?: boolean; "cost": CostCoefficients; "fuel": Fuel; "makeup": boolean; "pmax_mw": number; "slack": boolean; "uid": string; };
 
 export type IslandOptions = { "beyond"?: FarIslandPolicy; /** Landmasses whose nearest buses are closer than this are joined by an interconnect corridor (submarine or overhead), like Sicily or the Danish islands. source: typical AC/HVDC interconnector lengths, ENTSO-E grid map. */ "max_interconnect_km"?: number; };
 

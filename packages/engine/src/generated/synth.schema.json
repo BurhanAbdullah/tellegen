@@ -1248,6 +1248,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "condenser": {
+          "default": false,
+          "description": "A synchronous condenser the plan placed for voltage support in a\nremote pocket: no active power, reactive range only.",
+          "type": "boolean"
+        },
         "cost": {
           "$ref": "#/$defs/CostCoefficients"
         },
@@ -2752,5 +2757,5 @@
   ],
   "title": "SynthContract",
   "type": "object",
-  "x-rust-source-sha256": "6651ecdfcab4e1dbea571d07f48dbdc7bc90d9a195b822d125fd316c4703c18d"
+  "x-rust-source-sha256": "88b06fa7d48944718c254433a835ffde1bf727bd52e1d33714be5958d7ff66f6"
 }
