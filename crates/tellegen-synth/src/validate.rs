@@ -36,6 +36,8 @@ pub struct DcOpfRun {
     pub dispatch: Vec<(usize, f64)>,
     /// Loading per branch row (`None` for rows no island solved).
     pub loading: Vec<Option<f64>>,
+    /// From-end active flow per branch row, MW (`None` for rows no island solved).
+    pub branch_flow_mw: Vec<Option<f64>>,
 }
 
 impl DcOpfRun {
@@ -220,6 +222,7 @@ pub fn run_dc_opf(
         .filter_map(|(k, b)| b.uid.clone().map(|u| (u, k)))
         .collect();
     let mut loading: Vec<Option<f64>> = vec![None; net.branches().len()];
+    let mut branch_flow_mw: Vec<Option<f64>> = vec![None; net.branches().len()];
     let mut dispatch = Vec::new();
     let mut lmps = Vec::new();
     let mut objective = 0.0;
@@ -287,6 +290,7 @@ pub fn run_dc_opf(
                         if let Some(row) = row {
                             if row < loading.len() {
                                 loading[row] = Some(f.loading);
+                                branch_flow_mw[row] = Some(f.pf);
                             }
                         }
                     }
@@ -402,6 +406,7 @@ pub fn run_dc_opf(
         report,
         dispatch,
         loading,
+        branch_flow_mw,
     })
 }
 

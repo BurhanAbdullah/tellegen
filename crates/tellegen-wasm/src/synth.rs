@@ -106,6 +106,11 @@ pub fn ingest_impl(session: &Generator) -> Result<String, String> {
     to_json(&value)
 }
 
+/// The network as GridFM graphkit JSON, from `Electrify` on.
+pub fn export_gridfm_impl(session: &Generator) -> Result<String, String> {
+    session.export_gridfm().map_err(|e| payload(&e))
+}
+
 /// Every stage in one call: `{module_json, report, ingest}`.
 pub fn generate_impl(request_json: &str, osm_json: Option<String>) -> Result<String, String> {
     let mut session = session_new_impl(request_json, osm_json)?;
@@ -181,6 +186,10 @@ mod tests {
         let module = module_impl(&session).unwrap();
         let drop = crate::ingest_json_drop_value(module.as_bytes()).unwrap();
         assert_eq!(drop.kind, "module");
+
+        let gridfm: serde_json::Value =
+            serde_json::from_str(&export_gridfm_impl(&session).unwrap()).unwrap();
+        assert_eq!(gridfm["n_bus"], 40);
 
         let report: serde_json::Value =
             serde_json::from_str(&report_impl(&session).unwrap()).unwrap();

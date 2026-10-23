@@ -10,7 +10,9 @@ one stage (`context`, `site_buses`, `topology`, `electrify`, `dc_opf`,
 loops them. `preview()` returns transferred typed arrays for binary map
 layers, `report()` the `GenerationReport`, `takeModule()` the PowerIO module
 with bus locations and branch routes, and `ingest()` the same `IngestedCase` a
-dropped `.pio.json` of that module produces. `generateSynthetic` runs every
+dropped `.pio.json` of that module produces; `exportGridfm()` writes GridFM
+graphkit JSON. `source: "osm"` builds the grid from Overpass documents passed
+as the `osm` option. `generateSynthetic` runs every
 stage in one request, `syntheticOverpassQueries` returns the Overpass QL for a
 region, and `loadSyntheticPlaces` / `fetchSyntheticPlaces` /
 `syntheticPlacesUrl` handle the bundled Natural Earth places table, now

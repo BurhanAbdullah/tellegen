@@ -1976,6 +1976,16 @@ export class BrowserSynthSession {
     ) as IngestedCase;
   }
 
+  /** The network as GridFM graphkit JSON: per-unit bus, branch and
+   * generator feature matrices on a 0-based bus index, with the edge index
+   * in both directions. Available from `electrify` on. */
+  async exportGridfm(): Promise<string> {
+    this.#check();
+    return expectText(
+      await callSynth(this.host, { op: "synth_session_export_gridfm", session: this.handle }),
+    );
+  }
+
   /** Stop the generation. On a worker host this terminates the synthetic
    * generation worker: interactive studies live on another worker and are
    * untouched, and the next session starts a fresh one. On the page's own

@@ -11,6 +11,7 @@
 	const EXPORT_FORMATS = [
 		{ token: 'matpower', label: 'MATPOWER (.m)' },
 		{ token: 'psse', label: 'PSS/E (.raw)' },
+		{ token: 'psse35', label: 'PSS/E v35 (.raw)' },
 		{ token: 'powerworld', label: 'PowerWorld (.aux)' },
 		{ token: 'pslf', label: 'PSLF (.epc)' },
 		{ token: 'powermodels-json', label: 'PowerModels (.json)' },

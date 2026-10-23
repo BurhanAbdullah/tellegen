@@ -102,6 +102,7 @@ export type EngineRequest =
   | { op: "synth_session_report"; session: number }
   | { op: "synth_session_module"; session: number }
   | { op: "synth_session_ingest"; session: number }
+  | { op: "synth_session_export_gridfm"; session: number }
   | { op: "synth_session_free"; session: number }
   | { op: "synth_generate"; request: string; osm: string | null };
 
@@ -337,6 +338,8 @@ export function runRequest(
       return synthSession(req.session).module();
     case "synth_session_ingest":
       return synthSession(req.session).ingest();
+    case "synth_session_export_gridfm":
+      return synthSession(req.session).export_gridfm();
     case "synth_session_free":
       handles.synthSessions.get(req.session)?.free();
       handles.synthSessions.delete(req.session);

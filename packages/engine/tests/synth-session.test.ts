@@ -52,6 +52,8 @@ function stagedHost(kind: "worker" | "direct" = "worker") {
         return JSON.stringify({ schema: "tellegen.synth-report/1", stages: [], warnings: [] });
       case "synth_session_free":
         return null;
+      case "synth_session_export_gridfm":
+        return JSON.stringify({ format: "gridfm-graphkit", n_bus: 4 });
       default:
         throw new Error(`unexpected operation ${request.op}`);
     }
@@ -77,6 +79,12 @@ describe("BrowserSynthSession", () => {
     expect(ops.filter((op) => op === "synth_session_advance")).toHaveLength(STAGES.length);
     expect(ops.filter((op) => op === "synth_session_preview")).toHaveLength(3);
     expect(calls.every((c) => !("session" in c) || c.session === 9)).toBe(true);
+  });
+
+  it("exports GridFM graphkit JSON", async () => {
+    const { host } = stagedHost();
+    const text = await new BrowserSynthSession(host, 6).exportGridfm();
+    expect(JSON.parse(text)).toMatchObject({ format: "gridfm-graphkit", n_bus: 4 });
   });
 
   it("returns the preview as typed arrays without the transport tag", async () => {

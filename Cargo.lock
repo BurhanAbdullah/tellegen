@@ -1988,6 +1988,7 @@ name = "tellegen-synth"
 version = "0.1.0"
 dependencies = [
  "delaunator",
+ "num-complex",
  "powerio",
  "powerio-prob",
  "powerio-tx",

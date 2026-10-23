@@ -588,6 +588,7 @@ impl Generator {
                     report: crate::validate::skipped_dc(),
                     dispatch: Vec::new(),
                     loading: vec![None; built.net.branches().len()],
+                    branch_flow_mw: vec![None; built.net.branches().len()],
                 };
                 let cal = Calibrator::new(
                     &built.net,
@@ -729,6 +730,21 @@ impl Generator {
                 self.make_module(net)
             }
         }
+    }
+
+    /// The network as GridFM graphkit JSON, from `Electrify` on, with the
+    /// latest DC OPF flows when one has run.
+    pub fn export_gridfm(&self) -> Result<String, SynthError> {
+        let net = self
+            .network()
+            .ok_or_else(|| SynthError::State("no network before Electrify".to_owned()))?;
+        let flows = self
+            .state
+            .dc
+            .as_ref()
+            .filter(|run| run.feasible() && run.branch_flow_mw.len() == net.branches().len())
+            .map(|run| run.branch_flow_mw.as_slice());
+        crate::export::gridfm_graphkit_json(net, flows)
     }
 
     /// The module as PowerIO IR text, from `Electrify` on. Idempotent.

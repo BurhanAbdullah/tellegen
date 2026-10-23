@@ -1318,6 +1318,12 @@ impl SynthSession {
     pub fn ingest(&self) -> Result<String, JsError> {
         synth::ingest_impl(&self.0).map_err(synth_err)
     }
+
+    /// The network as GridFM graphkit JSON (per-unit feature matrices on a
+    /// 0-based bus index), from `electrify` on.
+    pub fn export_gridfm(&self) -> Result<String, JsError> {
+        synth::export_gridfm_impl(&self.0).map_err(synth_err)
+    }
 }
 
 /// A synthetic preview as flat arrays: bus `[lon, lat]` pairs, kinds (0 load,
