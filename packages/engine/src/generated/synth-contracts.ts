@@ -1,5 +1,5 @@
 // Generated from Rust by synth_contract and generate-synth-contracts.mjs.
-// Source SHA256: 3f4f573a99f3cc5418f525669ec6afd7f1cf70d522ba9920e8e8a9d2294a239c
+// Source SHA256: 6651ecdfcab4e1dbea571d07f48dbdc7bc90d9a195b822d125fd316c4703c18d
 
 export type AcPfOutcome = "converged" | "not_converged" | "skipped";
 

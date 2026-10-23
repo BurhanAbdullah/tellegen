@@ -1105,7 +1105,7 @@
       "oneOf": [
         {
           "const": "cut",
-          "description": "Drop the buses of a landmass farther than `max_interconnect_km` from\nthe connected system and say so in a warning. The default: the result\nis one electrical island the engine can solve as a whole.",
+          "description": "Drop the buses of a landmass farther than `max_interconnect_km` from\nthe connected system (the group of landmasses whose places hold the\nmost people) and say so in a warning. The default: the result is one\nelectrical island the engine can solve as a whole.",
           "type": "string"
         },
         {
@@ -2752,5 +2752,5 @@
   ],
   "title": "SynthContract",
   "type": "object",
-  "x-rust-source-sha256": "3f4f573a99f3cc5418f525669ec6afd7f1cf70d522ba9920e8e8a9d2294a239c"
+  "x-rust-source-sha256": "6651ecdfcab4e1dbea571d07f48dbdc7bc90d9a195b822d125fd316c4703c18d"
 }
