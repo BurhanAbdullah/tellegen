@@ -53,10 +53,12 @@
 		color: var(--text-accent);
 	}
 
+	/* Inside the Network panel on narrow screens, panel text size applies. */
 	footer.inline {
 		position: static;
 		margin-top: 14px;
 		padding: 0;
+		font-size: 12px;
 		background: none;
 		animation: none;
 		pointer-events: auto;
@@ -71,7 +73,6 @@
 
 		footer.inline {
 			margin-top: 4px;
-			font-size: 11px;
 		}
 	}
 

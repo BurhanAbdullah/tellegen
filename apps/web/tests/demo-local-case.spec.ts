@@ -98,6 +98,46 @@ test('slider drag shows the scaled LMP preview legend', async ({ page }) => {
 	expect(parseShift(await labels.innerText()) / atFull).toBeLessThan(0.6);
 });
 
+test('network and solver panel text is at least 12 px', async ({ page }) => {
+	await page.route('**/api/cases', (route) => {
+		void route.fulfill({ json: [] });
+	});
+
+	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
+	await page.locator('input[type="file"]').setInputFiles([
+		{
+			name: 'case14-coords.csv',
+			mimeType: 'text/csv',
+			buffer: Buffer.from(CASE14_COORDS)
+		},
+		{
+			name: 'case14synthetic.m',
+			mimeType: 'text/plain',
+			buffer: Buffer.from(CASE14)
+		}
+	]);
+	await expect(page.locator('.solvecard')).toContainText('OPF solve', { timeout: 60_000 });
+	const lookup = page.locator('#bus-lookup-input');
+	await lookup.fill('11');
+	await lookup.press('Enter');
+	await expect(page.locator('.chip', { hasText: '∂LMP/∂d' })).toBeVisible({ timeout: 30_000 });
+
+	for (const id of ['network', 'solver']) {
+		const smallest = await page.locator(`[data-panel="${id}"]`).evaluate((panel) => {
+			const sizes: Array<[number, string]> = [];
+			const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+				const element = node.parentElement;
+				if (!node.textContent?.trim() || !element?.checkVisibility()) continue;
+				sizes.push([parseFloat(getComputedStyle(element).fontSize), node.textContent.trim()]);
+			}
+			return sizes.sort((a, b) => a[0] - b[0])[0];
+		});
+		expect(smallest[0], `${id} panel text "${smallest[1]}"`).toBeGreaterThanOrEqual(12);
+	}
+});
+
 function parseShift(text: string): number {
 	const m = text.replace('−', '-').match(/(-?[\d.]+e[+-]\d+)/);
 	if (!m) throw new Error(`no shift value in ${JSON.stringify(text)}`);

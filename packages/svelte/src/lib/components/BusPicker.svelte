@@ -155,7 +155,7 @@
 
 	label {
 		display: block;
-		font-size: 10px;
+		font-size: 12px;
 		text-transform: uppercase;
 		margin-bottom: 3px;
 	}
@@ -244,7 +244,7 @@
 		border: 1px solid var(--line);
 		border-radius: var(--radius-xs, 2px);
 		box-shadow: var(--elev-1);
-		font-size: 10.5px;
+		font-size: 12.5px;
 		margin: 4px 0 0;
 	}
 

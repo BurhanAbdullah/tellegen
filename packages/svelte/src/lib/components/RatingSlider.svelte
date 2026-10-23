@@ -105,7 +105,7 @@
 	.slider-head {
 		display: flex;
 		justify-content: space-between;
-		font-size: 11.5px;
+		font-size: 13.5px;
 		color: var(--text-secondary);
 		margin-bottom: 4px;
 	}
@@ -120,7 +120,7 @@
 		justify-content: space-between;
 		gap: 8px;
 		margin: 6px 0 7px;
-		font-size: 10.5px;
+		font-size: 12.5px;
 	}
 
 	.slider-track {
@@ -236,13 +236,13 @@
 
 	.pred {
 		margin: 2px 0 0;
-		font-size: 11px;
+		font-size: 13px;
 		min-height: 16px;
 	}
 
 	.score {
 		margin: 8px 0 0;
-		font-size: 11px;
+		font-size: 13px;
 		color: var(--ink);
 		min-height: 16px;
 	}

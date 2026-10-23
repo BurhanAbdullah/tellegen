@@ -277,7 +277,7 @@ a {
    ControlPanel.svelte; the .mode / .display-mode / @media source order is
    preserved so the cascade resolves exactly as before. */
 .region {
-	font-size: 10px;
+	font-size: 12px;
 	font-weight: 400;
 	color: var(--text-secondary);
 	text-transform: uppercase;
@@ -297,7 +297,7 @@ a {
    before the component split. Scoping this would raise its specificity past that rule. */
 .mode > button {
 	margin-left: auto;
-	font-size: 10.5px;
+	font-size: 12.5px;
 	padding: 2px 7px;
 	background: none;
 	border: 1px solid var(--line);
@@ -316,7 +316,7 @@ a {
 }
 
 .display-mode .segment button {
-	font-size: 11px;
+	font-size: 13px;
 	padding: 2px 9px;
 }
 
@@ -334,7 +334,7 @@ a {
 .legend-labels {
 	display: flex;
 	justify-content: space-between;
-	font-size: 10.5px;
+	font-size: 12.5px;
 	color: var(--text-tertiary);
 	margin-top: 4px;
 }
@@ -353,7 +353,7 @@ a {
 	border-radius: 999px;
 	color: var(--text-secondary);
 	background: var(--surface-control);
-	font-size: 10px;
+	font-size: 12px;
 	line-height: 1;
 	cursor: help;
 }
@@ -386,7 +386,7 @@ a {
 
 .reset {
 	margin-top: 10px;
-	font-size: 10.5px;
+	font-size: 12.5px;
 	padding: 3px 10px;
 	background: none;
 	border: 1px solid var(--line);
