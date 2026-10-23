@@ -22,14 +22,17 @@ pub struct LoadOutcome {
     pub promoted: usize,
 }
 
-/// Allocate `ctx.peak_demand_mw` over the buses, then promote any bus whose
-/// load exceeds its voltage class cap to the lowest level that holds it.
+/// Allocate `ctx.peak_demand_mw` over the buses (converter stations are
+/// connection nodes and carry none), then, with `promote`, move any bus whose
+/// load exceeds its voltage class cap to the lowest level that holds it. A
+/// mapped (OSM) bus keeps its real voltage, so its caller passes false.
 pub fn assign_loads(
     buses: &mut [DraftBus],
     ctx: &RegionContext,
     data: &ContextData,
     fidelity: Fidelity,
     power_factor: f64,
+    promote: bool,
     rng: &mut Stream,
 ) -> LoadOutcome {
     if buses.is_empty() {
@@ -60,7 +63,18 @@ pub fn assign_loads(
             .map(|w| w.max(floor) * (0.9 + 0.2 * rng.uniform()))
             .collect()
     };
-    let total: f64 = weights.iter().sum();
+    let weights: Vec<f64> = weights
+        .iter()
+        .zip(buses.iter())
+        .map(|(w, b)| {
+            if b.kind == crate::report::BusKind::Converter {
+                0.0
+            } else {
+                *w
+            }
+        })
+        .collect();
+    let total: f64 = weights.iter().sum::<f64>().max(1e-12);
     let tan_phi = power_factor.clamp(1e-6, 1.0).acos().tan();
     for (bus, w) in buses.iter_mut().zip(&weights) {
         bus.population_weight = w / total;
@@ -69,7 +83,7 @@ pub fn assign_loads(
     }
     let levels = &ctx.voltage_levels_kv;
     let mut promoted = 0;
-    for bus in buses.iter_mut() {
+    for bus in buses.iter_mut().filter(|_| promote) {
         let before = bus.tier;
         while bus.tier > 0 && bus.load_mw > bus_load_cap_mw(levels[bus.tier]) {
             bus.tier -= 1;

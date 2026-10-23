@@ -203,6 +203,35 @@ mod tests {
     }
 
     #[test]
+    fn an_overpass_document_builds_a_mapped_grid_and_thin_data_says_so() {
+        load_places_impl(PLACES_FIXTURE).unwrap();
+        let request = serde_json::json!({
+            "region": {"geometry": {"type": "Polygon", "coordinates": [[[8.0, 49.6], [9.5, 49.6], [9.5, 50.6], [8.0, 50.6], [8.0, 49.6]]]}},
+            "source": "osm",
+            "demand": {"kind": "total_mw", "mw": 1500.0}
+        })
+        .to_string();
+        let osm = include_str!("../../tellegen-synth/tests/fixtures/overpass_small.json");
+        let out: serde_json::Value =
+            serde_json::from_str(&generate_impl(&request, Some(osm.to_owned())).unwrap()).unwrap();
+        assert_eq!(out["ingest"]["has_coords"], true);
+        assert_eq!(out["ingest"]["coords_kind"], "file");
+        assert_eq!(out["report"]["dc_opf"]["status"], "optimal");
+        assert_eq!(
+            out["report"]["provenance"]["osm"]["counts"]["hvdc_links"],
+            1
+        );
+
+        let thin = r#"{"elements":[{"type":"node","id":1,"lat":50.0,"lon":8.2,"tags":{"power":"substation","voltage":"110000"}}]}"#;
+        let e = generate_impl(&request, Some(thin.to_owned()))
+            .err()
+            .unwrap();
+        let payload: serde_json::Value = serde_json::from_str(&e).unwrap();
+        assert_eq!(payload["code"], "osm_insufficient");
+        assert_eq!(payload["buses"], 1);
+    }
+
+    #[test]
     fn errors_carry_their_code() {
         let err = session_new_impl(&request(10), None);
         // No table loaded on this test thread yet.

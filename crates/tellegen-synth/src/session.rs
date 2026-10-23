@@ -18,7 +18,7 @@ use crate::electrical::branches::{draw_corridors, expand_circuits, spread_sigma,
 use crate::electrical::generators::{place_generators, DraftGenerator};
 use crate::electrical::loads::assign_loads;
 use crate::electrical::params::{MAX_ANGLE_SPREAD_RAD, PLANNING_UTILISATION};
-use crate::electrical::planning::plan_corridors;
+use crate::electrical::planning::{plan_corridors, PlanMode};
 use crate::electrical::reactive::plan_shunts;
 use crate::error::SynthError;
 use crate::geom::wrap_lon;
@@ -191,7 +191,7 @@ impl Generator {
                 Stage::Topology
             }
             Stage::Topology => {
-                self.run_topology(&mut counts)?;
+                self.run_topology(&mut warnings, &mut counts)?;
                 preview_changed = true;
                 Stage::Electrify
             }
@@ -258,6 +258,15 @@ impl Generator {
         })
     }
 
+    /// Copy the OSM build's counters into the provenance block.
+    fn sync_osm_counts(&mut self) {
+        if let (Some(osm), Some(provenance)) =
+            (self.state.osm.as_ref(), self.report.provenance.osm.as_mut())
+        {
+            provenance.counts.extend(osm.counts.as_map());
+        }
+    }
+
     fn run_context(
         &mut self,
         warnings: &mut Vec<Warning>,
@@ -302,6 +311,7 @@ impl Generator {
             data,
             self.request.fidelity,
             self.request.power_factor,
+            self.state.osm.is_none(),
             &mut rng,
         );
         counts.insert("buses_promoted".into(), loads.promoted as u64);
@@ -323,15 +333,20 @@ impl Generator {
                 .filter(|b| b.place.is_some())
                 .count() as u64,
         );
+        self.sync_osm_counts();
         Ok(())
     }
 
-    fn run_topology(&mut self, counts: &mut BTreeMap<String, u64>) -> Result<(), SynthError> {
+    fn run_topology(
+        &mut self,
+        warnings: &mut Vec<Warning>,
+        counts: &mut BTreeMap<String, u64>,
+    ) -> Result<(), SynthError> {
         let ctx = self.report.context.as_ref().expect("context ran");
         let data = self.state.context.as_ref().expect("context ran");
         let mut rng = Stream::new(self.request.seed, StreamTag::Topology);
         let out = if let Some(osm) = self.state.osm.as_mut() {
-            osm.topology(&self.state.buses, data, &mut rng)?
+            osm.topology(&mut self.state.buses, data, warnings)?
         } else {
             build_topology(&self.state.buses, data, ctx.branch_factor, &mut rng)
         };
@@ -343,6 +358,7 @@ impl Generator {
         counts.insert("interconnects".into(), out.interconnects as u64);
         self.state.corridors = out.corridors;
         self.state.interconnects = out.interconnects;
+        self.sync_osm_counts();
         Ok(())
     }
 
@@ -375,6 +391,11 @@ impl Generator {
         let mut rng = Stream::new(self.request.seed, StreamTag::Electrical);
         let draws = draw_corridors(&self.state.corridors, self.request.fidelity, &mut rng);
         let branch_target = (ctx.branch_factor * self.state.buses.len() as f64).round() as usize;
+        let mode = if self.state.osm.is_some() {
+            PlanMode::Observe
+        } else {
+            PlanMode::Expand
+        };
         let (designs, plan) = plan_corridors(
             &mut self.state.buses,
             &ctx.voltage_levels_kv,
@@ -382,6 +403,7 @@ impl Generator {
             &draws,
             &generators,
             branch_target,
+            mode,
         );
         let branches = expand_circuits(&self.state.corridors, &designs);
         let reactive = plan_shunts(
@@ -398,7 +420,16 @@ impl Generator {
             ));
         }
         let shunts = reactive.shunts;
-        if branches.len() > branch_target {
+        if mode == PlanMode::Observe && plan.overloaded_corridors > 0 {
+            warnings.push(Warning::new(
+                "osm_corridors_overloaded",
+                format!(
+                    "{} mapped corridor(s) run above their modelled rating at the peak economic dispatch (highest loading {:.2}); the DC OPF has to redispatch around them or report infeasibility",
+                    plan.overloaded_corridors, plan.max_loading
+                ),
+            ));
+        }
+        if mode == PlanMode::Expand && branches.len() > branch_target {
             warnings.push(Warning::new(
                 "branch_target_exceeded",
                 format!(
@@ -409,7 +440,7 @@ impl Generator {
                 ),
             ));
         }
-        if !plan.converged || plan.overloaded_corridors > 0 {
+        if mode == PlanMode::Expand && (!plan.converged || plan.overloaded_corridors > 0) {
             warnings.push(Warning::new(
                 "planning_incomplete",
                 format!(
@@ -497,6 +528,7 @@ impl Generator {
         self.state.generators = generators;
         self.state.branches = branches;
         self.state.built = Some(built);
+        self.sync_osm_counts();
         Ok(())
     }
 

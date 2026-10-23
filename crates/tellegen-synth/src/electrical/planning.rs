@@ -32,6 +32,16 @@ use crate::geom::delaunay::UnionFind;
 use crate::site::DraftBus;
 use crate::topology::Corridor;
 
+/// Whether the plan may change the network.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlanMode {
+    /// Choose voltage classes and circuits (synthetic corridors).
+    Expand,
+    /// Keep the corridors as given and only measure the planning case
+    /// (mapped OSM corridors, whose circuits are real).
+    Observe,
+}
+
 /// What the plan decided and measured.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CorridorPlan {
@@ -259,7 +269,9 @@ pub fn plan_corridors(
     draws: &[CorridorDraw],
     generators: &[DraftGenerator],
     branch_target: usize,
+    mode: PlanMode,
 ) -> (Vec<CircuitDesign>, CorridorPlan) {
+    let expand = mode == PlanMode::Expand;
     let n = buses.len();
     // Electrical components of the corridor graph; each balances on its own.
     let mut uf = UnionFind::new(n);
@@ -308,7 +320,7 @@ pub fn plan_corridors(
     // 1. Voltage class by power and distance.
     let mut designs = design_circuits(buses, corridors, generators, draws);
     let mut promoted = 0usize;
-    for _ in 1..levels.len() {
+    for _ in 1..if expand { levels.len() } else { 1 } {
         let flows = corridor_flows(n, &designs, &circuits, &injection, &grounds);
         let mut raise: Vec<Option<usize>> = vec![None; n];
         for (k, c) in corridors.iter().enumerate() {
@@ -359,8 +371,8 @@ pub fn plan_corridors(
     let mut upsized = vec![false; corridors.len()];
     let mut stiffening = 0usize;
     let mut rounds = 0;
-    let mut converged = corridors.is_empty();
-    while rounds < PLANNING_MAX_ROUNDS && !corridors.is_empty() {
+    let mut converged = corridors.is_empty() || !expand;
+    while expand && rounds < PLANNING_MAX_ROUNDS && !corridors.is_empty() {
         rounds += 1;
         let flows = corridor_flows(n, &designs, &circuits, &injection, &grounds);
         let mut added = false;
@@ -475,7 +487,7 @@ pub fn plan_corridors(
 
     // 3. Fill to the requested branch count, heaviest planned loading first.
     let mut filler = 0usize;
-    if capacity_total + stiffening < branch_target && !corridors.is_empty() {
+    if expand && capacity_total + stiffening < branch_target && !corridors.is_empty() {
         let loading = |c: usize, k: u32| flows[c].abs() / (k as f64 * designs[c].rate_a);
         let mut order: Vec<usize> = (0..corridors.len()).collect();
         order.sort_by(|&i, &j| {

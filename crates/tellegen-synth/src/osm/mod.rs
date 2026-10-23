@@ -1,17 +1,17 @@
-//! OpenStreetMap (Overpass) mapping. The query builder lives here so the QL
-//! text exists once, in the engine; the parse and build steps land with the
-//! OSM milestone, and the session calls through this interface.
+//! OpenStreetMap (Overpass) mapping: the query builder (so the QL text
+//! exists once, in the engine), the document and tag parsers, and the grid
+//! build the session drives stage by stage.
 
-use crate::context::ContextData;
-use crate::electrical::branches::DraftBranch;
-use crate::electrical::generators::DraftGenerator;
+pub mod build;
+pub mod parse;
+
+pub use build::{OsmBuild, OsmCounts};
+pub use parse::{parse_document, ParsedDocument};
+
 use crate::error::SynthError;
 use crate::geom::region::RegionShape;
-use crate::report::{BBox, OsmProvenance, RegionContext, Warning};
+use crate::report::BBox;
 use crate::request::SynthRequest;
-use crate::rng::Stream;
-use crate::site::DraftBus;
-use crate::topology::{Corridor, TopologyOutput};
 
 /// Server-side time limit stated in every query, seconds. A regional query
 /// that needs longer is better split than waited on.
@@ -102,71 +102,6 @@ fn overpass_ql(bbox: &BBox) -> String {
          (\n  node[\"power\"=\"converter\"]{b};\n  way[\"power\"=\"converter\"]{b};\n  relation[\"power\"=\"converter\"]{b};\n)->.converters;\n\
          .subs out center tags;\n.lines out geom tags;\n.plants out center tags;\n.converters out center tags;\n"
     )
-}
-
-/// A parsed Overpass document.
-pub struct ParsedDocument {
-    pub provenance: OsmProvenance,
-}
-
-pub fn parse_document(_text: &str) -> Result<ParsedDocument, SynthError> {
-    Err(SynthError::Osm(
-        "OpenStreetMap generation is not available in this build".to_owned(),
-    ))
-}
-
-pub struct OsmBuild {
-    _parsed: ParsedDocument,
-}
-
-impl OsmBuild {
-    pub fn new(parsed: ParsedDocument) -> Self {
-        Self { _parsed: parsed }
-    }
-
-    pub fn site(
-        &mut self,
-        _req: &SynthRequest,
-        _ctx: &RegionContext,
-        _data: &ContextData,
-        _rng: &mut Stream,
-        _warnings: &mut Vec<Warning>,
-    ) -> Result<Vec<DraftBus>, SynthError> {
-        Err(SynthError::Osm("unavailable".to_owned()))
-    }
-
-    pub fn topology(
-        &mut self,
-        _buses: &[DraftBus],
-        _data: &ContextData,
-        _rng: &mut Stream,
-    ) -> Result<TopologyOutput, SynthError> {
-        Err(SynthError::Osm("unavailable".to_owned()))
-    }
-
-    pub fn generators(
-        &mut self,
-        _buses: &mut [DraftBus],
-        _corridors: &[Corridor],
-        _ctx: &RegionContext,
-        _req: &SynthRequest,
-        _rng: &mut Stream,
-        _warnings: &mut Vec<Warning>,
-    ) -> Vec<DraftGenerator> {
-        Vec::new()
-    }
-
-    pub fn hvdc_links(&self) -> Vec<crate::build::DraftHvdc> {
-        Vec::new()
-    }
-
-    pub fn branch_osm_ids(&self, branches: &[DraftBranch]) -> Vec<Vec<i64>> {
-        vec![Vec::new(); branches.len()]
-    }
-
-    pub fn makeup_flags(&self, generators: &[DraftGenerator]) -> Vec<bool> {
-        vec![false; generators.len()]
-    }
 }
 
 #[cfg(test)]
