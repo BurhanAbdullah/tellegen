@@ -29,8 +29,11 @@ import {
 	zoneState,
 	zoneOutline,
 	zoneCorridors,
-	zoneColouring,
 	zoneVoltage,
+	feeders,
+	pathToSource,
+	voltageClass,
+	levelLabel,
 	zoneLevel,
 	zoneSummary,
 	landmarkCandidates,
@@ -641,34 +644,80 @@ describe('galvanic zones', () => {
 		]);
 		expect(corridors[1].bounds).toEqual([2, 2, 8, 8]);
 	});
+});
 
-	it('gives neighbouring networks different tints', () => {
-		// Four networks in a row, 10 apart, each touching the next; a fifth far away; a sixth with
-		// a source, left out.
-		const zone = (buses: number[], hasSource = false) => ({
-			buses,
-			edges: [],
-			transformers: [],
-			hasSource
-		});
-		const found: GalvanicZones = {
-			zones: [zone([0]), zone([1]), zone([2]), zone([3]), zone([4]), zone([5], true)],
-			busZone: Int32Array.from([0, 1, 2, 3, 4, 5])
-		};
-		const positions = [0, 0, 0, 10, 0, 0, 20, 0, 0, 30, 0, 0, 500, 500, 0, 5, 0, 0];
-		const tint = zoneColouring(found, positions, (z) => !z.hasSource, 10, 3);
-		expect(tint[5]).toBe(-1);
-		for (const [a, b] of [
-			[0, 1],
-			[1, 2],
-			[2, 3]
-		])
-			expect(tint[a]).not.toBe(tint[b]);
-		expect([...tint].every((c, z) => z === 5 || (c >= 0 && c < 3))).toBe(true);
-		// One tint for everything nearby: the least used among neighbours is reused.
-		expect([...zoneColouring(found, positions, (z) => !z.hasSource, 10, 1)].slice(0, 5)).toEqual([
-			0, 0, 0, 0, 0
+describe('feeders', () => {
+	// S (source) feeds two MV feeders: S–M1 (with transformer T1 to L0) and S–M2. L0 feeds two LV
+	// circuits: L0–L1–L3 and L0–L2. M1–M2 closes a loop, drawn on the tree it does not belong to.
+	const g: DistGraph = {
+		buses: ['S', 'M1', 'M2', 'L0', 'L1', 'L2', 'L3'].map((id) => bus(id, [], id === 'S')),
+		edges: [
+			edge('line', 'sm1', 'S', 'M1'),
+			edge('line', 'sm2', 'S', 'M2'),
+			edge('transformer', 't1', 'M1', 'L0'),
+			edge('line', 'l01', 'L0', 'L1'),
+			edge('line', 'l02', 'L0', 'L2'),
+			edge('line', 'l13', 'L1', 'L3'),
+			edge('line', 'm12', 'M1', 'M2')
+		]
+	};
+	const tree = displayTree(g);
+	const f = feeders(g, tree, galvanicZones(g, tree));
+
+	it('splits each network at the branches leaving its supply bus, on MV and LV alike', () => {
+		expect(f.feeders.map((x) => [g.edges[x.head].id, g.buses[x.supply].id, x.number])).toEqual([
+			['sm1', 'S', 1],
+			['sm2', 'S', 2],
+			['l01', 'L0', 1],
+			['l02', 'L0', 2]
 		]);
+		// Supply buses belong to their network, not to one feeder.
+		expect([...f.busFeeder]).toEqual([-1, 0, 1, -1, 2, 3, 2]);
+		expect(f.feeders[2].buses.map((i) => g.buses[i].id)).toEqual(['L1', 'L3']);
+	});
+
+	it('puts a transformer on the feeder that reaches it, and a loop on its far end', () => {
+		expect([...f.edgeFeeder]).toEqual([0, 1, 0, 2, 3, 2, 1]);
+	});
+
+	it('walks the drawn path back to the source across transformers', () => {
+		expect(pathToSource(tree, 6).map((k) => g.edges[k].id)).toEqual(['l13', 'l01', 't1', 'sm1']);
+		expect(pathToSource(tree, 0)).toEqual([]);
+	});
+});
+
+describe('voltage levels', () => {
+	const zone = (hasSource: boolean) => ({ buses: [], edges: [], transformers: [], hasSource });
+
+	it('classes a level in wide bands, and guesses MV for the source network without one', () => {
+		expect(voltageClass(zone(false), 132_000)).toBe('hv');
+		expect(voltageClass(zone(false), 33_000)).toBe('sub');
+		expect(voltageClass(zone(false), 7_200)).toBe('mv');
+		expect(voltageClass(zone(false), 400)).toBe('lv');
+		expect(voltageClass(zone(true), null)).toBe('mv');
+		expect(voltageClass(zone(false), null)).toBe('lv');
+	});
+
+	it('names levels the way engineers write them', () => {
+		expect([11_000, 12_470, 19_052, 400, 132_000].map(levelLabel)).toEqual([
+			'11 kV',
+			'12.47 kV',
+			'19.05 kV',
+			'400 V',
+			'132 kV'
+		]);
+	});
+
+	it('prefers a declared winding or source rating over limits and solved voltages', () => {
+		const g: DistGraph = {
+			buses: [
+				{ ...bus('A', [], true), nominal_voltage: 11_000 },
+				{ ...bus('B'), voltage_limits: { vpp_min: [10_000], vpp_max: [10_400] } }
+			],
+			edges: [edge('line', 'ab', 'A', 'B')]
+		};
+		const zones = galvanicZones(g);
+		expect(zoneVoltage(zones.zones[0], g, null)).toBe(11_000);
 	});
 });
 

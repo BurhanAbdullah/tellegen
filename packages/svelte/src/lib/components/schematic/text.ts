@@ -6,7 +6,9 @@ import {
 	conductorSet,
 	formatPower,
 	loadingState,
+	type DisplayTree,
 	type EquipmentItem,
+	type Feeders,
 	type EquipmentSymbols,
 	type GalvanicZone,
 	type GalvanicZones,
@@ -32,6 +34,10 @@ export interface TextContext {
 	zoneMv: boolean[];
 	/** Per bus, for source positions: 1 drawn next to a connected bus, 2 left at the origin. */
 	inferred: Uint8Array | null;
+	feeders: Feeders;
+	tree: DisplayTree;
+	/** Short bus names, as drawn. */
+	busNames: string[];
 }
 
 const list = (ids: string[]) =>
@@ -47,15 +53,26 @@ const attachmentKinds = (graph: DistGraph, i: number) =>
 export class SchematicText {
 	constructor(private readonly c: TextContext) {}
 
-	/** The network a bus is in. */
+	/** What supplies a network at bus `s`: its feeding transformer, or the source bus itself. */
+	private supplyName(s: number): string {
+		const { tree, graph, transformerNames, busNames } = this.c;
+		const k = tree.parentEdge[s];
+		return k >= 0 ? (transformerNames.get(k) ?? graph.edges[k].id) : busNames[s];
+	}
+
+	/** "feeder 2 of TX 1234", "feeder 1 of SOURCEBUS": the same words on MV and LV. */
+	feederName(f: number): string {
+		const feeder = this.c.feeders.feeders[f];
+		return `feeder ${feeder.number} of ${this.supplyName(feeder.supply)}`;
+	}
+
+	/** Where a bus sits: on a feeder, or as the bus a network is supplied at. */
 	networkNote(i: number): string {
-		const { zones, outlined, transformerNames, graph } = this.c;
-		const z = zones.busZone[i];
-		if (z < 0 || !outlined(zones.zones[z])) return '';
-		const k = zones.zones[z].transformers[0];
-		return k === undefined
-			? ' · in a network without a transformer'
-			: ` · network fed by ${transformerNames.get(k) ?? graph.edges[k].id}`;
+		const f = this.c.feeders.busFeeder[i];
+		if (f >= 0) return ` · ${this.feederName(f)}`;
+		return this.c.tree.parentEdge[i] >= 0
+			? ` · supply bus of the network fed by ${this.supplyName(i)}`
+			: ' · source bus';
 	}
 
 	/** A bus's worst pair voltage against its band, for announcements and the stack card. */
@@ -98,7 +115,9 @@ export class SchematicText {
 			shared > 1
 				? ` · drawn on a route shared with ${shared - 1} other branch${shared > 2 ? 'es' : ''}`
 				: '';
-		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}${route}`;
+		const f = this.c.feeders.edgeFeeder[k];
+		const feeder = f >= 0 ? ` · ${this.feederName(f)}` : '';
+		return `${e.kind} ${e.id} · ${wires}${e.closed ? '' : ' · open'}${live.edges[k] ? '' : ' · not energised'}${feeder}${route}`;
 	}
 
 	item(d: EquipmentItem): string {

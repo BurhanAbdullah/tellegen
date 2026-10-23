@@ -31,10 +31,10 @@ import {
 	INK,
 	MONO,
 	PAPER,
+	PATH,
 	SYMBOL_INK,
 	ZONE_COLOURS,
 	ZONE_INK,
-	ZONE_TINTS,
 	alpha,
 	lineWidths,
 	stateInk
@@ -53,6 +53,9 @@ export const stackRadius = (n: number) => 8 + 4 * n;
 
 /** Pixel size of the paper behind text. */
 const paperText = (a: number) => alpha(PAPER, a);
+
+/** Screen width of the hover halos: wide enough to read under MV and LV lines alike. */
+const HALO_PX = 10;
 
 const cartesian = (kit: DeckKit) => ({ coordinateSystem: kit.core.COORDINATE_SYSTEM.CARTESIAN });
 
@@ -133,10 +136,16 @@ export interface SchematicScene {
 		tags: { z: number; text: string; position: [number, number]; width: number }[];
 		tagZoom: number;
 		corridors: ZoneCorridor[];
-		active: number;
-		tint: ArrayLike<number> | null;
-		feeder: [number, number] | null;
 	};
+	/** Where the pointer is in the network: its network's branches faintly, its feeder's strongly,
+	 * the path back to the source when shown, and the network's supply point. */
+	hover: {
+		network: Set<number>;
+		feeder: Set<number>;
+		path: Set<number>;
+		supply: [number, number] | null;
+		tint: RGBA;
+	} | null;
 	stacks: BusStacks | null;
 	spreadStacks: number[];
 	fans: FannedBranch[];
@@ -163,6 +172,7 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 	return [
 		// Zone outlines sit beneath everything; they pick only where nothing else is.
 		...corridorLayers(kit, s),
+		...hoverHalos(kit, s),
 		new PolygonLayer({
 			...common,
 			id: 'zones',
@@ -372,6 +382,7 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 			getWidth: 7,
 			widthUnits: 'pixels'
 		}),
+		...hoverMarks(kit, s),
 		...landmarkLayers(kit, s),
 		new ScatterplotLayer({
 			...common,
@@ -605,73 +616,108 @@ function sharedRouteLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 }
 
 /** Zone corridors on geographic positions while zoomed out: a band of fixed screen width along
- * each LV network's branches, with discs at its buses to round the joints. A translucent band
- * would darken wherever its pieces overlap, so the bands test depth strictly, all at one depth
- * (no per-layer polygon offset): each pixel is tinted once, by the first zone drawn there (the
- * hovered one, drawn first). */
+ * each LV network's branches, with discs at its buses to round the joints, quiet for networks
+ * within limits and in their state's colour otherwise. A translucent band would darken wherever
+ * its pieces overlap, so the bands test depth strictly, all at one depth (no per-layer polygon
+ * offset): each pixel is tinted once. Close in, the lines speak for themselves. */
 function corridorLayers(kit: DeckKit, s: SchematicScene): Layer[] {
-	const { corridors, active, states, tint, feeder } = s.zones;
-	if (!corridors.length) return [];
-	// Close in, only the emphasised network keeps its corridor.
-	if (s.symbols && active < 0) return [];
+	const { corridors, states } = s.zones;
+	if (!corridors.length || s.symbols) return [];
 	const { LineLayer, ScatterplotLayer } = kit.layers;
 	const common = cartesian(kit);
 	const g = s.shown;
 	const once = { depthWriteEnabled: true, depthCompare: 'less' } as const;
-	const band = (z: number, hovered: boolean): RGBA => {
+	const band = (z: number): RGBA => {
 		const state = states[z];
 		if (state === 'warning' || state === 'violation') {
-			const [fill, line] = ZONE_COLOURS[state];
-			return hovered ? line : alpha(fill, Math.min(255, fill[3] * 3));
+			const fill = ZONE_COLOURS[state][0];
+			return alpha(fill, Math.min(255, fill[3] * 3));
 		}
-		const [r, gr, b] = ZONE_TINTS[Math.max(0, tint?.[z] ?? 0)];
-		return [r, gr, b, hovered ? 160 : 72];
+		return alpha(ZONE_INK, 56);
 	};
-	const pass = (hovered: boolean) => {
-		const list = corridors.filter((c) => (c.z === active) === hovered);
-		const segments = list.flatMap((c) => c.segments.map((i) => ({ z: c.z, s: i })));
-		const buses = list.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
-		const suffix = hovered ? '-hovered' : '';
-		return [
-			new LineLayer({
-				...common,
-				id: `zones${suffix}`,
-				data: segments,
-				getSourcePosition: (d: { s: number }) => [g.sources[d.s * 3], g.sources[d.s * 3 + 1], 0],
-				getTargetPosition: (d: { s: number }) => [g.targets[d.s * 3], g.targets[d.s * 3 + 1], 0],
-				getColor: (d: { z: number }) => band(d.z, hovered),
-				getWidth: CORRIDOR_PX,
-				widthUnits: 'pixels',
-				parameters: once,
-				getPolygonOffset: null,
-				pickable: true,
-				updateTriggers: { getColor: states }
-			}),
-			new ScatterplotLayer({
-				...common,
-				id: `zones${suffix}-buses`,
-				data: buses,
-				getPosition: (d: { i: number }) => [g.positions[d.i * 3], g.positions[d.i * 3 + 1], 0],
-				getFillColor: (d: { z: number }) => band(d.z, hovered),
-				getRadius: CORRIDOR_PX / 2,
-				radiusUnits: 'pixels',
-				parameters: once,
-				getPolygonOffset: null,
-				pickable: true,
-				updateTriggers: { getFillColor: states }
-			})
-		];
-	};
+	const segments = corridors.flatMap((c) => c.segments.map((i) => ({ z: c.z, s: i })));
+	const buses = corridors.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
 	return [
-		...(feeder && active >= 0
+		new LineLayer({
+			...common,
+			id: 'zones',
+			data: segments,
+			getSourcePosition: (d: { s: number }) => [g.sources[d.s * 3], g.sources[d.s * 3 + 1], 0],
+			getTargetPosition: (d: { s: number }) => [g.targets[d.s * 3], g.targets[d.s * 3 + 1], 0],
+			getColor: (d: { z: number }) => band(d.z),
+			getWidth: CORRIDOR_PX,
+			widthUnits: 'pixels',
+			parameters: once,
+			getPolygonOffset: null,
+			pickable: true,
+			updateTriggers: { getColor: states }
+		}),
+		new ScatterplotLayer({
+			...common,
+			id: 'zones-buses',
+			data: buses,
+			getPosition: (d: { i: number }) => [g.positions[d.i * 3], g.positions[d.i * 3 + 1], 0],
+			getFillColor: (d: { z: number }) => band(d.z),
+			getRadius: CORRIDOR_PX / 2,
+			radiusUnits: 'pixels',
+			parameters: once,
+			getPolygonOffset: null,
+			pickable: true,
+			updateTriggers: { getFillColor: states }
+		})
+	];
+}
+
+/** The hovered network and feeder, as halos beneath the lines: the network faint, the feeder
+ * strong, the same on MV and LV. */
+function hoverHalos(kit: DeckKit, s: SchematicScene): Layer[] {
+	const h = s.hover;
+	if (!h) return [];
+	const d = s.drawn;
+	const halo = (id: string, edges: Set<number>, a: number) =>
+		new kit.layers.LineLayer({
+			...cartesian(kit),
+			id,
+			data: highlighted(d, edges, s.fan),
+			getSourcePosition: (i: number) => [d.sources[i * 3], d.sources[i * 3 + 1], 0],
+			getTargetPosition: (i: number) => [d.targets[i * 3], d.targets[i * 3 + 1], 0],
+			getColor: alpha(h.tint, a),
+			getWidth: HALO_PX,
+			widthUnits: 'pixels'
+		});
+	return [halo('hover-network', h.network, 90), halo('hover-feeder', h.feeder, 190)];
+}
+
+/** Over the lines: the path back to the source, when shown, and a ring at the supply point. */
+function hoverMarks(kit: DeckKit, s: SchematicScene): Layer[] {
+	const h = s.hover;
+	if (!h) return [];
+	const d = s.drawn;
+	const common = cartesian(kit);
+	return [
+		...(h.path.size
 			? [
-					new ScatterplotLayer({
+					new kit.layers.LineLayer({
 						...common,
-						id: 'zone-feeder',
-						data: [feeder],
+						id: 'hover-path',
+						data: highlighted(d, h.path, s.fan),
+						getSourcePosition: (i: number) => [d.sources[i * 3], d.sources[i * 3 + 1], 0],
+						getTargetPosition: (i: number) => [d.targets[i * 3], d.targets[i * 3 + 1], 0],
+						getColor: PATH,
+						getWidth: 3,
+						widthUnits: 'pixels'
+					})
+				]
+			: []),
+		...(h.supply
+			? [
+					new kit.layers.ScatterplotLayer({
+						...common,
+						id: 'hover-supply',
+						data: [h.supply],
 						getPosition: (p: [number, number]) => [...p, 0],
-						getFillColor: alpha(band(active, true), 60),
-						getLineColor: band(active, true),
+						getFillColor: alpha(h.tint, 50),
+						getLineColor: alpha(h.tint, 220),
 						stroked: true,
 						getRadius: 13,
 						radiusUnits: 'pixels',
@@ -679,9 +725,7 @@ function corridorLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 						lineWidthUnits: 'pixels'
 					})
 				]
-			: []),
-		...pass(true),
-		...(s.symbols ? [] : pass(false))
+			: [])
 	];
 }
 

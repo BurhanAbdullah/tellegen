@@ -171,68 +171,17 @@ export function zoneCorridors(
 	return [...out.values()];
 }
 
-/** One of `colours` tints per zone such that zones drawn near each other differ: two zones are
- * neighbours when they have buses within about `reach` drawing units (a grid of that cell size,
- * counting the eight cells around). Colours are assigned greedily, most constrained zone first
- * (DSatur); when every tint is taken nearby, the one used least among the neighbours is reused.
- * Zones left out by `include` get −1. */
-export function zoneColouring(
-	zones: GalvanicZones,
-	positions: ArrayLike<number>,
-	include: (zone: GalvanicZone) => boolean,
-	reach: number,
-	colours: number
-): Int8Array {
-	const n = zones.zones.length;
-	const out = new Int8Array(n).fill(-1);
-	if (!(reach > 0) || colours < 1) return out;
-	const cells = new Map<string, Set<number>>();
-	const cellOf = (i: number) =>
-		[Math.floor(positions[i * 3] / reach), Math.floor(positions[i * 3 + 1] / reach)] as const;
-	zones.zones.forEach((zone, z) => {
-		if (!include(zone)) return;
-		for (const i of zone.buses) {
-			const [cx, cy] = cellOf(i);
-			const key = `${cx},${cy}`;
-			(cells.get(key) ?? cells.set(key, new Set()).get(key)!).add(z);
-		}
-	});
-	const near: Set<number>[] = Array.from({ length: n }, () => new Set());
-	for (const [key, here] of cells) {
-		const [cx, cy] = key.split(',').map(Number);
-		for (let dx = -1; dx <= 1; dx++)
-			for (let dy = -1; dy <= 1; dy++) {
-				const there = cells.get(`${cx + dx},${cy + dy}`);
-				if (there) for (const a of here) for (const b of there) if (a !== b) near[a].add(b);
-			}
-	}
-	const todo = new Set(zones.zones.flatMap((zone, z) => (include(zone) ? [z] : [])));
-	while (todo.size) {
-		let pick = -1;
-		let best = [-1, -1];
-		for (const z of todo) {
-			const used = new Set([...near[z]].map((m) => out[m]).filter((c) => c >= 0)).size;
-			if (used > best[0] || (used === best[0] && near[z].size > best[1])) {
-				pick = z;
-				best = [used, near[z].size];
-			}
-		}
-		todo.delete(pick);
-		const count = new Array<number>(colours).fill(0);
-		for (const m of near[pick]) if (out[m] >= 0) count[out[m]]++;
-		out[pick] = count.indexOf(Math.min(...count));
-	}
-	return out;
-}
-
-/** A zone's phase–phase voltage level in volts: from declared limits (midpoint of the band; a
- * phase–neutral band times √3), else from solved voltages; the median over its buses. Null when
- * neither is known. */
+/** A zone's voltage level in volts: the declared rating of a winding or source in it (the
+ * largest), else its declared limits (midpoint of the band; a phase–neutral band times √3), else
+ * its solved voltages, as the median over its buses. Null when none is known. */
 export function zoneVoltage(
 	zone: GalvanicZone,
 	graph: DistGraph,
 	snapshot: ResultSnapshot | null
 ): number | null {
+	let nominal = 0;
+	for (const i of zone.buses) nominal = Math.max(nominal, graph.buses[i].nominal_voltage ?? 0);
+	if (nominal > 0) return nominal;
 	const levels: number[] = [];
 	const mid = (lo?: number[], hi?: number[]) =>
 		lo?.length && hi?.length ? (Math.min(...lo) + Math.max(...hi)) / 2 : null;

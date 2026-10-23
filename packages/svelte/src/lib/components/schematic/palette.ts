@@ -1,5 +1,5 @@
 import type { RGBA } from '../../colors.js';
-import type { ZoneState } from '../../diagram/index.js';
+import type { VoltageClass, ZoneState } from '../../diagram/index.js';
 
 export const INK: RGBA = [32, 36, 43, 255];
 export const ACCENT: RGBA = [178, 94, 0, 255];
@@ -25,17 +25,23 @@ export const stateInk = (state: string | undefined): RGBA =>
 /** Screen width of a zone's corridor on geographic positions. */
 export const CORRIDOR_PX = 9;
 
-/** Muted tints for networks within limits, kept clear of the warning and violation colours.
- * Networks drawn near each other get different ones, so a customer's network reads at a glance
- * where corridors touch. */
-export const ZONE_TINTS: [number, number, number][] = [
-	[70, 110, 150],
-	[40, 140, 140],
-	[100, 145, 70],
-	[125, 95, 165],
-	[100, 105, 120],
-	[160, 90, 140]
-];
+/** Line colour per voltage class in the topology view: shades of one blue, darker for higher
+ * levels, and LV in the quiet grey that carries most of a distribution drawing. Clear of the
+ * warning and violation colours and of the accent used for selection and flow. */
+export const LEVEL_COLOURS: Record<VoltageClass, RGBA> = {
+	hv: [38, 44, 112, 240],
+	sub: [30, 76, 140, 240],
+	mv: [58, 118, 178, 235],
+	lv: [138, 131, 117, 210]
+};
+
+/** Hover emphasis for a network and its feeder, beneath the lines; a problem network takes its
+ * state's colour instead. */
+export const HALO: RGBA = [64, 72, 92, 255];
+
+/** The hovered element's path back to the source: green, the one family no level, state or
+ * selection uses, so it reads over the halos. */
+export const PATH: RGBA = [16, 138, 96, 245];
 
 /** Fill and outline per zone state. */
 export const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {

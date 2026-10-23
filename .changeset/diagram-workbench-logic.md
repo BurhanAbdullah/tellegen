@@ -46,6 +46,9 @@ reads the full operating point from a stored result or the live session, and
 `TellegenShell` keeps `overviewResult` current for the active case
 (`controller.followOverview`, `readOverview` and `overviewOnRequest`). A
 multi-winding transformer counts once in losses and issues, and its loading is
-judged per connected bus. The
+judged per connected bus. Graph buses carry `nominal_voltage`, the declared rating
+of a winding or source there; the diagram colours lines by voltage level, and a
+hover shows the feeder and network of what it is over, with an optional path back
+to the source. The
 renderer-independent logic lives in `src/lib/diagram`, ported from the diagram
 projection draft (#177).

@@ -11,7 +11,6 @@
 	import type { MulticonductorCase } from '../state.svelte.js';
 	import type { RGBA } from '../colors.js';
 	import { priceGradient, sensGradient } from '../colors.js';
-	import { edgeColor } from '../multiconductor.js';
 	import { getPanelLayout } from '../panels.svelte.js';
 	import { getAppState } from '../context.svelte.js';
 	import {
@@ -57,11 +56,15 @@
 		landmarkStrokes,
 		placeLandmarks,
 		type Landmark,
-		zoneLevel,
+		voltageClass,
+		levelLabel,
+		VOLTAGE_CLASSES,
+		feeders,
+		pathToSource,
+		type VoltageClass,
 		zoneSummary,
 		zoneVoltage,
 		zoneCorridors,
-		zoneColouring,
 		zoneOutline,
 		zoneState,
 		type GalvanicZone,
@@ -87,7 +90,7 @@
 		type SchematicScene
 	} from './schematic/layers.js';
 	import type { FanState } from './schematic/paint.js';
-	import { DEAD, INK, ZONE_TINTS } from './schematic/palette.js';
+	import { DEAD, HALO, INK, LEVEL_COLOURS, ZONE_COLOURS } from './schematic/palette.js';
 	import PickCard from './schematic/PickCard.svelte';
 	import { SchematicText, tooltip } from './schematic/text.js';
 	import { HoverPin, StoredFlag } from './schematic/view-prefs.svelte.js';
@@ -293,25 +296,34 @@
 	const corridors = $derived(
 		shown && !shown.attachmentGap ? zoneCorridors(zones, shown, outlined) : []
 	);
-	/** Networks with buses within about this many metres count as neighbours for their tints. */
-	const TINT_REACH_M = 60;
-	const zoneTint = $derived(
-		corridors.length
-			? zoneColouring(zones, shown!.positions, outlined, TINT_REACH_M, ZONE_TINTS.length)
-			: null
-	);
-	/** The zone under the pointer: its corridor darkens, so it reads as one network. */
+	/** The corridor under the pointer, as a network to emphasise. */
 	let hoveredZone = $state(-1);
-	/** MV (from 1 kV phase–phase) is drawn heavier than LV, as on a paper single-line diagram; a
-	 * transformer takes its higher side. */
-	const zoneMv = $derived(
-		zones.zones.map((z) => zoneLevel(z, zoneVoltage(z, graph, snapshot)) === 'mv')
-	);
-	const edgeMv = $derived(
-		Uint8Array.from(graph.edges, (e, k) => {
+	/** Each network's voltage level (declared rating, else limits, else solved) and class. MV and
+	 * above (from 1 kV phase–phase) is drawn heavier than LV, as on a paper single-line diagram,
+	 * and each class has its own shade; a transformer takes its higher side. */
+	const zoneVolts = $derived(zones.zones.map((z) => zoneVoltage(z, graph, snapshot)));
+	const zoneClass = $derived(zones.zones.map((z, i) => voltageClass(z, zoneVolts[i])));
+	const zoneMv = $derived(zoneClass.map((c) => c !== 'lv'));
+	const CLASS_RANK: Record<VoltageClass, number> = { lv: 0, mv: 1, sub: 2, hv: 3 };
+	const edgeClass = $derived(
+		graph.edges.map((e, k): VoltageClass => {
 			const { from, to } = inputs.names.branches[k];
-			const mv = (i: number) => (i >= 0 ? zoneMv[zones.busZone[i]] : false);
-			return mv(from) || (e.kind === 'transformer' && mv(to)) ? 1 : 0;
+			const at = (i: number): VoltageClass => (i >= 0 ? zoneClass[zones.busZone[i]] : 'lv');
+			if (e.kind !== 'transformer') return at(from >= 0 ? from : to);
+			return CLASS_RANK[at(from)] >= CLASS_RANK[at(to)] ? at(from) : at(to);
+		})
+	);
+	const edgeMv = $derived(Uint8Array.from(edgeClass, (c) => (c === 'lv' ? 0 : 1)));
+	/** The levels in the drawing, per class, for the key: "MV · 11 kV". */
+	const levelKey = $derived(
+		VOLTAGE_CLASSES.flatMap(({ cls, name }) => {
+			if (!zoneClass.includes(cls)) return [];
+			const levels = [
+				...new Set(
+					zoneVolts.flatMap((v, z) => (zoneClass[z] === cls && v !== null ? [levelLabel(v)] : []))
+				)
+			];
+			return [{ cls, label: levels.length ? `${name} · ${levels.slice(0, 3).join(', ')}` : name }];
 		})
 	);
 	/** Zoomed out, LV detail fades so the MV backbone, zone outlines and states read first. */
@@ -492,40 +504,69 @@
 		)
 	);
 
-	/** The network to emphasise: the corridor under the pointer, else the network of whatever is
-	 * hovered here or in a linked view (a bus, a line, or the transformer feeding it). */
-	const activeZone = $derived.by(() => {
-		if (hoveredZone >= 0) return hoveredZone;
-		let z = -1;
-		if (hoveredBus >= 0) z = zones.busZone[hoveredBus];
-		else
-			for (const k of hoveredEdges) {
-				if (graph.edges[k].kind === 'transformer') {
-					z = zones.zones.findIndex((zone) => !zone.hasSource && zone.transformers[0] === k);
-				} else {
-					const { from } = inputs.names.branches[k];
-					if (from >= 0) z = zones.busZone[from];
-				}
-				break;
-			}
-		return z >= 0 && outlined(zones.zones[z]) ? z : -1;
+	/** Feeders of every network: the branches leaving its supply bus, on MV and LV alike. */
+	const feederSet = $derived(feeders(graph, tree, zones));
+	/** "Path to source": the hover also traces the drawn path back to the source. */
+	const pathPref = new StoredFlag('tellegen.schematic.path', ['on', 'off'], false);
+	/** Where the hovered thing sits: its network, its feeder (−1 for a supply bus, a transformer or a
+	 * corridor), and the bus the path to the source starts from. */
+	const hoverPlace = $derived.by((): { zone: number; feeder: number; from: number } | null => {
+		if (hoveredZone >= 0) return { zone: hoveredZone, feeder: -1, from: -1 };
+		if (hoveredBus >= 0)
+			return {
+				zone: zones.busZone[hoveredBus],
+				feeder: feederSet.busFeeder[hoveredBus],
+				from: hoveredBus
+			};
+		for (const k of hoveredEdges) {
+			const { from, to } = inputs.names.branches[k];
+			if (from < 0 || to < 0) return null;
+			const down = tree.depth[from] >= tree.depth[to] ? from : to;
+			// A transformer shows the network it feeds; a branch its feeder and network.
+			const transformer = graph.edges[k].kind === 'transformer';
+			return {
+				zone: zones.busZone[down],
+				feeder: transformer ? -1 : feederSet.edgeFeeder[k],
+				from: down
+			};
+		}
+		return null;
 	});
-	/** Where a zone's feeding transformer is drawn: its symbol, else midway between its buses. */
-	function feederPoint(z: number): [number, number] | null {
-		const k = zones.zones[z].transformers[0];
+	const activeZone = $derived(hoverPlace?.zone ?? -1);
+	/** Where a network is supplied: the source bus of the source network, else its feeding
+	 * transformer's symbol (or midway between its buses). */
+	function supplyPoint(z: number): [number, number] | null {
+		const zone = zones.zones[z];
+		const g = geometry.positions;
+		if (zone.hasSource) {
+			const i = zone.buses.find((b) => graph.buses[b].has_source);
+			return i === undefined ? null : [g[i * 3], g[i * 3 + 1]];
+		}
+		const k = zone.transformers[0];
 		if (k === undefined) return null;
 		const a = equipment?.anchors;
 		if (a && Number.isFinite(a[k * 2])) return [a[k * 2], a[k * 2 + 1]];
 		const { from, to } = inputs.names.branches[k];
 		if (from < 0 || to < 0) return null;
-		const g = geometry.positions;
 		return [(g[from * 3] + g[to * 3]) / 2, (g[from * 3 + 1] + g[to * 3 + 1]) / 2];
 	}
+	const hover = $derived.by((): SchematicScene['hover'] => {
+		if (!hoverPlace || hoverPlace.zone < 0) return null;
+		const { zone: z, feeder: f, from } = hoverPlace;
+		const state = zoneStates[z];
+		return {
+			network: new Set(zones.zones[z].edges),
+			feeder: new Set(f >= 0 ? feederSet.feeders[f].edges : []),
+			path: new Set(pathPref.value && from >= 0 ? pathToSource(tree, from) : []),
+			supply: supplyPoint(z),
+			tint: state === 'warning' || state === 'violation' ? ZONE_COLOURS[state][1] : HALO
+		};
+	});
 	/** Per-edge and per-bus colours for the active mode; results never recolour inactive branches. */
 	const edgeColours = $derived(
 		graph.edges.map((e, k): RGBA => {
 			if (!live.edges[k]) return DEAD;
-			if (!e.closed || colour === 'none' || !snapshot) return edgeColor(e.kind, e.closed);
+			if (!e.closed || colour === 'none' || !snapshot) return LEVEL_COLOURS[edgeClass[k]];
 			if (colour === 'loading-heat') {
 				const loading = snapshot.branches[k].loading;
 				return loading === null ? MISSING_COLOUR : loadingColour(loading);
@@ -621,7 +662,10 @@
 			valuesOn,
 			edgeMv,
 			zoneMv,
-			inferred: layout === 'source' ? (geometry.inferred ?? null) : null
+			inferred: layout === 'source' ? (geometry.inferred ?? null) : null,
+			feeders: feederSet,
+			tree,
+			busNames: names
 		})
 	);
 
@@ -661,11 +705,9 @@
 				shapes: zoneShapes,
 				tags: zoneTags,
 				tagZoom,
-				corridors,
-				active: activeZone,
-				tint: zoneTint,
-				feeder: activeZone >= 0 ? feederPoint(activeZone) : null
+				corridors
 			},
+			hover,
 			stacks,
 			spreadStacks,
 			fans: fanned(),
@@ -965,8 +1007,7 @@
 			zoneTags,
 			tagZoom,
 			corridors,
-			activeZone,
-			zoneTint,
+			hover,
 			marks,
 			fannedGroups,
 			fannedEdges,
@@ -1343,6 +1384,13 @@
 				/> Basemap</label
 			>
 		{/if}
+		<label class="check" title="Hovering also traces the drawn path back to the source"
+			><input
+				type="checkbox"
+				checked={pathPref.value}
+				onchange={(e) => pathPref.set(e.currentTarget.checked)}
+			/> Path to source</label
+		>
 		{#if layout === 'schematic'}
 			<label>
 				<span class="sr-only">Schematic arrangement</span>
@@ -1411,6 +1459,21 @@
 			ontoggle={(e) => keyPref.set(e.currentTarget.open)}
 		>
 			<summary>Key</summary>
+			{#if levelKey.length}
+				<ul class="symbols" aria-label="Voltage levels">
+					{#each levelKey as level (level.cls)}
+						<li>
+							<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+								><path
+									class="level"
+									style:stroke="rgb({LEVEL_COLOURS[level.cls].slice(0, 3).join(' ')})"
+									d="M-2 0H26"
+								/></svg
+							>{level.label}
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			<label class="toggle"
 				><input
 					type="checkbox"
@@ -1443,6 +1506,21 @@
 			ontoggle={(e) => keyPref.set(e.currentTarget.open)}
 		>
 			<summary>Key</summary>
+			{#if levelKey.length}
+				<ul class="symbols" aria-label="Voltage levels">
+					{#each levelKey as level (level.cls)}
+						<li>
+							<svg viewBox="-2 -12 28 24" width="28" height="24" aria-hidden="true"
+								><path
+									class="level"
+									style:stroke="rgb({LEVEL_COLOURS[level.cls].slice(0, 3).join(' ')})"
+									d="M-2 0H26"
+								/></svg
+							>{level.label}
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			<ul class="symbols" aria-label="Symbols">
 				{#if equipment?.routeGroups.length || stacks?.groups.length}
 					<li>
@@ -1704,6 +1782,9 @@
 	.symbols path.flow {
 		stroke: var(--accent);
 		stroke-width: 1.5;
+	}
+	.symbols path.level {
+		stroke-width: 3;
 	}
 	.symbols path.wire {
 		stroke: var(--text-secondary);

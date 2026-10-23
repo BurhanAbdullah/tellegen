@@ -19,6 +19,8 @@ export * from './energisation.js';
 export * from './short-names.js';
 export * from './tree-walk.js';
 export * from './galvanic-zones.js';
+export * from './voltage-levels.js';
+export * from './feeders.js';
 export * from './landmarks.js';
 export * from './basemap.js';
 export * from './shared-routes.js';
