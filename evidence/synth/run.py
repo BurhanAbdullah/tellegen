@@ -6,11 +6,11 @@
   run         generate every declared spec and seed with `tellegen generate`
               and write result.json: hashes, verdicts, and each structural
               statistic beside the reference and published ranges
-  sweep       generate each country-scale spec (written by regions.py) once
-              and write sweep.json and sweep.md: peak demand against the
-              official peak of peak_references.json, branches per bus,
-              parallel circuits, the DC OPF and AC power flow verdicts and
-              the engine time
+  sweep       generate each country-scale spec (written by regions.py) at
+              several seeds and write sweep.json and sweep.md: peak demand
+              against the official peak of peak_references.json, branches per
+              bus, parallel circuits, the DC OPF and AC power flow passes out
+              of the seeds, the voltage range and the engine time
 
 Nothing here vendors third-party data: the reference cases are the PGLib-OPF
 fixtures already in the repository, plus any case the operator staged with
@@ -224,6 +224,37 @@ def sweep_row(spec, report, references, tolerance):
     }
 
 
+def aggregate(rows):
+    """One region's runs over the seeds: pass counts, ranges and the median time."""
+    first = rows[0]
+    converged = [r for r in rows if r['vm'][0] is not None]
+    times = sorted(r['engine_ms'] for r in rows)
+    return {
+        'region': first['region'],
+        'seeds': [r['seed'] for r in rows],
+        'runs': len(rows),
+        'voltage_basis': first['voltage_basis'],
+        'voltage_levels_kv': max((r['voltage_levels_kv'] for r in rows), key=len),
+        'added_level_kv': next((r['added_level_kv'] for r in rows if r['added_level_kv'] is not None), None),
+        'buses': first['buses'],
+        'peak_mw': first['peak_mw'],
+        'reference': first['reference'],
+        'peak_ratio': first['peak_ratio'],
+        'peak_verdict': first['peak_verdict'],
+        'branch_bus_ratio': [min(r['branch_bus_ratio'] for r in rows), max(r['branch_bus_ratio'] for r in rows)],
+        'max_parallel_circuits': max(r['max_parallel_circuits'] for r in rows),
+        'dc_pass': sum(r['dc_opf'] == 'optimal' for r in rows),
+        'ac_converged': len(converged),
+        'ac_pass': sum(r['valid'] for r in rows),
+        'vm': [min(r['vm'][0] for r in converged), max(r['vm'][1] for r in converged)] if converged else [None, None],
+        'plans_incomplete': sum(not r['plan_converged'] for r in rows),
+        'engine_ms_median': times[len(times) // 2],
+        'engine_ms_max': times[-1],
+        'failures': [{'seed': r['seed'], 'dc_opf': r['dc_opf'], 'ac_pf': r['ac_pf'], 'vm': r['vm'],
+                      'message': r['ac_message'] or r['dc_message']} for r in rows if not r['valid']],
+    }
+
+
 def sweep_markdown(packet):
     def vm(r):
         lo, hi = r['vm']
@@ -237,29 +268,43 @@ def sweep_markdown(packet):
         text = '/'.join(shown)
         return text + ('' if r['voltage_basis'] == 'country' else f" ({r['voltage_basis']})")
 
+    def span(pair, fmt):
+        lo, hi = pair
+        return fmt.format(lo) if abs(hi - lo) < 5e-3 else f'{fmt.format(lo)}–{fmt.format(hi)}'
+
     summary = packet['summary']
+    seeds = ', '.join(str(s) for s in packet['seeds'])
     lines = [
-        f"{summary['valid']} of {summary['regions']} regions valid (DC OPF optimal and AC power flow "
-        f"converged inside 0.9–1.1 pu); DC OPF optimal {summary['dc_optimal']}, AC power flow "
-        f"converged {summary['ac_converged']}; peak within ±{packet['tolerance']:.0%} of the reference "
-        f"for {summary['peak_within']} of the {summary['peak_scored']} regions whose reference scope matches.",
+        f"Outline: {packet['outline']}. Seeds {seeds}: {summary['runs']} runs over {summary['regions']} regions.",
+        '',
+        f"- DC OPF optimal in {summary['dc_pass']} of {summary['runs']} runs; AC power flow converged "
+        f"inside 0.9–1.1 pu in {summary['ac_pass']} of {summary['runs']} ({summary['ac_converged']} converged "
+        f"at all).",
+        f"- {summary['regions_all_valid']} of {summary['regions']} regions are valid at every seed.",
+        f"- Peak within ±{packet['tolerance']:.0%} of the reference for {summary['peak_within']} of the "
+        f"{summary['peak_scored']} regions whose reference scope matches (demand does not depend on the seed).",
         '',
         'Levels are the national ladder of the region\'s dominant country, highest first; a `+` marks a '
-        'higher level in service there that the corridor plan raised buses to.',
+        'higher level in service there that the corridor plan raised buses to at some seed. DC and AC are '
+        'passes out of the seeds run (AC: converged inside the band); Vm is the range over the runs that '
+        'converged; engine ms is the median.',
         '',
-        '| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |',
-        '| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |',
+        '| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC | AC | Vm pu | Engine ms |',
+        '| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: |',
     ]
-    for r in packet['rows']:
+    for r in packet['regions']:
         ref = r['reference']
         shown = f"{ref['reference_mw']:,.0f} ({ref['year']})" if ref else ''
         ratio = f"{r['peak_ratio']:.2f}" if r['peak_ratio'] is not None else ''
         lines.append(
             f"| {r['region'].upper()} | {levels(r)} | {r['buses']} | {r['peak_mw']:,.0f} | {shown} | {ratio} | "
-            f"{r['peak_verdict']} | {r['branch_bus_ratio']:.2f} | {r['max_parallel_circuits']} | "
-            f"{r['dc_opf']} | {r['ac_pf']} | {vm(r)} | {r['engine_ms']:,.0f} |")
+            f"{r['peak_verdict']} | {span(r['branch_bus_ratio'], '{:.2f}')} | {r['max_parallel_circuits']} | "
+            f"{r['dc_pass']}/{r['runs']} | {r['ac_pass']}/{r['runs']} | {vm(r)} | {r['engine_ms_median']:,.0f} |")
+    missing = packet.get('missing') or []
+    if missing:
+        lines += ['', f"Not in this outline layer, so not run: {', '.join(m.upper() for m in missing)}."]
     lines += ['', '| Region | Reference scope | Source |', '| --- | --- | --- |']
-    for r in packet['rows']:
+    for r in packet['regions']:
         ref = r['reference']
         if ref:
             urls = ' '.join(f'<{u}>' for u in ref['urls'])
@@ -271,47 +316,57 @@ def sweep(args):
     args.output.mkdir(parents=True, exist_ok=False)
     table = json.loads(args.references.read_text())
     references, tolerance = table['regions'], table['tolerance']
+    seeds = [int(s) for s in args.seeds.split(',')]
     packet = {
-        'schema': 'tellegen.synth-sweep/1',
+        'schema': 'tellegen.synth-sweep/2',
+        'outline': args.outline,
         'tellegen_sha256': digest(args.tellegen),
         'peak_references_sha256': digest(args.references),
-        'seed': args.seed,
+        'seeds': seeds,
         'tolerance': tolerance,
         'specs': {},
+        'missing': [m for m in (args.missing or '').split(',') if m],
         'rows': [],
     }
     for spec_path in args.spec:
         spec = json.loads(spec_path.read_text())
         packet['specs'][spec['id']] = digest(spec_path)
-        directory = args.output / spec['id']
-        directory.mkdir()
-        request = dict(spec['request'], seed=args.seed)
-        request_path = directory / 'request.json'
-        request_path.write_text(json.dumps(request) + '\n')
-        result = subprocess.run([str(args.tellegen), 'generate', '--request', str(request_path),
-                                 '--out', str(directory)], text=True, capture_output=True, check=False)
-        if result.stderr.strip():
-            (directory / 'stderr.txt').write_text(result.stderr)
-        if result.returncode:
-            raise RuntimeError(f"{spec['id']}: {result.stderr.strip() or result.stdout.strip()}")
-        report = json.loads((directory / 'report.json').read_text())
-        row = sweep_row(spec, report, references, tolerance)
-        packet['rows'].append(row)
-        print(f"{spec['id']}: {row['buses']} buses, peak {row['peak_mw']:,.0f} MW "
-              f"({row['peak_verdict']}), branch/bus {row['branch_bus_ratio']:.2f}, "
-              f"circuits {row['max_parallel_circuits']}, DC {row['dc_opf']}, AC {row['ac_pf']}, "
-              f"{row['engine_ms']:,.0f} ms", flush=True)
-        if not args.keep:
-            for name in ('network.pio.json', 'network.geo.json'):
-                (directory / name).unlink(missing_ok=True)
+        for seed in seeds:
+            directory = args.output / f"{spec['id']}-s{seed}"
+            directory.mkdir()
+            request = dict(spec['request'], seed=seed)
+            request_path = directory / 'request.json'
+            request_path.write_text(json.dumps(request) + '\n')
+            result = subprocess.run([str(args.tellegen), 'generate', '--request', str(request_path),
+                                     '--out', str(directory)], text=True, capture_output=True, check=False)
+            if result.stderr.strip():
+                (directory / 'stderr.txt').write_text(result.stderr)
+            if result.returncode:
+                raise RuntimeError(f"{spec['id']}: {result.stderr.strip() or result.stdout.strip()}")
+            report = json.loads((directory / 'report.json').read_text())
+            row = dict(sweep_row(spec, report, references, tolerance), seed=seed)
+            packet['rows'].append(row)
+            print(f"{spec['id']} seed {seed}: {row['buses']} buses, peak {row['peak_mw']:,.0f} MW "
+                  f"({row['peak_verdict']}), branch/bus {row['branch_bus_ratio']:.2f}, "
+                  f"circuits {row['max_parallel_circuits']}, DC {row['dc_opf']}, AC {row['ac_pf']}, "
+                  f"{row['engine_ms']:,.0f} ms", flush=True)
+            if not args.keep:
+                for name in ('network.pio.json', 'network.geo.json'):
+                    (directory / name).unlink(missing_ok=True)
+    regions = []
+    for spec_id in packet['specs']:
+        regions.append(aggregate([r for r in packet['rows'] if r['region'] == spec_id]))
+    packet['regions'] = regions
     rows = packet['rows']
     packet['summary'] = {
-        'regions': len(rows),
-        'valid': sum(r['valid'] for r in rows),
-        'dc_optimal': sum(r['dc_opf'] == 'optimal' for r in rows),
+        'regions': len(regions),
+        'runs': len(rows),
+        'dc_pass': sum(r['dc_opf'] == 'optimal' for r in rows),
         'ac_converged': sum(r['ac_pf'] == 'converged' for r in rows),
-        'peak_within': sum(r['peak_verdict'] == 'within' for r in rows),
-        'peak_scored': sum(r['peak_verdict'] in ('within', 'outside') for r in rows),
+        'ac_pass': sum(r['valid'] for r in rows),
+        'regions_all_valid': sum(g['ac_pass'] == g['runs'] for g in regions),
+        'peak_within': sum(g['peak_verdict'] == 'within' for g in regions),
+        'peak_scored': sum(g['peak_verdict'] in ('within', 'outside') for g in regions),
     }
     (args.output / 'sweep.json').write_text(json.dumps(packet, indent=2) + '\n')
     (args.output / 'sweep.md').write_text(sweep_markdown(packet))
@@ -335,7 +390,10 @@ def main():
     sw.add_argument('spec', type=Path, nargs='+')
     sw.add_argument('--tellegen', type=Path, required=True)
     sw.add_argument('--output', type=Path, required=True)
-    sw.add_argument('--seed', type=int, default=1)
+    sw.add_argument('--seeds', default='1,7,2026', help='comma-separated seeds (the app uses 2026)')
+    sw.add_argument('--outline', default='Natural Earth 1:50m admin-0 (regions.py --outline 50m)',
+                    help='what the specs\' polygons are, for the table')
+    sw.add_argument('--missing', help='comma-separated regions the outline layer lacks')
     sw.add_argument('--references', type=Path, default=PEAK_REFERENCES)
     sw.add_argument('--keep', action='store_true', help='keep the network files of every region')
     args = parser.parse_args()

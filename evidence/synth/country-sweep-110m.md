@@ -1,34 +1,38 @@
-16 of 18 regions valid (DC OPF optimal and AC power flow converged inside 0.9–1.1 pu); DC OPF optimal 18, AC power flow converged 16; peak within ±25% of the reference for 14 of the 14 regions whose reference scope matches.
+Outline: the MapToGrid app's 1:110m layer (regions.py --outline app-110m), the app's default request. Seeds 1, 7, 2026: 51 runs over 17 regions.
 
-Levels are the national ladder of the region's dominant country, highest first; a `+` marks a higher level in service there that the corridor plan raised buses to.
+- DC OPF optimal in 51 of 51 runs; AC power flow converged inside 0.9–1.1 pu in 41 of 51 (43 converged at all).
+- 12 of 17 regions are valid at every seed.
+- Peak within ±25% of the reference for 13 of the 13 regions whose reference scope matches (demand does not depend on the seed).
 
-| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |
-| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |
-| PRT | 400/220/150 | 94 | 8,162 | 9,395 (2025) | 0.87 | within | 1.48 | 2 | optimal | converged | 1.012–1.031 | 16 |
-| ESP | 400/220 | 266 | 38,469 | 39,957 (2025) | 0.96 | within | 1.66 | 3 | optimal | converged | 1.016–1.022 | 35 |
-| DEU | 380/220 | 517 | 77,504 | 75,635 (2025) | 1.02 | within | 1.62 | 4 | optimal | converged | 1.009–1.025 | 53 |
-| FRA | 400/225 | 467 | 67,896 | 88,000 (2025) | 0.77 | within | 1.60 | 4 | optimal | converged | 1.016–1.022 | 50 |
-| GBR | 400/275 | 314 | 47,095 | 48,141 (2025) | 0.98 | within | 1.60 | 4 | optimal | converged | 0.996–1.029 | 30 |
-| TEXAS-BOX | +765/500/345/230 | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.60 | 4 | optimal | converged | 1.013–1.042 | 60 |
-| USA | +765/500/345/230 | 3000 | 647,597 | 759,180 (2025) | 0.85 | within | 1.61 | 4 | optimal | not_converged |  | 1,867 |
-| IND | +765/400/220 | 2013 | 301,683 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | optimal | converged | 1.012–1.023 | 605 |
-| CHN | +1000/500/220 | 3000 | 1,484,029 | 1,508,000 (2025) | 0.98 | within | 1.64 | 4 | optimal | converged | 1.019–1.020 | 1,035 |
-| RUS | +750/500/220 | 1181 | 175,955 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | optimal | not_converged |  | 570 |
-| BRA | +765/500/230 | 750 | 111,478 | 106,532 (2025) | 1.05 | within | 1.60 | 4 | optimal | converged | 1.017–1.050 | 158 |
-| JPN | 500/275 | 1006 | 150,834 | 162,600 (2025) | 0.93 | within | 1.60 | 4 | optimal | converged | 1.017–1.031 | 221 |
-| AUS | +500/330/275/220 | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 3 | optimal | converged | 1.017–1.061 | 50 |
-| ZAF | +765/400/275 | 312 | 36,539 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | optimal | converged | 1.009–1.025 | 34 |
-| NGA | 330/132 | 174 | 5,233 | 5,802 (2025) | 0.90 | not comparable | 1.55 | 3 | optimal | converged | 0.981–1.025 | 13 |
-| EGY | 500/220 | 312 | 35,021 | 39,800 (2025) | 0.88 | within | 1.60 | 4 | optimal | converged | 1.013–1.020 | 32 |
-| CHL | 500/220 | 268 | 13,151 | 13,093 (2025) | 1.00 | within | 1.60 | 3 | optimal | converged | 1.016–1.072 | 33 |
-| IDN | 500/150 | 369 | 54,111 | 61,288 (2024) | 0.88 | flagged | 1.60 | 3 | optimal | converged | 1.018–1.021 | 39 |
+Levels are the national ladder of the region's dominant country, highest first; a `+` marks a higher level in service there that the corridor plan raised buses to at some seed. DC and AC are passes out of the seeds run (AC: converged inside the band); Vm is the range over the runs that converged; engine ms is the median.
+
+| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC | AC | Vm pu | Engine ms |
+| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: |
+| PRT | 400/220/150 | 95 | 8,162 | 9,395 (2025) | 0.87 | within | 1.49–1.52 | 2 | 3/3 | 3/3 | 0.992–1.033 | 8 |
+| ESP | 400/220 | 254 | 37,988 | 39,957 (2025) | 0.95 | within | 1.60–1.67 | 4 | 3/3 | 3/3 | 1.015–1.028 | 20 |
+| DEU | 380/220 | 524 | 78,508 | 75,635 (2025) | 1.04 | within | 1.53–1.60 | 4 | 3/3 | 3/3 | 0.980–1.024 | 47 |
+| GBR | 400/275 | 315 | 47,219 | 48,141 (2025) | 0.98 | within | 1.50–1.59 | 4 | 3/3 | 3/3 | 1.011–1.054 | 26 |
+| TEXAS-BOX | +765/500/345/230 | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.60 | 4 | 3/3 | 3/3 | 0.998–1.046 | 65 |
+| USA | +765/500/345/230 | 3000 | 649,906 | 759,180 (2025) | 0.86 | within | 1.60–1.61 | 4 | 3/3 | 0/3 |  | 1,645 |
+| IND | +765/400/220 | 2014 | 302,004 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | 3/3 | 3/3 | 1.008–1.024 | 492 |
+| CHN | +1000/500/220 | 3000 | 1,501,472 | 1,508,000 (2025) | 1.00 | within | 1.64–1.67 | 4 | 3/3 | 3/3 | 1.018–1.022 | 1,032 |
+| RUS | +750/500/220 | 1181 | 175,954 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | 3/3 | 0/3 | 0.261–1.955 | 460 |
+| BRA | +765/500/230 | 750 | 112,433 | 106,532 (2025) | 1.06 | within | 1.60 | 4 | 3/3 | 1/3 | 0.949–1.108 | 147 |
+| JPN | 500/275 | 996 | 149,312 | 162,600 (2025) | 0.92 | within | 1.60–1.61 | 4 | 3/3 | 3/3 | 1.016–1.037 | 156 |
+| AUS | +500/330/275/220 | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 4 | 3/3 | 2/3 | 0.998–1.032 | 39 |
+| ZAF | +765/400/275 | 312 | 36,390 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | 3/3 | 3/3 | 1.012–1.039 | 30 |
+| NGA | 330/132 | 174 | 5,236 | 5,802 (2025) | 0.90 | not comparable | 1.60 | 4 | 3/3 | 3/3 | 0.956–1.034 | 12 |
+| EGY | 500/220 | 312 | 34,828 | 39,800 (2025) | 0.88 | within | 1.60–1.63 | 4 | 3/3 | 2/3 | 1.015–1.021 | 28 |
+| CHL | 500/220 | 282 | 13,156 | 13,093 (2025) | 1.00 | within | 1.60 | 4 | 3/3 | 3/3 | 1.019–1.052 | 24 |
+| IDN | 500/150 | 356 | 44,810 | 61,288 (2024) | 0.73 | flagged | 1.57–1.60 | 4 | 3/3 | 3/3 | 1.015–1.025 | 38 |
+
+Not in this outline layer, so not run: FRA.
 
 | Region | Reference scope | Source |
 | --- | --- | --- |
 | PRT | Mainland public-grid demand, 15-minute (REN); excludes the Azores and Madeira and behind-the-meter self-consumption. Model: Mainland Portugal; the Azores and Madeira are cut as far islands or left out as too small for a bus. | REN, Dados Técnicos 2025: <https://www.ren.pt/media/2cbfm5p4/ren-dados-te-cnicos-2025.pdf> |
 | ESP | Peninsular hourly demand at power-station busbars (REE); excludes the Balearic and Canary Islands. Model: Peninsular Spain and the Balearic Islands; the Canaries are cut as far islands. | REE, annual maximums: <https://www.sistemaelectrico-ree.es/en/spanish-electricity-system/demand/annual-maximums> |
 | DEU | Country hourly total load (ENTSO-E, the SMARD Netzlast series). Model: Germany. | ENTSO-E Statistical Factsheet 2025: <https://eepublicdownloads.entsoe.eu/clean-documents/Publications/Statistics/Factsheet/entsoe_sfs2025_web.pdf> |
-| FRA | National gross consumption, consolidated (RTE); metropolitan France. Model: Metropolitan France with Corsica; the overseas departments are cut as far islands. | RTE, annual peak of gross consumption (data.gouv.fr): <https://www.data.gouv.fr/datasets/pic-annuel-de-la-consommation-brute-delectricite-2001-a-2021/> |
 | GBR | Great Britain: transmission National Demand plus NESO's estimates of embedded wind and solar, half-hourly maximum (9 Jan 2025); Northern Ireland, about 1.8 GW, is not included. Model: The United Kingdom polygon, Northern Ireland included. | NESO historic demand data: <https://www.neso.energy/data-portal/historic-demand-data> |
 | TEXAS-BOX | ERCOT region hourly integrated native load. Model: A bounding box around Texas that also takes in parts of Mexico, New Mexico, Oklahoma and Louisiana, and El Paso, which is outside ERCOT. | ERCOT hourly load archive: <https://www.ercot.com/gridinfo/load/load_hist> |
 | USA | Lower-48 coincident hourly demand over the balancing authorities (EIA-930); 2025 value preliminary. Model: The United States after the far-island policy (Alaska and Hawaii cut). | EIA, Today in Energy: <https://www.eia.gov/todayinenergy/detail.php?id=65864> |

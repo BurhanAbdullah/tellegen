@@ -83,27 +83,42 @@ tracked as generator work.
 
 ## Country-scale sweep
 
-`country-sweep.md` and `country-sweep.json` hold one run of the default
-request (density high, no bus count, seed 1) on 17 whole countries and a
-box around Texas, measured against each country's official peak.
+Two sweeps of the default request on 17 whole countries and a box around
+Texas, each at seeds 1, 7 and 2026 (the MapToGrid app's default seed),
+measured against each country's official peak:
+
+- `country-sweep-50m.md` / `.json`: Natural Earth 1:50m admin-0 outlines.
+- `country-sweep-110m.md` / `.json`: the MapToGrid app's own 1:110m
+  selection layer (`static/data/countries-110m.geojson`, SHA-256
+  `04be4d555283ceb888758d01e2a359e17db86918794357e72b16bb50fc4686bd`), with
+  the request the app sends for an untouched Generation panel
+  (`src/lib/engine/request.ts`: synthetic, density and fidelity high,
+  population demand, no voltage levels). France is not in that layer
+  (Natural Earth codes it `-99`), so the app cannot select it and this
+  sweep has 17 regions.
 
 ```sh
 # Natural Earth v5.1.2, 1:50m admin-0 countries (public domain); regions.py
 # checks the file's SHA-256 (SOURCE_SHA256) before writing the specs.
 curl -LO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson
-python3 -I evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs
+python3 -I evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs50
+python3 -I evidence/synth/regions.py /path/to/maptogrid/static/data/countries-110m.geojson \
+  --outline app-110m --out /path/to/specs110
 TELLEGEN_ALLOW_FALLBACK=1 cargo build --release -p tellegen-cli --features conic
-python3 evidence/synth/run.py sweep /path/to/specs/*.json \
+python3 evidence/synth/run.py sweep /path/to/specs50/*.json --seeds 1,7,2026 \
   --tellegen target/release/tellegen --output /path/to/new-sweep-directory
-# The same sessions through the wasm build, timed in Node:
+python3 evidence/synth/run.py sweep /path/to/specs110/*.json --seeds 1,7,2026 --missing fra \
+  --outline "the MapToGrid app's 1:110m layer" \
+  --tellegen target/release/tellegen --output /path/to/another-new-directory
+# The same sessions through the wasm build, timed in Node (SEED defaults to 2026):
 npm run wasm
 node evidence/synth/wasm_time.mjs packages/engine/src/wasm-pkg \
-  crates/tellegen-synth/data/populated_places.json /path/to/specs/usa.json
+  crates/tellegen-synth/data/populated_places.json /path/to/specs110/usa.json
 ```
 
-The specs are not committed (they copy Natural Earth polygons); `regions.py`
-regenerates them byte for byte, and `country-sweep.json` records each spec's
-SHA-256.
+The specs are not committed (they copy the outline polygons); `regions.py`
+regenerates them byte for byte, and each sweep's JSON records every spec's
+SHA-256 and every run.
 
 **Peak references.** `peak_references.json` gives every region's official
 peak with its year, scope and source URLs. It uses the latest complete year
@@ -125,56 +140,118 @@ reference's scope matches the modelled region:
 
 **Levels.** Each region is modelled at its dominant country's national
 ladder (`crates/tellegen-synth/data/voltage_ladders.json`, with sources),
-shown in the table's Levels column. A `+` marks a higher level in service
-that the plan raised buses to: 765 kV in the United States, India, Brazil
-and South Africa, 750 kV in Russia, 1000 kV in China, and 500 kV in
-Australia. Germany, France, Great Britain, Spain, Portugal, Japan,
-Nigeria, Egypt, Chile and Indonesia have no higher AC level, and the plan
-adds none.
+shown in the Levels column. A `+` marks a higher level in service that the
+plan raised buses to at some seed: 765 kV in the United States, India,
+Brazil and South Africa, 750 kV in Russia, 1000 kV in China, 500 kV in
+Australia. Germany, France, Great Britain, Spain, Portugal, Japan, Nigeria,
+Egypt, Chile and Indonesia have no higher AC level, and the plan adds none.
 
-**Result.** 16 of 18 regions are valid, all 18 DC OPFs are optimal, and 16
-AC power flows converge. All 14 scored peaks lie within ±25% of their
-reference, from 0.77 (France) to 1.21 (India). Branches per bus run from
-1.48 to 1.66, and no corridor holds more than four circuits.
+**Result.** These are rates over all seeds, not one seed:
 
-**Failures, as the engine reported them:**
+| Outline | Runs | DC OPF optimal | AC converged in band | Regions valid at every seed | Peaks within ±25% |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Natural Earth 1:50m | 54 | 54 | 45 | 12 of 18 | 14 of 14 |
+| App 1:110m, app request | 51 | 51 | 41 | 12 of 17 | 13 of 13 |
 
-- **United States.** The AC power flow does not converge (5 starts). From
-  its own DC angles a Newton solve stalls at a 2 MW mismatch in a 230 kV
-  pocket in Nevada: a remote area at the AC transfer limit of its corridor.
-  The Lower 48 is one AC island in the model, where in reality it is three
-  interconnections joined by DC ties; the planning spread stays at 205°.
-- **Russia.** The AC power flow does not converge. From its DC angles Newton
-  stalls at 1.4 MW in a 220 kV pocket in central Siberia; the planning
-  spread is 72°.
+Demand, the bus count and the levels do not depend on the seed. The two
+outlines differ by a percent or two in peak demand, except where the
+outline changes which islands are generated.
 
-Splitting continental islands into synchronous areas joined by HVDC is not
-modelled. `planning_incomplete` is raised for 13 of the 18 regions. Where
-the country has no higher level, corridors stay at its ceiling and the
-angle spread is reported instead of met: Spain 81°, Germany 64°, Great
-Britain 55°, France 49°, Japan 94° (two corridors short of capacity at four
-500 kV circuits), Chile 92° and Indonesia 171°.
+**Failures by region, as the engine reported them** (AC passes out of 3):
 
-**Compared with the run before national ladders** (500/230 kV everywhere,
-with 765 kV above): China and Indonesia became valid and Russia stopped
-converging, so valid regions went from 15 to 16. Branches per bus in Spain,
-Germany, France and Great Britain rose from 1.51–1.59 to 1.60–1.66, since
-380/400 kV circuits carry less than 500 kV ones and no higher level is left
-to promote to.
+| Region | 1:50m | App 1:110m | What fails |
+| --- | ---: | ---: | --- |
+| Russia | 0 | 0 | See below |
+| United States | 1 | 0 | Not converged; from its own DC angles Newton stalls at about 2 MW in a remote 230 kV pocket (Nevada at seed 1) |
+| China | 2 | 3 | 1:50m seed 7 not converged |
+| Brazil | 3 | 1 | 1:110m seed 1 not converged; seed 7 converged at 0.949–1.108 pu |
+| Australia | 2 | 2 | 1:50m seed 2026 converged at up to 1.541 pu; 1:110m seed 1 not converged |
+| Chile | 2 | 3 | 1:50m seed 2026 converged at up to 1.232 pu |
+| Indonesia | 2 | 3 | 1:50m seed 2026 converged at up to 1.266 pu |
+| Egypt | 3 | 2 | 1:110m seed 2026 not converged |
 
-**Time.** The automatic bus count reaches the 3000-bus limit for the United
-States and China. End to end, with both validations, a run takes:
+Every DC OPF is optimal on both outlines. `planning_incomplete` is raised
+wherever a country's ladder stops before the angle spread can be met:
+Spain, Germany, Great Britain, France, Japan (two corridors short of
+capacity at four 500 kV circuits), Chile and Indonesia, and the
+continental regions.
 
-| Region | Buses | Native CLI (Apple M5 Pro) | wasm in Node 26 (same machine) |
+**Russia.** Its AC power flow fails at every seed on both outlines, and
+for two structural reasons:
+
+- *Remote pockets at the end of long 220 kV chains.* Russia is one AC island
+  of 17 million km² in the model, where the real UES leaves Magadan,
+  Chukotka, Kamchatka and Norilsk as isolated systems. At three of the six
+  runs (1:50m seeds 1 and 2026, 1:110m seed 1) Newton stalls at 1–2 MW in a
+  220 kV pocket on the Yenisei north of Krasnoyarsk or at Magadan, 95°
+  from the reference, from a flat and a DC start alike: no AC solution lies
+  near the plan. The planning spread is 67–129° against the 44° target.
+- *A 750 kV network far larger than Russia's.* Capacity promotion raises
+  both ends of a heavy corridor, and every corridor touching a raised bus
+  then runs at 750 kV. At seed 1, 317 of 1,181 buses sit at 750 kV, with
+  73,500 circuit-km of 750 kV line. That is far more than any real 750 kV
+  network: Ukraine's, among the largest, is about 4,400 route-km
+  (Ukrenergo, 2020), and Russia's serves its north-west and west (SO UES).
+  Their 269 GVAr of charging is
+  met by 280–460 GVAr of fixed reactors for a 176 GW load, so voltages
+  swing with the dispatch. Where a solution exists, a DC start finds it,
+  but at 0.874–1.154 pu (1:50m seed 7) and 0.954–1.145 pu (1:110m seed
+  2026), outside the band; only 1:110m seed 7 (0.921–1.062 pu) would pass.
+  The engine's flat start at 1:110m seed 2026 converges to a false
+  0.26–1.96 pu root.
+
+  A warm start from the DC angles therefore lifts Russia from 0 to 1 of 6
+  valid runs, and from 1 to 3 converged. It does not repair the plan.
+
+Three model changes were tried against this and not kept, because none
+improved the AC passes over both outlines:
+
+- Adequacy areas bounded by extent as well as load (about 120,000 km² each,
+  the Lower 48's balancing authorities): 84 of 105 against 85.
+- Lines between buses at different voltages run at the lower voltage, with
+  the transformer at the higher end: fewer 750 kV lines, but 77 of 105.
+- No stiffening onto the higher level: no change, since promotion, not
+  stiffening, builds the 750 kV network.
+
+Splitting continental islands into synchronous areas joined by HVDC, with
+switched reactive compensation, is the remaining structural step.
+
+**Indonesia on the app's outline.** At 1:110m the archipelago fell apart
+into several island groups, and the context kept the largest by area,
+Borneo's: the grid had 33 of 99 places and 8.5 GW of 54 GW, without Java.
+The context now keeps the group whose places hold the most people
+(bdaaa90): Indonesia keeps Java and Sumatra (44.8 GW), and its AC power flow
+converges at all three seeds. This was the only difference between the
+outlines with a cause in the model. The other differences (places snapped,
+peaks) are a few percent, and the AC outcomes that differ between outlines
+come from bus sites drawn on different polygons, the same kind of variation
+as between seeds.
+
+**Time**, end to end with both validations (Apple M5 Pro):
+
+| Region | Buses | Native CLI, median of 3 seeds (1:50m / 1:110m) | wasm in Node 26, app outline, seed 2026 |
 | --- | ---: | ---: | ---: |
-| United States | 3000 | 1.6–1.9 s | 2.2 s |
-| China | 3000 | 1.0–1.1 s | 1.3 s |
-| India | 2013 | 0.58–0.61 s | 0.67 s |
-| Russia | 1181 | 0.56–0.57 s | 0.72 s |
-| Germany | 517 | 0.05 s | 0.07 s |
+| United States | 3000 | 1.75 / 1.64 s | 2.10 s |
+| China | 3000 | 1.30 / 1.03 s | 1.47 s |
+| India | 2013 | 0.60 / 0.49 s | 0.56 s |
+| Russia | 1181 | 0.56 / 0.46 s | 0.36 s |
+| Germany | 517 | 0.05 / 0.05 s | 0.06 s |
 
-The United States and Russia spend about 1 s and 0.3 s in wasm on AC power
-flows that do not converge over five starts; the United States is over the
-2 s aim for that reason.
-The corridor plan takes half to two thirds of each large run. Lower bus caps
-(1500–2500) made the United States and China fail AC, and were no faster.
+The United States is over the 2 s aim in wasm because its AC power flow
+does not converge over five starts (about 1.0 s of the run).
+
+### Limits of these results
+
+- **Seed robustness.** One seed overstates robustness. Russia converged at
+  one seed and outline before national ladders, and nowhere since; of the
+  regions that fail at all, Australia, Brazil, Chile, China, Egypt and
+  Indonesia each fail at one or two of six runs, so a single-seed table
+  reports them as valid or as failed by chance. The rates above, over three
+  seeds and two outlines, are the measure to quote, and three seeds are
+  still few.
+- **Voltage band.** Several converged runs leave the 0.9–1.1 pu band
+  (Australia at up to 1.54 pu, Chile 1.23, Indonesia 1.27, Brazil 0.95–1.11),
+  because the reactive plan sizes fixed shunts at the planning dispatch
+  while validation runs at the DC OPF's.
+- **One AC island per region.** Continental regions and archipelagos are
+  solved as one synchronous system; the generator has no HVDC of its own.
