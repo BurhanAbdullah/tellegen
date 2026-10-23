@@ -2,17 +2,36 @@
 "@tellegen/svelte": minor
 ---
 
-`TellegenMap` takes its basemap from props instead of a hardcoded CARTO URL.
-The default is now the OpenFreeMap positron style with the CARTO
-positron-nolabels style as a fallback, so the hosted look is unchanged while
-CARTO's key enforcement on unkeyed tiles no longer blanks the map. New props:
-`mapStyle`, `fallbackMapStyle`, `theme` (`'light' | 'dark'`), `projection`
-(`'mercator' | 'globe'`, re-applied after every style load), `initialCamera`,
-`hideBasemapLabels`, `extraLayers`, `attribution` (`'compact' | 'full'`, never
-off), `onMapReady(map, overlay)`, `onBasemapFallback` and `onBasemapError`.
+`TellegenMap` takes its basemap from props instead of a hardcoded CARTO URL,
+and the default order depends on a CARTO basemap key. CARTO's terms ask for
+one; keys are free for non-commercial use from carto.com/basemaps/apikey.
+
+- With `cartoApiKey`, the keyed CARTO style leads (positron-nolabels or
+  dark-matter-nolabels), and OpenFreeMap is the fallback.
+- Without a key, OpenFreeMap leads, and the keyless CARTO style is the
+  fallback.
+
+Whenever an OpenFreeMap style renders, road lines start at zoom 8. In the dark
+theme, water and land are recoloured towards CARTO Dark Matter
+(`openFreeMapEdits`, matched by `source-layer`).
+
+New props:
+
+- `mapStyle` and `fallbackMapStyle`;
+- `cartoApiKey`;
+- `theme` (`'light' | 'dark'`);
+- `projection` (`'mercator' | 'globe'`, re-applied after every style load);
+- `initialCamera`;
+- `hideBasemapLabels`;
+- `extraLayers`;
+- `attribution` (`'compact' | 'full'`, never off);
+- `onMapReady(map, overlay)`, `onBasemapFallback` and `onBasemapError`.
+
 `basemap.ts` exports `OPENFREEMAP_STYLES`, `CARTO_STYLES`, `cartoStyleUrl`,
-`defaultBasemap`, `resolveBasemap` and `attachBasemapFallback`; the overlay
-palette is `MAP_PALETTE[theme]`.
+`defaultBasemap`, `resolveBasemap`, `attachBasemapFallback`,
+`isOpenFreeMapStyle` and `openFreeMapEdits`. The overlay palette is
+`MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
+`cartoApiKey`, and the default shell passes it and `theme` to its map.
 
 The controller gains `openBalancedModule({ name, moduleJson | payload,
 geoLayer?, formulation?, activate?, frame? })` and
@@ -25,5 +44,5 @@ dark tokens in `styles.css`) and marks the shell loaded when default cases are
 off. `@tellegen/svelte/components` exports `PanelHost` (with `showToolbar`
 and `--tellegen-dock-left/right/bottom` insets), `NotificationCenter` and the
 renderless `ShellEnvironment` for custom shells. Hosts with a Content Security
-Policy must allow `https://tiles.openfreemap.org` in `connect-src` and
-`img-src`.
+Policy must allow `https://tiles.openfreemap.org` and `https://*.cartocdn.com`
+in `connect-src` and `img-src`.

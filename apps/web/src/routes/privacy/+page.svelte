@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { PUBLIC_CARTO_BASEMAP_KEY } from '$app/env/public';
 	import SeoHead from '#lib/components/SeoHead.svelte';
 	import { browserAnalytics } from '#lib/analytics/client.js';
 	let optedOut = $state(true);
@@ -78,11 +79,16 @@
 	<section>
 		<h2>Map tiles</h2>
 		<p>
-			The geographic basemap loads directly from OpenFreeMap; when that style cannot be loaded, the
-			map switches to CARTO. Your browser requests the style, tiles, fonts and sprites from
-			whichever provider is on screen, so that provider sees the map area, IP address, and browser
-			details. Case files and equipment data are not included. The plain diagram view does not
-			request a basemap.
+			{#if PUBLIC_CARTO_BASEMAP_KEY}
+				The geographic basemap loads directly from CARTO, with this site's CARTO basemap key; when
+				that style cannot be loaded, the map switches to OpenFreeMap.
+			{:else}
+				The geographic basemap loads directly from OpenFreeMap; when that style cannot be loaded,
+				the map switches to CARTO.
+			{/if}
+			Your browser requests the style, tiles, fonts and sprites from whichever provider is on screen,
+			so that provider sees the map area, IP address, and browser details. Case files and equipment data
+			are not included. The plain diagram view does not request a basemap.
 		</p>
 		<p>
 			<a href="https://openfreemap.org/" rel="noreferrer">OpenFreeMap</a> ·
