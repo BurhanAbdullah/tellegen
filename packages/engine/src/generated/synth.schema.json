@@ -604,12 +604,28 @@
     "CountryDemand": {
       "description": "One country's part of a region's demand under the national basis.",
       "properties": {
+        "area_share": {
+          "description": "Share of the country's area the region covers (each part of the region\ncounted to the country of its nearest place); absent without an area.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "code": {
           "description": "Country code of the places table (Natural Earth `adm0_a3`).",
           "type": "string"
         },
+        "listed_share": {
+          "description": "Population of the country's listed places over its national\npopulation, at most 1: the share of its peak that follows its places.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "national_peak_mw": {
-          "description": "The country's national peak (annual average load × peak factor), MW;\n`peak_mw` equals it when the region holds every place of the country.\nAbsent for the world fallback.",
+          "description": "The country's national peak (annual average load × peak factor), MW;\n`peak_mw` equals it when the region holds every place and at least 95%\nof the area of the country. Absent for the world fallback.",
           "format": "double",
           "type": [
             "number",
@@ -630,6 +646,14 @@
           "description": "Sum of `pop_max` over those places.",
           "format": "double",
           "type": "number"
+        },
+        "unlisted_peak_mw": {
+          "description": "Of `peak_mw`, the part of the country's unlisted demand the region\ntakes: in proportion to the area it covers, never beyond its share of\nthe country's listed population, MW.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "year": {
           "description": "Year of the national figure; absent when the country has no entry and\nits places drew the world average.",
@@ -889,6 +913,14 @@
     "DemandTableProvenance": {
       "description": "The national demand table behind a national demand basis.",
       "properties": {
+        "areas_sha256": {
+          "description": "SHA-256 of the bundled country area table the unlisted demand spreads\nover.",
+          "type": "string"
+        },
+        "areas_source_sha256": {
+          "description": "SHA-256 of the admin-0 file the areas were derived from.",
+          "type": "string"
+        },
         "licence": {
           "type": "string"
         },
@@ -925,7 +957,9 @@
         "licence",
         "sha256",
         "source_sha256",
-        "peak_factor"
+        "peak_factor",
+        "areas_sha256",
+        "areas_source_sha256"
       ],
       "type": "object"
     },
@@ -1495,7 +1529,7 @@
       "description": "The corridor and reactive plan the electrify stage made before any\nvalidation ran: what the corridors were sized for and what was installed.",
       "properties": {
         "added_level_kv": {
-          "description": "A level the plan added above the requested ones (765 kV) because\ncorridors at the highest requested level needed more than two\ncircuits; absent when the requested levels sufficed.",
+          "description": "The highest level the plan added above the modelled ones (one of\n`RegionContext::promotion_levels_kv`) because corridors at the highest\nmodelled level needed more than two circuits; absent when the modelled\nlevels sufficed or the region has no higher level in service.",
           "format": "double",
           "type": [
             "number",
@@ -1815,6 +1849,16 @@
         },
         "tellegen_version": {
           "type": "string"
+        },
+        "voltage_table": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoltageTableProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -2009,7 +2053,7 @@
           "type": "integer"
         },
         "places_snapped": {
-          "description": "Places counted in the region although just outside its polygons:\nwithin 15 km of its edge, of a country it already holds, and moved\nonto that edge (harbours and estuaries the polygons leave out).",
+          "description": "Places counted in the region although just outside its polygons:\nwithin 15 km of its edge, of a country whose place population it\nholds at least half of, and moved onto that edge (harbours and\nestuaries the polygons leave out).",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -2019,10 +2063,22 @@
           "format": "double",
           "type": "number"
         },
+        "promotion_levels_kv": {
+          "description": "Higher AC levels the corridor plan may raise buses to, kV, highest\nfirst: the country's levels in service above its ladder, or 765 kV\nabove stated levels. Empty when there is none, as in most of Europe.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "type": "array"
+        },
         "target_bus_count": {
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "voltage_basis": {
+          "$ref": "#/$defs/VoltageBasis",
+          "description": "Where the levels came from."
         },
         "voltage_classes_kv": {
           "description": "The line class each level takes its per-km parameters from.",
@@ -2032,8 +2088,15 @@
           },
           "type": "array"
         },
+        "voltage_country": {
+          "description": "The country whose ladder the levels are (table code), or whose missing\nentry the fallback stands in for; absent for stated levels or a region\nwithout places.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "voltage_levels_kv": {
-          "description": "Nominal levels, highest first.",
+          "description": "Nominal levels, highest first; a level the corridor plan added above\nthem (`PlanningReport::added_level_kv`) comes first once it ran.",
           "items": {
             "format": "double",
             "type": "number"
@@ -2058,7 +2121,8 @@
         "fuel_mix",
         "branch_factor",
         "voltage_levels_kv",
-        "voltage_classes_kv"
+        "voltage_classes_kv",
+        "voltage_basis"
       ],
       "type": "object"
     },
@@ -2375,11 +2439,7 @@
           }
         },
         "voltage_levels_kv": {
-          "default": [
-            500.0,
-            230.0
-          ],
-          "description": "Nominal voltage levels, kV, highest first after resolution. Each level\nkeeps its own kV for the per-unit base and takes the per-km parameters\nof the nearest line class.",
+          "description": "Nominal voltage levels, kV, highest first after resolution. Each level\nkeeps its own kV for the per-unit base and takes the per-km parameters\nof the nearest line class. Empty (the default) takes the national\nladder of the region's dominant country by demand\n([`crate::voltage::VoltageLadders`]); a stated list is used as given,\nand the corridor plan may then add 765 kV above it.",
           "items": {
             "format": "double",
             "type": "number"
@@ -2607,6 +2667,47 @@
       },
       "type": "object"
     },
+    "VoltageBasis": {
+      "description": "Where a region's voltage levels came from.",
+      "oneOf": [
+        {
+          "const": "request",
+          "description": "The request stated the levels.",
+          "type": "string"
+        },
+        {
+          "const": "country",
+          "description": "The national ladder of the region's dominant country\n(`RegionContext::voltage_country`, `Provenance::voltage_table`).",
+          "type": "string"
+        },
+        {
+          "const": "fallback",
+          "description": "The dominant country has no ladder in the table: the ENTSO-E members'\nladder for a member, else IEC 60038's standard levels (warning\n`voltage_fallback`).",
+          "type": "string"
+        }
+      ]
+    },
+    "VoltageTableProvenance": {
+      "description": "The voltage ladder table behind a country or fallback voltage basis.",
+      "properties": {
+        "schema": {
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 of the bundled table.",
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "version",
+        "sha256"
+      ],
+      "type": "object"
+    },
     "Warning": {
       "description": "A non-fatal condition the caller should show.",
       "properties": {
@@ -2651,5 +2752,5 @@
   ],
   "title": "SynthContract",
   "type": "object",
-  "x-rust-source-sha256": "93f072b38ca579bad2f4e6ba2335bb204385d483a82ff7bd5556c8a2b7111448"
+  "x-rust-source-sha256": "3f4f573a99f3cc5418f525669ec6afd7f1cf70d522ba9920e8e8a9d2294a239c"
 }
