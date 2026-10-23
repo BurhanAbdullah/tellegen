@@ -57,17 +57,27 @@ export const CARTO_STYLES = {
 	'dark-nolabels': 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json'
 } as const;
 
-/** A CARTO style URL with the optional API key appended as `key=`. */
+/** A CARTO key with surrounding whitespace removed, or `undefined` when
+ * nothing is left. A variable saved with a stray newline or space must not
+ * count as a key. */
+export function normalizeCartoApiKey(apiKey: string | undefined): string | undefined {
+	return apiKey?.trim() || undefined;
+}
+
+/** A CARTO style URL with the optional API key appended as `key=`. A blank
+ * key appends nothing. */
 export function cartoStyleUrl(style: string, apiKey?: string): string {
-	if (!apiKey) return style;
+	const key = normalizeCartoApiKey(apiKey);
+	if (!key) return style;
 	const separator = style.includes('?') ? '&' : '?';
-	return `${style}${separator}key=${encodeURIComponent(apiKey)}`;
+	return `${style}${separator}key=${encodeURIComponent(key)}`;
 }
 
 export interface DefaultBasemapOptions {
 	/** CARTO basemap key, sent as `key=`. With one, CARTO leads and
-	 * OpenFreeMap is the fallback; without one, the order flips. Restrict the
-	 * key to the hosts that serve your app. */
+	 * OpenFreeMap is the fallback; without one, the order flips. The key is
+	 * trimmed, and a blank one counts as none. Restrict the key to the hosts
+	 * that serve your app. */
 	cartoApiKey?: string;
 	/** Default `true`: the CARTO style uses its `-nolabels` variant, and label
 	 * layers are hidden on load whichever style renders. */
@@ -82,9 +92,10 @@ export function defaultBasemap(
 ): ResolvedBasemap {
 	const hideLabels = options.hideLabels ?? true;
 	const variant = hideLabels ? (`${theme}-nolabels` as const) : theme;
-	const carto = cartoStyleUrl(CARTO_STYLES[variant], options.cartoApiKey);
+	const key = normalizeCartoApiKey(options.cartoApiKey);
+	const carto = cartoStyleUrl(CARTO_STYLES[variant], key);
 	const openFreeMap = OPENFREEMAP_STYLES[theme];
-	return options.cartoApiKey
+	return key
 		? {
 				primary: carto,
 				fallback: openFreeMap,

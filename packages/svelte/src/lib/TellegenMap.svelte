@@ -110,7 +110,7 @@
 		/** CARTO basemap key (free for non-commercial use from
 		 * carto.com/basemaps/apikey; restrict it to your hosts). With one, the
 		 * CARTO style leads and OpenFreeMap is the fallback; without one, the
-		 * order flips. */
+		 * order flips. Trimmed; a blank key counts as none. */
 		cartoApiKey?: string;
 		/** deck.gl layers drawn after tellegen's own, in the same overlay. */
 		extraLayers?: Layer[];

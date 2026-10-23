@@ -16,6 +16,7 @@ import {
 	type BasemapSpec,
 	type BasemapStyle
 } from '../src/lib/basemap.js';
+import { resolveTellegenUiConfig } from '../src/lib/context.svelte.js';
 
 type Listener = (event: BasemapMapEvent) => void;
 
@@ -125,6 +126,28 @@ describe('style URLs', () => {
 		expect(resolveBasemap({ theme: 'light', hideBasemapLabels: true, cartoApiKey: 'k' })).toEqual(
 			defaultBasemap('light', { cartoApiKey: 'k' })
 		);
+	});
+
+	it('trims the CARTO key, and a blank one counts as none', () => {
+		for (const blank of ['  ', '\n']) {
+			expect(defaultBasemap('light', { cartoApiKey: blank })).toEqual(defaultBasemap('light'));
+			expect(resolveBasemap({ theme: 'dark', hideBasemapLabels: true, cartoApiKey: blank })).toEqual(
+				defaultBasemap('dark')
+			);
+			expect(cartoStyleUrl(CARTO_STYLES.dark, blank)).toBe(CARTO_STYLES.dark);
+			expect(resolveTellegenUiConfig({ cartoApiKey: blank }).cartoApiKey).toBe('');
+		}
+		const keyed = defaultBasemap('light', { cartoApiKey: ' abc ' });
+		expect(keyed).toMatchObject({
+			primary: `${CARTO_STYLES['light-nolabels']}?key=abc`,
+			primaryProvider: 'carto',
+			fallbackProvider: 'openfreemap'
+		});
+		expect(
+			resolveBasemap({ theme: 'light', hideBasemapLabels: true, cartoApiKey: ' abc ' })
+		).toEqual(keyed);
+		expect(cartoStyleUrl(CARTO_STYLES.dark, ' abc ')).toBe(`${CARTO_STYLES.dark}?key=abc`);
+		expect(resolveTellegenUiConfig({ cartoApiKey: ' abc ' }).cartoApiKey).toBe('abc');
 	});
 
 	it('lets explicit styles win, as custom providers, and null switch the fallback off', () => {

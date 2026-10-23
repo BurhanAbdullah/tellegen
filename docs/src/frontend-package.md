@@ -185,7 +185,8 @@ besides its click callbacks:
   style for `theme` with a key, else the OpenFreeMap style.
 - `fallbackMapStyle`: the style used when the primary fails; `null` disables
   the switch. Default: whichever of the two is not the primary.
-- `cartoApiKey`: the CARTO key; empty or absent means none.
+- `cartoApiKey`: the CARTO key. It is trimmed, and an empty, blank or
+  absent key means none.
 - `theme`: `'light'` (default) or `'dark'`. Picks the default styles and the
   overlay palette (`MAP_PALETTE`).
 - `projection`: `'mercator'` (default) or `'globe'`. Re-applied after every

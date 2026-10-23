@@ -9,7 +9,7 @@ one; keys are free for non-commercial use from carto.com/basemaps/apikey.
 - With `cartoApiKey`, the keyed CARTO style leads (positron-nolabels or
   dark-matter-nolabels), and OpenFreeMap is the fallback.
 - Without a key, OpenFreeMap leads, and the keyless CARTO style is the
-  fallback.
+  fallback. The key is trimmed, so a blank one counts as none.
 
 Whenever an OpenFreeMap style renders, road lines start at zoom 8. In the dark
 theme, water and land are recoloured towards CARTO Dark Matter
