@@ -45,6 +45,16 @@ export interface ResolvedBasemap extends BasemapSpec {
 	fallbackProvider: BasemapProvider | null;
 }
 
+/** What `defaultBasemap` returns: one CARTO and one OpenFreeMap style URL,
+ * in the order the key decides. Never `'custom'`, and never without a
+ * fallback. */
+export interface DefaultBasemap extends ResolvedBasemap {
+	primary: string;
+	fallback: string;
+	primaryProvider: 'carto' | 'openfreemap';
+	fallbackProvider: 'carto' | 'openfreemap';
+}
+
 export const OPENFREEMAP_STYLES = {
 	light: 'https://tiles.openfreemap.org/styles/positron',
 	dark: 'https://tiles.openfreemap.org/styles/dark'
@@ -89,7 +99,7 @@ export interface DefaultBasemapOptions {
 export function defaultBasemap(
 	theme: BasemapTheme,
 	options: DefaultBasemapOptions = {}
-): ResolvedBasemap {
+): DefaultBasemap {
 	const hideLabels = options.hideLabels ?? true;
 	const variant = hideLabels ? (`${theme}-nolabels` as const) : theme;
 	const key = normalizeCartoApiKey(options.cartoApiKey);

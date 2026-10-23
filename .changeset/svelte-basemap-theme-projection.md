@@ -32,7 +32,8 @@ New props:
 `isOpenFreeMapStyle` and `openFreeMapEdits`. `defaultBasemap` and
 `resolveBasemap` name the provider of each style in `primaryProvider` and
 `fallbackProvider` (`'carto'`, `'openfreemap'`, or `'custom'` for a style the
-host passed), and the reasons given to `onBasemapFallback` and
+host passed; `defaultBasemap` returns the narrower `DefaultBasemap`, never
+custom and never without a fallback), and the reasons given to `onBasemapFallback` and
 `onBasemapError` carry `from` and `to` in the same terms. The overlay palette
 is `MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
 `cartoApiKey`, and the default shell passes it and `theme` to its map.

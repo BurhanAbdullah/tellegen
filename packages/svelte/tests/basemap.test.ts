@@ -128,6 +128,23 @@ describe('style URLs', () => {
 		);
 	});
 
+	it('always defaults to one CARTO and one OpenFreeMap URL, never custom or without a fallback', () => {
+		for (const theme of ['light', 'dark'] as const) {
+			for (const cartoApiKey of [undefined, '', 'k']) {
+				for (const hideLabels of [true, false]) {
+					const spec = defaultBasemap(theme, { cartoApiKey, hideLabels });
+					expect(typeof spec.primary).toBe('string');
+					expect(typeof spec.fallback).toBe('string');
+					expect(new Set([spec.primaryProvider, spec.fallbackProvider])).toEqual(
+						new Set(['carto', 'openfreemap'])
+					);
+					const cartoUrl = spec.primaryProvider === 'carto' ? spec.primary : spec.fallback;
+					expect(cartoUrl.startsWith('https://basemaps.cartocdn.com/')).toBe(true);
+				}
+			}
+		}
+	});
+
 	it('trims the CARTO key, and a blank one counts as none', () => {
 		for (const blank of ['  ', '\n']) {
 			expect(defaultBasemap('light', { cartoApiKey: blank })).toEqual(defaultBasemap('light'));

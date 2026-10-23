@@ -245,8 +245,10 @@ The helpers behind the defaults are exported too:
 host can word its credits and fallback notice without reading URLs. Their
 `primaryProvider` and `fallbackProvider` are `'carto'`, `'openfreemap'`, or
 `'custom'` for a style the host passed, and `fallbackProvider` is `null` when
-the fallback is off. The fallback reasons use the same names in `from` and
-`to`.
+the fallback is off. `defaultBasemap` is typed `DefaultBasemap`: two style
+URLs, one CARTO and one OpenFreeMap, so its providers are never `'custom'` and
+its fallback is never `null`. The fallback reasons use the same names in
+`from` and `to`.
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector

@@ -20,6 +20,7 @@ export type {
 	BasemapStyle,
 	BasemapSwitch,
 	BasemapTheme,
+	DefaultBasemap,
 	MapProjection,
 	MapTheme,
 	ResolvedBasemap,
