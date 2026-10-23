@@ -28,6 +28,14 @@ The repository does not modify or vendor those dependency sources. License and
 notice files from dependencies are distributed through their normal package
 archives.
 
+## Populated Places
+
+The synthetic grid generator ships `crates/tellegen-synth/data/populated_places.json`
+(copied into `@tellegen/engine` as `data/populated_places.json`): name,
+longitude, latitude, `pop_max` and country of the Natural Earth 1:10m
+populated places. Natural Earth data is in the public domain
+([naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/)).
+
 ## Demo Case Data
 
 The demo data is staged by the operator and is not vendored in this repository.
