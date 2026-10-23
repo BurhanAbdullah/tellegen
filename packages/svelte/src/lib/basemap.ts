@@ -21,11 +21,28 @@ export type MapTheme = BasemapTheme;
  * Mercator at high zoom on its own. */
 export type MapProjection = 'mercator' | 'globe';
 
+/** Who serves a basemap style: one of the two default providers, or
+ * `'custom'` for a style the host supplied. */
+export type BasemapProvider = 'carto' | 'openfreemap' | 'custom';
+
 export interface BasemapSpec {
 	primary: BasemapStyle;
 	fallback: BasemapStyle | null;
 	/** Hide the style's `symbol` layers after every `style.load`. */
 	hideLabels: boolean;
+	/** Who serves `primary`. Absent counts as `'custom'`. */
+	primaryProvider?: BasemapProvider;
+	/** Who serves `fallback`, `null` with no fallback. Absent counts as
+	 * `'custom'`. */
+	fallbackProvider?: BasemapProvider | null;
+}
+
+/** A `BasemapSpec` that names both providers, as `defaultBasemap` and
+ * `resolveBasemap` return it. A host words its credits and fallback notice
+ * from these instead of reading style URLs. */
+export interface ResolvedBasemap extends BasemapSpec {
+	primaryProvider: BasemapProvider;
+	fallbackProvider: BasemapProvider | null;
 }
 
 export const OPENFREEMAP_STYLES = {
@@ -62,14 +79,26 @@ export interface DefaultBasemapOptions {
 export function defaultBasemap(
 	theme: BasemapTheme,
 	options: DefaultBasemapOptions = {}
-): BasemapSpec {
+): ResolvedBasemap {
 	const hideLabels = options.hideLabels ?? true;
 	const variant = hideLabels ? (`${theme}-nolabels` as const) : theme;
 	const carto = cartoStyleUrl(CARTO_STYLES[variant], options.cartoApiKey);
 	const openFreeMap = OPENFREEMAP_STYLES[theme];
 	return options.cartoApiKey
-		? { primary: carto, fallback: openFreeMap, hideLabels }
-		: { primary: openFreeMap, fallback: carto, hideLabels };
+		? {
+				primary: carto,
+				fallback: openFreeMap,
+				hideLabels,
+				primaryProvider: 'carto',
+				fallbackProvider: 'openfreemap'
+			}
+		: {
+				primary: openFreeMap,
+				fallback: carto,
+				hideLabels,
+				primaryProvider: 'openfreemap',
+				fallbackProvider: 'carto'
+			};
 }
 
 export interface ResolveBasemapInput {
@@ -83,16 +112,21 @@ export interface ResolveBasemapInput {
 }
 
 /** The spec `TellegenMap` renders from its props: explicit styles win, the
- * theme fills in whatever is left, and `null` turns the fallback off. */
-export function resolveBasemap(input: ResolveBasemapInput): BasemapSpec {
+ * theme fills in whatever is left, and `null` turns the fallback off. An
+ * explicit style is `'custom'`, whichever host serves it. */
+export function resolveBasemap(input: ResolveBasemapInput): ResolvedBasemap {
 	const defaults = defaultBasemap(input.theme, {
 		cartoApiKey: input.cartoApiKey,
 		hideLabels: input.hideBasemapLabels
 	});
+	const fallback = input.fallbackMapStyle;
 	return {
 		primary: input.mapStyle ?? defaults.primary,
-		fallback: input.fallbackMapStyle === undefined ? defaults.fallback : input.fallbackMapStyle,
-		hideLabels: input.hideBasemapLabels
+		fallback: fallback === undefined ? defaults.fallback : fallback,
+		hideLabels: input.hideBasemapLabels,
+		primaryProvider: input.mapStyle === undefined ? defaults.primaryProvider : 'custom',
+		fallbackProvider:
+			fallback === undefined ? defaults.fallbackProvider : fallback === null ? null : 'custom'
 	};
 }
 
@@ -169,11 +203,21 @@ export function openFreeMapEdits(style: StyleSpecification, theme: BasemapTheme)
 	return edits;
 }
 
-export type BasemapFallbackReason =
+/** The providers a fallback event concerns. */
+export interface BasemapSwitch {
+	/** The provider whose style failed. */
+	from: BasemapProvider;
+	/** The provider switched to; `null` when no basemap is left to show. */
+	to: BasemapProvider | null;
+}
+
+type BasemapFailure =
 	| { kind: 'style-load'; message: string; status?: number }
 	| { kind: 'source-forbidden'; message: string; status: number; sourceId: string }
 	| { kind: 'tiles-unavailable'; message: string; sourceId: string }
 	| { kind: 'webgl'; message: string };
+
+export type BasemapFallbackReason = BasemapFailure & BasemapSwitch;
 
 /** The fields of a MapLibre `error` or `sourcedata` event the fallback reads. */
 export interface BasemapMapEvent {
@@ -194,10 +238,12 @@ export interface BasemapMapLike {
 }
 
 export interface BasemapFallbackHandlers {
-	/** The primary failed and the fallback style was requested. */
+	/** The primary failed and the fallback style was requested. `from` is the
+	 * spec's primary provider and `to` its fallback provider. */
 	onFallback?(reason: BasemapFallbackReason): void;
 	/** No basemap can be shown: the fallback failed too, none was configured,
-	 * or WebGL is unavailable. */
+	 * or WebGL is unavailable. `from` is the provider on screen, `to` is
+	 * `null`. */
 	onFailure?(reason: BasemapFallbackReason): void;
 }
 
@@ -253,6 +299,8 @@ export function attachBasemapFallback(
 	options: BasemapFallbackOptions = {}
 ): () => void {
 	const now = options.now ?? (() => Date.now());
+	const primaryProvider = spec.primaryProvider ?? 'custom';
+	const fallbackProvider = spec.fallback === null ? null : (spec.fallbackProvider ?? 'custom');
 	let styleLoaded = map.isStyleLoaded() === true;
 	let fellBack = false;
 	let failed = false;
@@ -260,12 +308,13 @@ export function attachBasemapFallback(
 	let tileWindowStart = 0;
 	let tileArrived = false;
 
-	const fail = (reason: BasemapFallbackReason) => {
+	const fail = (reason: BasemapFailure) => {
 		if (failed) return;
 		failed = true;
-		handlers.onFailure?.(reason);
+		const from = fellBack && fallbackProvider !== null ? fallbackProvider : primaryProvider;
+		handlers.onFailure?.({ ...reason, from, to: null });
 	};
-	const fallBack = (reason: BasemapFallbackReason) => {
+	const fallBack = (reason: BasemapFailure) => {
 		if (fellBack || spec.fallback === null) {
 			fail(reason);
 			return;
@@ -274,7 +323,7 @@ export function attachBasemapFallback(
 		styleLoaded = false;
 		tileFailures = 0;
 		tileArrived = false;
-		handlers.onFallback?.(reason);
+		handlers.onFallback?.({ ...reason, from: primaryProvider, to: fallbackProvider });
 		map.setStyle(spec.fallback, { diff: false });
 	};
 	const passThrough = (event: BasemapMapEvent) => {

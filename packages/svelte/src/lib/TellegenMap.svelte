@@ -121,9 +121,12 @@
 		 * fires again after a context-loss or basemap remount, after the previous
 		 * cleanup ran. */
 		onMapReady?: (map: MapLibreMap, overlay: MapLibreOverlay) => void | (() => void);
-		/** The primary basemap failed and the fallback was requested. */
+		/** The primary basemap failed and the fallback was requested. The
+		 * reason's `from` and `to` name the providers (`'carto'`,
+		 * `'openfreemap'` or `'custom'`). */
 		onBasemapFallback?: (reason: BasemapFallbackReason) => void;
-		/** No basemap can be shown; the network layers still draw. */
+		/** No basemap can be shown; the network layers still draw. The reason's
+		 * `from` names the provider that failed last, and `to` is `null`. */
 		onBasemapError?: (reason: BasemapFallbackReason) => void;
 	} = $props();
 
@@ -174,11 +177,13 @@
 	const basemap = $derived(
 		resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels, cartoApiKey })
 	);
-	// Read as three values, not one object, so a theme change that resolves
+	// Read as separate values, not one object, so a theme change that resolves
 	// to the same styles does not rebuild the map.
 	const basemapPrimary = $derived(basemap.primary);
 	const basemapFallback = $derived(basemap.fallback);
 	const basemapHideLabels = $derived(basemap.hideLabels);
+	const basemapPrimaryProvider = $derived(basemap.primaryProvider);
+	const basemapFallbackProvider = $derived(basemap.fallbackProvider);
 	const palette = $derived(MAP_PALETTE[theme]);
 	// Set once a map has existed in this component instance: a rebuild (context
 	// loss or basemap change) restores the camera instead of reframing.
@@ -843,7 +848,9 @@
 		const spec = {
 			primary: basemapPrimary,
 			fallback: basemapFallback,
-			hideLabels: basemapHideLabels
+			hideLabels: basemapHideLabels,
+			primaryProvider: basemapPrimaryProvider,
+			fallbackProvider: basemapFallbackProvider
 		};
 		const compactAttribution = attribution === 'compact';
 		const camera = untrack(() => initialCamera);

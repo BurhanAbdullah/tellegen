@@ -61,7 +61,9 @@ function ajaxError(status: number, message: string) {
 const spec: BasemapSpec = {
 	primary: 'https://primary.example/style.json',
 	fallback: 'https://fallback.example/style.json',
-	hideLabels: true
+	hideLabels: true,
+	primaryProvider: 'openfreemap',
+	fallbackProvider: 'carto'
 };
 
 function attach(map: FakeMap, overrides: Partial<BasemapSpec> = {}, now?: () => number) {
@@ -89,12 +91,16 @@ describe('style URLs', () => {
 		expect(defaultBasemap('light')).toEqual({
 			primary: OPENFREEMAP_STYLES.light,
 			fallback: CARTO_STYLES['light-nolabels'],
-			hideLabels: true
+			hideLabels: true,
+			primaryProvider: 'openfreemap',
+			fallbackProvider: 'carto'
 		});
 		expect(defaultBasemap('dark', { hideLabels: false, cartoApiKey: '' })).toEqual({
 			primary: OPENFREEMAP_STYLES.dark,
 			fallback: CARTO_STYLES.dark,
-			hideLabels: false
+			hideLabels: false,
+			primaryProvider: 'openfreemap',
+			fallbackProvider: 'carto'
 		});
 	});
 
@@ -102,12 +108,16 @@ describe('style URLs', () => {
 		expect(defaultBasemap('light', { cartoApiKey: 'k' })).toEqual({
 			primary: `${CARTO_STYLES['light-nolabels']}?key=k`,
 			fallback: OPENFREEMAP_STYLES.light,
-			hideLabels: true
+			hideLabels: true,
+			primaryProvider: 'carto',
+			fallbackProvider: 'openfreemap'
 		});
 		expect(defaultBasemap('dark', { cartoApiKey: 'k' })).toEqual({
 			primary: `${CARTO_STYLES['dark-nolabels']}?key=k`,
 			fallback: OPENFREEMAP_STYLES.dark,
-			hideLabels: true
+			hideLabels: true,
+			primaryProvider: 'carto',
+			fallbackProvider: 'openfreemap'
 		});
 		expect(defaultBasemap('dark', { hideLabels: false, cartoApiKey: 'k' }).primary).toBe(
 			`${CARTO_STYLES.dark}?key=k`
@@ -117,7 +127,7 @@ describe('style URLs', () => {
 		);
 	});
 
-	it('lets explicit styles win and null switch the fallback off', () => {
+	it('lets explicit styles win, as custom providers, and null switch the fallback off', () => {
 		const inline = { version: 8 as const, sources: {}, layers: [] };
 		expect(resolveBasemap({ theme: 'dark', hideBasemapLabels: true })).toEqual(
 			defaultBasemap('dark')
@@ -125,7 +135,9 @@ describe('style URLs', () => {
 		expect(resolveBasemap({ mapStyle: inline, theme: 'light', hideBasemapLabels: false })).toEqual({
 			primary: inline,
 			fallback: CARTO_STYLES.light,
-			hideLabels: false
+			hideLabels: false,
+			primaryProvider: 'custom',
+			fallbackProvider: 'carto'
 		});
 		expect(
 			resolveBasemap({
@@ -134,15 +146,38 @@ describe('style URLs', () => {
 				theme: 'light',
 				hideBasemapLabels: true
 			})
-		).toEqual({ primary: 'https://a.example/s.json', fallback: null, hideLabels: true });
+		).toEqual({
+			primary: 'https://a.example/s.json',
+			fallback: null,
+			hideLabels: true,
+			primaryProvider: 'custom',
+			fallbackProvider: null
+		});
 		expect(
 			resolveBasemap({
 				fallbackMapStyle: 'https://b.example/s.json',
 				theme: 'light',
 				hideBasemapLabels: true,
-				cartoApiKey: 'ignored-when-fallback-is-explicit'
-			}).fallback
-		).toBe('https://b.example/s.json');
+				cartoApiKey: 'k'
+			})
+		).toEqual({
+			primary: `${CARTO_STYLES['light-nolabels']}?key=k`,
+			fallback: 'https://b.example/s.json',
+			hideLabels: true,
+			primaryProvider: 'carto',
+			fallbackProvider: 'custom'
+		});
+	});
+
+	it('names a host-supplied style custom even when CARTO or OpenFreeMap serves it', () => {
+		const resolved = resolveBasemap({
+			mapStyle: OPENFREEMAP_STYLES.dark,
+			fallbackMapStyle: CARTO_STYLES.dark,
+			theme: 'dark',
+			hideBasemapLabels: true
+		});
+		expect(resolved.primaryProvider).toBe('custom');
+		expect(resolved.fallbackProvider).toBe('custom');
 	});
 });
 
@@ -267,7 +302,9 @@ describe('attachBasemapFallback', () => {
 		expect(onFallback.mock.calls[0][0]).toEqual({
 			kind: 'style-load',
 			message: 'Failed to fetch',
-			status: 0
+			status: 0,
+			from: 'openfreemap',
+			to: 'carto'
 		});
 		expect(onFailure).not.toHaveBeenCalled();
 		expect(consoleError).not.toHaveBeenCalled();
@@ -289,7 +326,12 @@ describe('attachBasemapFallback', () => {
 		expect(map.styles).toHaveLength(1);
 		expect(onFallback).toHaveBeenCalledTimes(1);
 		expect(onFailure).toHaveBeenCalledTimes(1);
-		expect(onFailure.mock.calls[0][0]).toMatchObject({ kind: 'style-load', status: 0 });
+		expect(onFailure.mock.calls[0][0]).toMatchObject({
+			kind: 'style-load',
+			status: 0,
+			from: 'carto',
+			to: null
+		});
 	});
 
 	it('a style error after style.load is passed through, not treated as a fetch failure', () => {
@@ -328,7 +370,9 @@ describe('attachBasemapFallback', () => {
 				kind: 'source-forbidden',
 				message: text,
 				status,
-				sourceId: 'carto'
+				sourceId: 'carto',
+				from: 'openfreemap',
+				to: 'carto'
 			});
 		}
 	});
@@ -342,7 +386,9 @@ describe('attachBasemapFallback', () => {
 			kind: 'source-forbidden',
 			message: 'Missing API key',
 			status: 0,
-			sourceId: 'carto'
+			sourceId: 'carto',
+			from: 'openfreemap',
+			to: 'carto'
 		});
 	});
 
@@ -368,7 +414,9 @@ describe('attachBasemapFallback', () => {
 		expect(onFallback.mock.calls[0][0]).toEqual({
 			kind: 'tiles-unavailable',
 			message: 'Failed to fetch',
-			sourceId: 'openmaptiles'
+			sourceId: 'openmaptiles',
+			from: 'openfreemap',
+			to: 'carto'
 		});
 	});
 
@@ -447,7 +495,9 @@ describe('attachBasemapFallback', () => {
 		expect(onFallback).not.toHaveBeenCalled();
 		expect(onFailure.mock.calls[0][0]).toEqual({
 			kind: 'webgl',
-			message: 'Failed to initialize WebGL'
+			message: 'Failed to initialize WebGL',
+			from: 'openfreemap',
+			to: null
 		});
 		expect(consoleError).not.toHaveBeenCalled();
 	});
@@ -471,7 +521,45 @@ describe('attachBasemapFallback', () => {
 		map.emit('error', { error: ajaxError(0, 'Failed to fetch') });
 		expect(map.styles).toHaveLength(0);
 		expect(onFallback).not.toHaveBeenCalled();
-		expect(onFailure.mock.calls[0][0]).toMatchObject({ kind: 'style-load' });
+		expect(onFailure.mock.calls[0][0]).toMatchObject({
+			kind: 'style-load',
+			from: 'openfreemap',
+			to: null
+		});
+	});
+
+	it('names both providers custom when the spec does not name them', () => {
+		const map = new FakeMap();
+		const onFallback = vi.fn<(r: BasemapFallbackReason) => void>();
+		const onFailure = vi.fn<(r: BasemapFallbackReason) => void>();
+		attachBasemapFallback(
+			map,
+			{ primary: spec.primary, fallback: spec.fallback, hideLabels: true },
+			{ onFallback, onFailure }
+		);
+		map.emit('error', { error: ajaxError(0, 'Failed to fetch') });
+		map.emit('error', { error: ajaxError(0, 'Failed to fetch') });
+		expect(onFallback.mock.calls[0][0]).toMatchObject({ from: 'custom', to: 'custom' });
+		expect(onFailure.mock.calls[0][0]).toMatchObject({ from: 'custom', to: null });
+	});
+
+	it('names the providers of a keyed default spec: CARTO first, then OpenFreeMap', () => {
+		const map = new FakeMap();
+		const onFallback = vi.fn<(r: BasemapFallbackReason) => void>();
+		const onFailure = vi.fn<(r: BasemapFallbackReason) => void>();
+		attachBasemapFallback(map, defaultBasemap('dark', { cartoApiKey: 'k' }), {
+			onFallback,
+			onFailure
+		});
+		map.emit('style.load');
+		map.emit('error', { sourceId: 'carto', tile: {}, error: ajaxError(401, 'Unauthorized') });
+		expect(onFallback.mock.calls[0][0]).toMatchObject({ from: 'carto', to: 'openfreemap' });
+		map.emit('error', { error: ajaxError(0, 'Failed to fetch') });
+		expect(onFailure.mock.calls[0][0]).toMatchObject({
+			kind: 'style-load',
+			from: 'openfreemap',
+			to: null
+		});
 	});
 
 	it('after the switch, forbidden tiles from the fallback report failure once', () => {
@@ -483,7 +571,12 @@ describe('attachBasemapFallback', () => {
 		map.emit('error', { sourceId: 'carto', tile: {}, error: ajaxError(403, 'Forbidden') });
 		expect(onFallback).toHaveBeenCalledTimes(1);
 		expect(onFailure).toHaveBeenCalledTimes(1);
-		expect(onFailure.mock.calls[0][0]).toMatchObject({ kind: 'source-forbidden', status: 403 });
+		expect(onFailure.mock.calls[0][0]).toMatchObject({
+			kind: 'source-forbidden',
+			status: 403,
+			from: 'carto',
+			to: null
+		});
 		expect(map.styles).toHaveLength(1);
 	});
 

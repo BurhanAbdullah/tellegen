@@ -29,8 +29,12 @@ New props:
 
 `basemap.ts` exports `OPENFREEMAP_STYLES`, `CARTO_STYLES`, `cartoStyleUrl`,
 `defaultBasemap`, `resolveBasemap`, `attachBasemapFallback`,
-`isOpenFreeMapStyle` and `openFreeMapEdits`. The overlay palette is
-`MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
+`isOpenFreeMapStyle` and `openFreeMapEdits`. `defaultBasemap` and
+`resolveBasemap` name the provider of each style in `primaryProvider` and
+`fallbackProvider` (`'carto'`, `'openfreemap'`, or `'custom'` for a style the
+host passed), and the reasons given to `onBasemapFallback` and
+`onBasemapError` carry `from` and `to` in the same terms. The overlay palette
+is `MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
 `cartoApiKey`, and the default shell passes it and `theme` to its map.
 
 The controller gains `openBalancedModule({ name, moduleJson | payload,

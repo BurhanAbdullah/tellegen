@@ -199,8 +199,10 @@ besides its click callbacks:
   overlay once they exist. It may return a cleanup, and it fires again after
   a context-loss or basemap rebuild.
 - `onBasemapFallback(reason)`: the switch to the fallback happened.
+  `reason.from` and `reason.to` name the two providers.
 - `onBasemapError(reason)`: no basemap can be shown. The network layers
-  still draw.
+  still draw. `reason.from` names the provider that failed last, and
+  `reason.to` is `null`.
 
 `TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
 together with `theme`, to the default shell's map. A SvelteKit 3 host can
@@ -237,6 +239,13 @@ The helpers behind the defaults are exported too:
 - `defaultBasemap(theme, { cartoApiKey })` and `resolveBasemap(props)`;
 - `attachBasemapFallback(map, spec, handlers)`;
 - `isOpenFreeMapStyle(style)` and `openFreeMapEdits(style, theme)`.
+
+`defaultBasemap` and `resolveBasemap` also say who serves each style, so a
+host can word its credits and fallback notice without reading URLs. Their
+`primaryProvider` and `fallbackProvider` are `'carto'`, `'openfreemap'`, or
+`'custom'` for a style the host passed, and `fallbackProvider` is `null` when
+the fallback is off. The fallback reasons use the same names in `from` and
+`to`.
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
