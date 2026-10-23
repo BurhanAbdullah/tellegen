@@ -45,6 +45,13 @@ Both are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/
 Ember, *Yearly Electricity Data*; Our World in Data, *Energy dataset*. The
 table records the SHA-256 of the CSV it was derived from.
 
+`crates/tellegen-synth/data/country_areas.json`, also compiled into the
+engine, gives each country's area, measured by
+`scripts/derive-country-areas.py` from Natural Earth's 1:50m admin-0
+countries (public domain). `crates/tellegen-synth/data/voltage_ladders.json`
+lists national transmission voltage levels with the operator, regulator and
+standards documents each entry was taken from; it copies no dataset.
+
 ## Demo Case Data
 
 The demo data is staged by the operator and is not vendored in this repository.

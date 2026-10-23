@@ -10,7 +10,10 @@ generator:
 1. measures the region and its populated places (Natural Earth, public
    domain), sizes peak demand from each place's country (Ember's national
    demand via Our World in Data, CC BY 4.0, bundled as
-   `data/national_demand.json`), and resolves the bus count and fuel mix;
+   `data/national_demand.json`, the unlisted part spread over each
+   country's area), takes the national voltage ladder of its dominant
+   country (`data/voltage_ladders.json`), and resolves the bus count and
+   fuel mix;
 2. sites buses on the most populous places plus blue-noise fill, and
    allocates demand weighted loads;
 3. wires each electrical island with a minimum spanning tree, a spanning
