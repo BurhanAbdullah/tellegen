@@ -164,6 +164,12 @@ fn mark_raise_to(
     true
 }
 
+/// Rounds in which the plan may stiffen; the last quarter of
+/// [`PLANNING_MAX_ROUNDS`] only adds capacity, so a plan that runs out of
+/// rounds ends with its corridors within their ratings rather than mid-way
+/// through a stiffening step. Modelling choice, no source.
+const STIFFENING_ROUNDS: u32 = PLANNING_MAX_ROUNDS * 3 / 4;
+
 /// Least-cost outputs of quadratic-cost units meeting `demand` on an
 /// unconstrained, lossless network: every unit runs where its incremental
 /// cost `c1 + 2 c2 p` equals the common price, unless held at a bound.
@@ -578,14 +584,22 @@ pub fn plan_corridors(
         }
         // Capacity holds; stiffen any island whose spread is too wide (the
         // round's angles still describe the unchanged network). Stiffening
-        // raises buses only within the requested levels (the level the plan
-        // may add above them answers capacity, not angle) and adds circuits
-        // only while the network stays within its branch budget.
+        // raises buses within the requested levels until STIFFENING_HV_SHARE
+        // of them sit at the highest one; only then, like capacity, does it
+        // raise onto the level the plan may add above them, under the same
+        // share. It adds circuits only while the network stays within its
+        // branch budget.
         let mut stiffen_raise: Vec<Option<usize>> = vec![None; n];
-        let stiffen_top = usize::from(extended);
+        let hv_budget = (STIFFENING_HV_SHARE * n as f64).floor() as usize;
+        let requested_top = usize::from(extended);
+        let stiffen_top =
+            if extended && buses.iter().filter(|b| b.tier <= requested_top).count() >= hv_budget {
+                0
+            } else {
+                requested_top
+            };
         let budget = (STIFFENING_BRANCH_BUDGET * n as f64).floor() as usize;
         let mut total: usize = circuits.iter().map(|&k| k as usize).sum();
-        let hv_budget = (STIFFENING_HV_SHARE * n as f64).floor() as usize;
         let mut hv = buses.iter().filter(|b| b.tier <= stiffen_top).count();
         let mut spread_ok = true;
         let mut stiffened = false;
@@ -604,6 +618,10 @@ pub fn plan_corridors(
                 continue;
             }
             spread_ok = false;
+            if rounds > STIFFENING_ROUNDS {
+                // The remaining rounds belong to capacity.
+                continue;
+            }
             // The spread is (e_lead - e_lag)ᵀ L⁻¹ p; one more circuit on
             // corridor k (Δb = its circuit susceptance) narrows it by about
             // Δb · Δθ_k · Δφ_k with φ = L⁻¹ (e_lead - e_lag).
