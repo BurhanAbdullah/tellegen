@@ -254,7 +254,7 @@
 		padding: 4px;
 		list-style: none;
 		min-width: 100%;
-		background: var(--surface, #fff);
+		background: var(--surface, var(--paper));
 		border: 1px solid var(--border, rgba(0, 0, 0, 0.15));
 		border-radius: 6px;
 		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);

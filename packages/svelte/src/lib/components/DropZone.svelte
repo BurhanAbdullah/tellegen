@@ -19,7 +19,7 @@
 		inset: 0;
 		z-index: 20;
 		pointer-events: none;
-		background: rgba(236, 233, 226, 0.75);
+		background: rgb(var(--bg-rgb) / 0.75);
 	}
 
 	.dropframe {
