@@ -32,6 +32,7 @@
 	--surface-panel: var(--panel);
 	--surface-chip: rgb(var(--paper-rgb) / 0.65);
 	--surface-control: rgb(var(--paper-rgb) / 0.55);
+	--surface-menu: #fff;
 	--border-default: var(--line);
 	--border-strong: var(--accent);
 	--text-primary: var(--ink);
@@ -47,6 +48,10 @@
 	--data-pos: var(--pos);
 	--data-neg: var(--neg);
 	--focus-ring: var(--accent);
+	/* unselected bus outline in the plain diagram view */
+	--diagram-bus-stroke: #756a5b;
+	/* ground symbol in the multiconductor bus detail */
+	--mc-ground-stroke: #3a3a3a;
 
 	/* type scale, anchored at the 15px body */
 	--fs-display-lg: 33px;
@@ -81,6 +86,11 @@
 	--radius-full: 50%;
 	--elev-1: 0 2px 10px rgb(var(--ink-rgb) / 0.1);
 	--elev-2: 0 4px 24px rgb(var(--ink-rgb) / 0.08);
+	/* floating controls that keep their own light shadows; the dark theme maps
+	   them onto the two steps above */
+	--elev-cue: 0 4px 18px rgb(var(--ink-rgb) / 0.1);
+	--elev-menu: 0 4px 18px rgb(var(--ink-rgb) / 0.14);
+	--elev-tooltip: 0 2px 10px rgb(var(--ink-rgb) / 0.12);
 	--shadow-thumb: 0 1px 4px rgb(var(--ink-rgb) / 0.3);
 	--inset-active: inset 0 -2px 0 var(--accent);
 
@@ -101,6 +111,48 @@
 	--z-cue: 14;
 	--z-overlay: 20;
 	--z-grain: 9999;
+}
+
+/* Dark theme: `TellegenProvider theme="dark"` sets the attribute (a host may
+   also put it in its template). Contrast ratios are measured against the panel
+   composited over #4a4a4a, the darkest grey a dark basemap paints under it:
+   every text token clears 7:1 and --border-strong clears the 3:1 non-text
+   minimum, so the same markup passes WCAG AA on either ground. */
+:root[data-theme='dark'] {
+	--bg: #0b1420;
+	--paper: #0f1a27;
+	--panel: rgba(10, 20, 31, 0.92);
+	--line: #34465a; /* decorative separators only */
+	--border-strong: #6f8aa6; /* 3.4:1, component boundaries */
+	--ink: #e8eef4; /* 15.3:1 */
+	--ink-dim: #b4c1cd; /* 9.8:1 */
+	--ink-faint: #93a4b4; /* 7.0:1 */
+	--accent: #ffb24d;
+	--accent-bright: #ffc46e; /* 11.4:1 */
+	--accent-soft: rgba(255, 178, 77, 0.14);
+	--red: #ff9f8b; /* 9.0:1 */
+	--pos: #c9a7e0;
+	--neg: #8fd0a4;
+	--bg-rgb: 11 20 32;
+	--ink-rgb: 232 238 244;
+	--accent-rgb: 255 178 77;
+	--paper-rgb: 15 26 39;
+	--text-primary: var(--ink);
+	--text-secondary: var(--ink-dim);
+	--text-tertiary: var(--ink-faint);
+	--text-accent: var(--accent-bright);
+	--text-danger: var(--red);
+	--focus-ring: #8de7f7; /* 12.7:1 */
+	--surface-menu: var(--paper);
+	--diagram-bus-stroke: var(--ink-faint);
+	--mc-ground-stroke: var(--ink-dim);
+	--elev-1: 0 2px 10px rgb(0 0 0 / 0.45);
+	--elev-2: 0 4px 24px rgb(0 0 0 / 0.4);
+	--elev-cue: var(--elev-2);
+	--elev-menu: var(--elev-2);
+	--elev-tooltip: var(--elev-1);
+	/* the light form derives from --ink-rgb, which would glow here */
+	--shadow-thumb: 0 1px 4px rgb(0 0 0 / 0.5);
 }
 
 * {
