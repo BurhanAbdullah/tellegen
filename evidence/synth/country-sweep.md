@@ -1,0 +1,43 @@
+15 of 18 regions valid (DC OPF optimal and AC power flow converged inside 0.9–1.1 pu); DC OPF optimal 18, AC power flow converged 17; peak within ±25% of the reference for 14 of the 14 regions whose reference scope matches.
+
+| Region | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC OPF | AC PF | Vm pu | Engine ms |
+| --- | ---: | ---: | --- | ---: | --- | ---: | ---: | --- | --- | --- | ---: |
+| PRT | 94 | 8,162 | 9,395 (2025) | 0.87 | within | 1.48 | 2 | optimal | converged | 1.019–1.028 | 14 |
+| ESP | 266 | 38,469 | 39,957 (2025) | 0.96 | within | 1.59 | 4 | optimal | converged | 1.019–1.023 | 34 |
+| DEU | 517 | 77,504 | 75,635 (2025) | 1.02 | within | 1.53 | 3 | optimal | converged | 1.004–1.022 | 47 |
+| FRA | 467 | 67,896 | 88,000 (2025) | 0.77 | within | 1.51 | 3 | optimal | converged | 1.019–1.025 | 45 |
+| GBR | 314 | 47,095 | 48,141 (2025) | 0.98 | within | 1.53 | 3 | optimal | converged | 0.948–1.020 | 29 |
+| TEXAS-BOX | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.59 | 4 | optimal | converged | 1.007–1.021 | 49 |
+| USA | 3000 | 647,597 | 759,180 (2025) | 0.85 | within | 1.61 | 4 | optimal | converged | 0.998–1.138 | 1,011 |
+| IND | 2013 | 301,683 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | optimal | converged | 1.015–1.024 | 542 |
+| CHN | 3000 | 1,484,029 | 1,508,000 (2025) | 0.98 | within | 1.70 | 4 | optimal | converged | 0.598–1.083 | 1,093 |
+| RUS | 1182 | 176,021 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | optimal | converged | 0.987–1.061 | 343 |
+| BRA | 750 | 111,478 | 106,532 (2025) | 1.05 | within | 1.60 | 4 | optimal | converged | 1.017–1.050 | 147 |
+| JPN | 1006 | 150,834 | 162,600 (2025) | 0.93 | within | 1.60 | 4 | optimal | converged | 1.009–1.026 | 173 |
+| AUS | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 4 | optimal | converged | 1.020–1.037 | 42 |
+| ZAF | 312 | 36,539 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | optimal | converged | 1.010–1.037 | 32 |
+| NGA | 174 | 5,233 | 5,802 (2025) | 0.90 | not comparable | 1.47 | 2 | optimal | converged | 1.020–1.050 | 12 |
+| EGY | 312 | 35,021 | 39,800 (2025) | 0.88 | within | 1.57 | 4 | optimal | converged | 1.017–1.021 | 28 |
+| CHL | 268 | 13,151 | 13,093 (2025) | 1.00 | within | 1.60 | 3 | optimal | converged | 1.015–1.050 | 31 |
+| IDN | 369 | 54,111 | 61,288 (2024) | 0.88 | flagged | 1.60 | 4 | optimal | not_converged |  | 87 |
+
+| Region | Reference scope | Source |
+| --- | --- | --- |
+| PRT | Mainland public-grid demand, 15-minute (REN); excludes the Azores and Madeira and behind-the-meter self-consumption. Model: Mainland Portugal; the Azores and Madeira are cut as far islands or left out as too small for a bus. | REN, Dados Técnicos 2025: <https://www.ren.pt/media/2cbfm5p4/ren-dados-te-cnicos-2025.pdf> |
+| ESP | Peninsular hourly demand at power-station busbars (REE); excludes the Balearic and Canary Islands. Model: Peninsular Spain and the Balearic Islands; the Canaries are cut as far islands. | REE, annual maximums: <https://www.sistemaelectrico-ree.es/en/spanish-electricity-system/demand/annual-maximums> |
+| DEU | Country hourly total load (ENTSO-E, the SMARD Netzlast series). Model: Germany. | ENTSO-E Statistical Factsheet 2025: <https://eepublicdownloads.entsoe.eu/clean-documents/Publications/Statistics/Factsheet/entsoe_sfs2025_web.pdf> |
+| FRA | National gross consumption, consolidated (RTE); metropolitan France. Model: Metropolitan France with Corsica; the overseas departments are cut as far islands. | RTE, annual peak of gross consumption (data.gouv.fr): <https://www.data.gouv.fr/datasets/pic-annuel-de-la-consommation-brute-delectricite-2001-a-2021/> |
+| GBR | Great Britain: transmission National Demand plus NESO's estimates of embedded wind and solar, half-hourly maximum (9 Jan 2025); Northern Ireland, about 1.8 GW, is not included. Model: The United Kingdom polygon, Northern Ireland included. | NESO historic demand data: <https://www.neso.energy/data-portal/historic-demand-data> |
+| TEXAS-BOX | ERCOT region hourly integrated native load. Model: A bounding box around Texas that also takes in parts of Mexico, New Mexico, Oklahoma and Louisiana, and El Paso, which is outside ERCOT. | ERCOT hourly load archive: <https://www.ercot.com/gridinfo/load/load_hist> |
+| USA | Lower-48 coincident hourly demand over the balancing authorities (EIA-930); 2025 value preliminary. Model: The United States after the far-island policy (Alaska and Hawaii cut). | EIA, Today in Energy: <https://www.eia.gov/todayinenergy/detail.php?id=65864> |
+| IND | All-India peak demand met (30 May 2024). No 2025 annual figure is published; ministerial statements put 2025 near 241-243 GW. Model: India. | Ministry of Power via PIB: <https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2022257> |
+| CHN | National total maximum load, all grids (NEA, 17 Jul 2025). Model: China (Natural Earth's CHN polygon, which leaves out Taiwan, Hong Kong and Macao). | National Energy Administration, as reported: <https://news.10jqka.com.cn/20260711/c678109972.shtml> <https://www.stdaily.com/web/gdxw/2025-07/06/content_365859.html> |
+| RUS | UES of Russia; excludes the technologically isolated systems. Model: Russia with its isolated eastern systems; one far polygon is cut. | SO UPS, 2025 operating report: <https://www.so-ups.ru/fileadmin/files/company/reports/disclosure/2026/ups_rep2025.pdf> |
+| BRA | SIN instantaneous load (ONS), including estimated behind-the-meter distributed generation. Model: Brazil. | ONS via eixos.com.br: <https://eixos.com.br/energia-eletrica/consumo-de-energia-no-brasil-bate-setimo-recorde-do-ano-atingindo-106-532-mw/> |
+| JPN | National coincident peak of the 10 areas, hourly, sending end (OCCTO draft verification report, 22 Oct 2025). Model: Japan. | OCCTO: <https://www.occto.or.jp/iinkai/chouseiryoku/2025/files/chousei_112_02.pdf> |
+| AUS | No national figure exists. NEM operational demand 33,716 MW (16 Dec 2024) plus WEM 4,233 MW (18 Feb 2024): a non-coincident sum that leaves out rooftop PV and the off-grid systems. Model: Australia with Tasmania as one AC island; the NEM and Western Australia are joined. | AEMO Quarterly Energy Dynamics Q4 2024 and Q1 2024: <https://aemo.com.au/-/media/files/major-publications/qed/2024/qed-q4-2024.pdf> <https://aemo.com.au/-/media/files/major-publications/qed/2024/qed-q1-2024.pdf> |
+| ZAF | Eskom total peak demand on the integrated power system, financial year April 2024 to March 2025; no 2025 figure is published. Model: South Africa. | Eskom Integrated Report 2025: <https://www.eskom.co.za/wp-content/uploads/2025/10/Eskom-integrated-report-2025.pdf> |
+| NGA | National grid peak generation (4 Mar 2025): supply-limited, not demand. Model: Nigeria. | TCN via Nairametrics: <https://nairametrics.com/2025/03/06/nigerias-power-generation-hits-record-5801-84mw-tcn/> |
+| EGY | Unified national grid peak load (13 Aug 2025). Model: Egypt. | Ministry of Electricity via Amwal Al Ghad: <https://en.amwalalghad.com/?p=214097> |
+| CHL | SEN gross hourly demand (CEN, 29 Dec 2025). Model: Chile; small islands are left out. | Coordinador Eléctrico Nacional, Reporte Energético enero 2026: <https://www.coordinador.cl/wp-content/uploads/2026/01/CEN_Reporte_Energetico_SEN_Ene26.pdf> |
+| IDN | Sum of the individual PLN system peaks, not coincident (Java-Bali alone 42,636 MW); no 2025 figure was retrievable. Model: Indonesia as one AC island over 26 landmasses; one far polygon is cut. | PLN Statistik 2024: <https://www.pln.co.id/webapi/media/file/webkorp/asset/Statistik2024.pdf> |

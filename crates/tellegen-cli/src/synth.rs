@@ -5,7 +5,8 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use std::time::Instant;
 
 use powerio::PioValue;
 use tellegen::ir::{balanced_module, deserialize_module, serialize_module};
@@ -68,6 +69,12 @@ pub fn parse_generate_args(args: &[String]) -> Result<GenerateArgs, String> {
     })
 }
 
+/// Milliseconds since the first call: the stage clock of a native session.
+fn clock_ms() -> f64 {
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_secs_f64() * 1e3
+}
+
 fn read_text(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
 }
@@ -98,6 +105,7 @@ pub fn generate_command(
     };
     let osm = args.osm.as_deref().map(read_text).transpose()?;
     let mut session = Generator::new(request, Arc::new(places), osm).map_err(|e| e.to_string())?;
+    session.set_clock(clock_ms);
     if let Some(install) = cancel {
         install(session.cancel_flag());
     }
