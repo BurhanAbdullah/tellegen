@@ -53,7 +53,7 @@
 
 <style>
 	.solve-label {
-		font-size: 11px;
+		font-size: 13px;
 		margin-bottom: 8px;
 	}
 	.solvecard {
@@ -65,7 +65,7 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 10px 14px;
-		font-size: 10px;
+		font-size: 12px;
 		margin-top: 6px;
 	}
 
@@ -75,7 +75,7 @@
 
 	.fallback-reason {
 		margin: 6px 0 0;
-		font-size: 10px;
+		font-size: 12px;
 		line-height: 1.35;
 		overflow-wrap: anywhere;
 	}
