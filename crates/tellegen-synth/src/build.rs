@@ -318,6 +318,7 @@ fn annotate(
                     .copied()
                     .unwrap_or(g.makeup),
                 slack: g.slack,
+                condenser: g.condenser,
             })
             .collect(),
     };

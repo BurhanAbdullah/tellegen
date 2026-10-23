@@ -20,11 +20,20 @@
 //! has the planned profile as a solution; the validation stage checks it at
 //! the dispatch the DC OPF actually chooses.
 
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+
 use crate::electrical::branches::{DraftBranch, BASE_MVA};
 use crate::electrical::generators::DraftGenerator;
-use crate::electrical::params::{GENERATOR_Q_PLANNING_SHARE, GENERATOR_VG, MIN_SHUNT_BANK_MVAR};
+use crate::electrical::params::{
+    GENERATOR_Q_PLANNING_SHARE, GENERATOR_VG, MIN_SHUNT_BANK_MVAR, VOLTAGE_SUPPORT_KM,
+    VOLTAGE_SUPPORT_Q_SHARE,
+};
 use crate::electrical::planning::dc_angles;
+use crate::report::BusKind;
+use crate::request::Fuel;
 use crate::site::DraftBus;
+use crate::topology::Corridor;
 
 /// Fast decoupled iterations before the angle solve gives up.
 const MAX_ANGLE_ITERATIONS: usize = 40;
@@ -128,6 +137,128 @@ pub fn ac_angles(
     (theta, false)
 }
 
+/// Corridor-km from every bus to its nearest bus in `sources` (multi-source
+/// Dijkstra), and that source; `f64::INFINITY` for a bus no source reaches.
+fn distance_to_sources(
+    n: usize,
+    corridors: &[Corridor],
+    sources: &[usize],
+) -> (Vec<f64>, Vec<usize>) {
+    #[derive(PartialEq)]
+    struct Item(f64, usize, usize);
+    impl Eq for Item {}
+    impl Ord for Item {
+        fn cmp(&self, other: &Self) -> Ordering {
+            other
+                .0
+                .total_cmp(&self.0)
+                .then_with(|| other.1.cmp(&self.1))
+        }
+    }
+    impl PartialOrd for Item {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    let mut adj: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    for c in corridors {
+        adj[c.a].push((c.b, c.length_km));
+        adj[c.b].push((c.a, c.length_km));
+    }
+    let mut dist = vec![f64::INFINITY; n];
+    let mut from = vec![usize::MAX; n];
+    let mut heap = BinaryHeap::new();
+    for &s in sources {
+        if dist[s] > 0.0 {
+            dist[s] = 0.0;
+            from[s] = s;
+            heap.push(Item(0.0, s, s));
+        }
+    }
+    while let Some(Item(d, i, src)) = heap.pop() {
+        if d > dist[i] {
+            continue;
+        }
+        for &(j, km) in &adj[i] {
+            let nd = d + km;
+            if nd < dist[j] {
+                dist[j] = nd;
+                from[j] = src;
+                heap.push(Item(nd, j, src));
+            }
+        }
+    }
+    (dist, from)
+}
+
+/// Synchronous condensers for remote load pockets: while some loaded bus lies
+/// more than [`VOLTAGE_SUPPORT_KM`] of corridor from the nearest generator or
+/// condenser, the farthest one gets a condenser. Each is sized to
+/// [`VOLTAGE_SUPPORT_Q_SHARE`] of the load it then lies nearest to. A pocket
+/// fed over long lines with no machine of its own has nothing to hold its
+/// voltage, and its AC power flow can stall with the lines well inside their
+/// ratings; the condenser gives it the local voltage control real remote
+/// systems have. Returns the condensers, to append to the generators.
+pub fn place_voltage_support(
+    buses: &mut [DraftBus],
+    corridors: &[Corridor],
+    generators: &[DraftGenerator],
+) -> Vec<DraftGenerator> {
+    let n = buses.len();
+    let mut sources: Vec<usize> = generators.iter().map(|g| g.bus).collect();
+    let mut placed: Vec<usize> = Vec::new();
+    loop {
+        let (dist, _) = distance_to_sources(n, corridors, &sources);
+        let farthest = (0..n)
+            .filter(|&i| buses[i].load_mw > 0.0 && dist[i].is_finite())
+            .max_by(|&a, &b| dist[a].total_cmp(&dist[b]).then(b.cmp(&a)));
+        match farthest {
+            Some(i) if dist[i] > VOLTAGE_SUPPORT_KM => {
+                sources.push(i);
+                placed.push(i);
+            }
+            _ => break,
+        }
+    }
+    if placed.is_empty() {
+        return Vec::new();
+    }
+    let (_, from) = distance_to_sources(n, corridors, &sources);
+    let mut served = vec![0.0; n];
+    for i in 0..n {
+        if from[i] != usize::MAX {
+            served[from[i]] += buses[i].load_mw;
+        }
+    }
+    placed
+        .into_iter()
+        .map(|bus| {
+            let q = (VOLTAGE_SUPPORT_Q_SHARE * served[bus]).max(MIN_SHUNT_BANK_MVAR);
+            if buses[bus].kind != BusKind::Generator {
+                buses[bus].kind = BusKind::Generator;
+                buses[bus].annotation = format!(
+                    "{} (synchronous condenser: more than {VOLTAGE_SUPPORT_KM:.0} km of corridor from any generator)",
+                    buses[bus].annotation
+                );
+            }
+            DraftGenerator {
+                bus,
+                fuel: Fuel::Other,
+                pmax_mw: 0.0,
+                pmin_mw: 0.0,
+                qmax_mvar: q,
+                qmin_mvar: -q,
+                c2: 0.0,
+                c1: 0.0,
+                c0: 0.0,
+                makeup: false,
+                slack: false,
+                condenser: true,
+            }
+        })
+        .collect()
+}
+
 /// Plan the shunt banks that hold the planned voltage profile at the planning
 /// dispatch. `dispatch_mw` is per generator; `grounds` holds each electrical
 /// component's slack bus.
@@ -181,7 +312,76 @@ pub fn plan_shunts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::report::ElementSource;
     use crate::topology::CorridorRole;
+
+    #[test]
+    fn a_load_beyond_the_reach_of_any_generator_gets_a_condenser() {
+        // A radial chain of 200 km corridors: a generator at bus 0, 100 MW at
+        // every other bus. Buses 1 and 2 lie within 480 km of the machine;
+        // bus 3 (600 km) and bus 4 (800 km) do not, and one condenser at the
+        // far end brings both within reach.
+        let bus = |load_mw: f64| DraftBus {
+            lon: 0.0,
+            lat: 0.0,
+            name: String::new(),
+            place: None,
+            tier: 0,
+            base_kv: 230.0,
+            kind: BusKind::Load,
+            confidence: 1.0,
+            polygon: 0,
+            island: 0,
+            source: ElementSource::Synthetic,
+            population_weight: 0.0,
+            load_mw,
+            load_mvar: 0.0,
+            annotation: String::new(),
+        };
+        let mut buses: Vec<DraftBus> = (0..5)
+            .map(|i| bus(if i == 0 { 0.0 } else { 100.0 }))
+            .collect();
+        let corridors: Vec<Corridor> = (0..4)
+            .map(|i| Corridor {
+                a: i,
+                b: i + 1,
+                kv: 230.0,
+                length_km: 200.0,
+                role: CorridorRole::Internal,
+                circuits: 1,
+                route: Vec::new(),
+                is_delaunay: true,
+            })
+            .collect();
+        let generator = DraftGenerator {
+            bus: 0,
+            fuel: Fuel::Gas,
+            pmax_mw: 500.0,
+            pmin_mw: 0.0,
+            qmax_mvar: 275.0,
+            qmin_mvar: -225.0,
+            c2: 0.01,
+            c1: 20.0,
+            c0: 0.0,
+            makeup: false,
+            slack: true,
+            condenser: false,
+        };
+        let condensers =
+            place_voltage_support(&mut buses, &corridors, std::slice::from_ref(&generator));
+        assert_eq!(condensers.len(), 1);
+        let c = &condensers[0];
+        assert_eq!(c.bus, 4);
+        assert!(c.condenser && c.pmax_mw == 0.0 && c.pmin_mw == 0.0);
+        // It lies nearest to buses 3 and 4 (and the tie at 400 km goes to the
+        // generator): 200 MW served, so a ±100 MVAr range.
+        assert!((c.qmax_mvar - 100.0).abs() < 1e-9 && (c.qmin_mvar + 100.0).abs() < 1e-9);
+        assert_eq!(buses[4].kind, BusKind::Generator);
+        // Within reach, nothing is added.
+        let short = &corridors[..2];
+        let mut near: Vec<DraftBus> = buses[..3].to_vec();
+        assert!(place_voltage_support(&mut near, short, &[generator]).is_empty());
+    }
 
     fn line(from: usize, to: usize, r: f64, x: f64, b: f64) -> DraftBranch {
         DraftBranch {

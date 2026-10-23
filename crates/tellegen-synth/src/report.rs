@@ -695,6 +695,10 @@ pub struct GeneratorAnnotation {
     pub cost: CostCoefficients,
     pub makeup: bool,
     pub slack: bool,
+    /// A synchronous condenser the plan placed for voltage support in a
+    /// remote pocket: no active power, reactive range only.
+    #[serde(default)]
+    pub condenser: bool,
 }
 
 /// Per element annotations keyed by the same ids and uids the ingest view uses.

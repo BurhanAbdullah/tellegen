@@ -906,6 +906,7 @@ fn unit(bus: usize, fuel: Fuel, mw: f64, makeup: bool, rng: &mut Stream) -> Draf
         c0: 0.0,
         makeup,
         slack: false,
+        condenser: false,
     }
 }
 

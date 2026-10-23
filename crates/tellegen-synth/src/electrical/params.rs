@@ -342,6 +342,18 @@ pub const UPGRADE_CIRCUITS: u32 = 2;
 /// above carry one or two circuits per voltage level and none more than four.
 pub const MAX_CIRCUITS_PER_CORRIDOR: u32 = 4;
 
+/// Corridor-km from the nearest generator beyond which a loaded bus gets a
+/// synchronous condenser for voltage support. source: the St. Clair curve
+/// falls to 1.0 SIL at 480 km (300 mi; Dunlop, Gutman, Marchenko 1979), where
+/// voltage-drop and stability limits replace the thermal one, so a load
+/// farther than that from any machine depends on remote voltage control alone.
+pub const VOLTAGE_SUPPORT_KM: f64 = 480.0;
+
+/// Reactive range of a synchronous condenser, MVAr per MW of the load it lies
+/// nearest to: the ±0.33 MVAr/MW of a 0.95 power-factor load, rounded up to
+/// leave headroom. Modelling choice.
+pub const VOLTAGE_SUPPORT_Q_SHARE: f64 = 0.5;
+
 /// Share of a generator's reactive capability the reactive plan counts on at
 /// peak; the rest stays in reserve for contingencies and voltage control.
 /// source: WECC, "Voltage Stability Criteria, Undervoltage Load Shedding

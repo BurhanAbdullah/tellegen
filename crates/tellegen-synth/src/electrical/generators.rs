@@ -35,6 +35,9 @@ pub struct DraftGenerator {
     pub c0: f64,
     pub makeup: bool,
     pub slack: bool,
+    /// A synchronous condenser: voltage support with no active power
+    /// (`pmax_mw` 0), placed by [`crate::electrical::reactive::place_voltage_support`].
+    pub condenser: bool,
 }
 
 /// Peak load of one adequacy area, MW: an island's units are grouped into
@@ -445,6 +448,7 @@ pub fn place_generators(
                 c0: 0.0,
                 makeup: false,
                 slack: false,
+                condenser: false,
             });
         }
         // The island's largest unit is its reference.

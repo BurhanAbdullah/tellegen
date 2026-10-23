@@ -22,7 +22,7 @@ use crate::electrical::params::{
     MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_UTILISATION, UPGRADE_CIRCUITS,
 };
 use crate::electrical::planning::{plan_corridors, PlanMode};
-use crate::electrical::reactive::plan_shunts;
+use crate::electrical::reactive::{place_voltage_support, plan_shunts};
 use crate::error::SynthError;
 use crate::geom::wrap_lon;
 use crate::places::Places;
@@ -444,12 +444,24 @@ impl Generator {
             branch_target,
             mode,
         );
+        // Mapped (OSM) networks keep their real equipment; only a synthetic
+        // plan adds condensers.
+        let condensers = if mode == PlanMode::Expand {
+            place_voltage_support(&mut self.state.buses, &self.state.corridors, &generators)
+        } else {
+            Vec::new()
+        };
+        counts.insert("condensers".into(), condensers.len() as u64);
+        let mut generators = generators;
+        let mut dispatch = plan.dispatch.clone();
+        dispatch.extend(std::iter::repeat_n(0.0, condensers.len()));
+        generators.extend(condensers);
         let branches = expand_circuits(&self.state.corridors, &designs);
         let reactive = plan_shunts(
             &self.state.buses,
             &branches,
             &generators,
-            &plan.dispatch,
+            &dispatch,
             &plan.grounds,
         );
         if !reactive.angles_converged {
