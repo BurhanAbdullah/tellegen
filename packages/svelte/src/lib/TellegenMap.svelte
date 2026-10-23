@@ -1327,7 +1327,7 @@
 							? palette.selected
 							: b.has_source
 								? [63, 111, 187, 220]
-								: palette.outline,
+								: palette.outlineStrong,
 					getLineWidth: (b) => (selectedId === b.id ? 2.5 : b.has_source ? 2 : 1),
 					lineWidthUnits: 'pixels',
 					pickable: true,
@@ -1558,7 +1558,7 @@
 	}
 
 	.multi-detail :global(.mc-ground line) {
-		stroke: var(--ink-dim);
+		stroke: var(--mc-ground-stroke);
 		stroke-width: 1.3;
 	}
 
@@ -1682,7 +1682,7 @@
 		color: var(--text-accent);
 		font-size: 11px;
 		cursor: pointer;
-		box-shadow: var(--elev-2);
+		box-shadow: var(--elev-cue);
 	}
 
 	@media (max-width: 420px) {
@@ -1762,7 +1762,7 @@
 		line-height: 1.5;
 		padding: 8px 10px !important;
 		border-radius: 2px;
-		box-shadow: var(--elev-1);
+		box-shadow: var(--elev-tooltip);
 	}
 
 	@media (max-width: 760px) {

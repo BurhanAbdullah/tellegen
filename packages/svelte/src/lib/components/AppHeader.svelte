@@ -321,7 +321,7 @@
 		background: rgb(var(--paper-rgb) / 0.36);
 		border: 1px dashed rgb(var(--accent-rgb) / 0.55);
 		color: var(--text-secondary);
-		box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.08);
+		box-shadow: inset 0 0 0 1px rgba(212, 116, 34, 0.08);
 	}
 
 	.cases > button.ghost .cregion {

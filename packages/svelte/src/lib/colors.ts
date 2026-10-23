@@ -103,6 +103,8 @@ export const busNeutral: RGBA = [180, 175, 165, 200];
  * the `.pwd` substation marker. The selection blue is the same in both. */
 export interface MapPalette {
 	outline: RGBA;
+	/** The multiconductor view's bus outline, a shade stronger. */
+	outlineStrong: RGBA;
 	highlight: RGBA;
 	highlightSoft: RGBA;
 	selected: RGBA;
@@ -115,6 +117,7 @@ export interface MapPalette {
 export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
 	light: {
 		outline: [46, 42, 34, 110],
+		outlineStrong: [46, 42, 34, 120],
 		highlight: [32, 36, 43, 90],
 		highlightSoft: [32, 36, 43, 70],
 		selected: [32, 36, 43, 255],
@@ -125,6 +128,7 @@ export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
 	},
 	dark: {
 		outline: [232, 238, 244, 120],
+		outlineStrong: [232, 238, 244, 130],
 		highlight: [232, 238, 244, 90],
 		highlightSoft: [232, 238, 244, 70],
 		selected: [255, 255, 255, 255],

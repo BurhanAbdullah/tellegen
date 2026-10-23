@@ -220,7 +220,7 @@
 		background: var(--panel);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-xs, 2px);
-		box-shadow: var(--elev-2);
+		box-shadow: var(--elev-menu);
 	}
 
 	li {

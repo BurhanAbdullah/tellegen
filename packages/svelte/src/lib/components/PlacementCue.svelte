@@ -21,7 +21,7 @@
 		border-radius: 3px;
 		color: var(--text-accent);
 		font-size: 11px;
-		box-shadow: var(--elev-2);
+		box-shadow: var(--elev-cue);
 		pointer-events: none;
 	}
 
