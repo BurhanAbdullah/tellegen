@@ -10,8 +10,9 @@ use crate::error::SynthError;
 use crate::geom::region::RegionShape;
 use crate::geom::{haversine_km, wrap_lon};
 use crate::places::{PlacedCity, Places};
-use crate::report::{CountryDemand, DemandBasis, RegionContext, Warning};
+use crate::report::{CountryDemand, DemandBasis, RegionContext, VoltageBasis, Warning};
 use crate::request::{DemandSpec, Density, FarIslandPolicy, SynthRequest};
+use crate::voltage::{LadderSource, VoltageLadders};
 
 /// Everything later stages need from the context stage that is not in the
 /// public [`RegionContext`].
@@ -254,7 +255,8 @@ pub fn resolve_context(
         ));
     }
 
-    let levels = req.resolved_voltage_levels();
+    let ladder = resolve_ladder(req, &cities, warnings);
+    let levels = ladder.levels_kv.clone();
     let classes: Vec<f64> = levels
         .iter()
         .map(|&kv| crate::electrical::params::line_class_for(kv).kv)
@@ -285,6 +287,9 @@ pub fn resolve_context(
             .unwrap_or_else(|| density_branch_factor(req.density)),
         voltage_levels_kv: levels,
         voltage_classes_kv: classes,
+        voltage_basis: ladder.basis,
+        voltage_country: ladder.country,
+        promotion_levels_kv: ladder.above_kv,
     };
     Ok((
         context,
@@ -296,6 +301,91 @@ pub fn resolve_context(
             group_count,
         },
     ))
+}
+
+/// The voltage levels a region is modelled at.
+struct ResolvedLadder {
+    levels_kv: Vec<f64>,
+    above_kv: Vec<f64>,
+    basis: VoltageBasis,
+    country: Option<String>,
+}
+
+/// The line class the corridor plan may add above stated levels.
+fn top_line_class_kv() -> f64 {
+    crate::electrical::params::LINE_CLASSES[crate::electrical::params::LINE_CLASSES.len() - 1].kv
+}
+
+/// The levels of the request, or else the national ladder of the region's
+/// dominant country: the one whose places carry the most demand (population
+/// under a stated total). A stated list may be promoted to 765 kV above it;
+/// a country's ladder only to the higher levels that country has in service.
+fn resolve_ladder(
+    req: &SynthRequest,
+    cities: &[PlacedCity],
+    warnings: &mut Vec<Warning>,
+) -> ResolvedLadder {
+    if !req.voltage_levels_kv.is_empty() {
+        let levels = req.resolved_voltage_levels();
+        let top = top_line_class_kv();
+        return ResolvedLadder {
+            above_kv: if levels[0] < top - 1e-6 {
+                vec![top]
+            } else {
+                Vec::new()
+            },
+            levels_kv: levels,
+            basis: VoltageBasis::Request,
+            country: None,
+        };
+    }
+    let demand = NationalDemand::bundled();
+    let mut weight: BTreeMap<&str, f64> = BTreeMap::new();
+    for city in cities {
+        *weight
+            .entry(demand.canonical(&city.place.iso_a3))
+            .or_default() += city.demand_weight.max(0.0);
+    }
+    let dominant = weight
+        .iter()
+        .filter(|(code, _)| !code.is_empty())
+        .max_by(|a, b| a.1.total_cmp(b.1).then_with(|| b.0.cmp(a.0)))
+        .map(|(code, _)| (*code).to_owned());
+    let table = VoltageLadders::bundled();
+    let ladder = table.ladder(dominant.as_deref());
+    let basis = match ladder.source {
+        LadderSource::Country => VoltageBasis::Country,
+        LadderSource::Regional | LadderSource::Standard => {
+            let levels = ladder
+                .levels_kv
+                .iter()
+                .map(|kv| format!("{kv}"))
+                .collect::<Vec<_>>()
+                .join("/");
+            let reason = match (&dominant, ladder.source) {
+                (Some(code), LadderSource::Regional) => format!(
+                    "{code} has no entry in the voltage table; the {} members' {levels} kV ladder is used",
+                    table.regional_name
+                ),
+                (Some(code), _) => format!(
+                    "{code} has no entry in the voltage table; the {} standard {levels} kV levels are used",
+                    table.standard_name
+                ),
+                (None, _) => format!(
+                    "no populated place names the region's country; the {} standard {levels} kV levels are used",
+                    table.standard_name
+                ),
+            };
+            warnings.push(Warning::new("voltage_fallback", reason));
+            VoltageBasis::Fallback
+        }
+    };
+    ResolvedLadder {
+        levels_kv: ladder.levels_kv,
+        above_kv: ladder.above_kv,
+        basis,
+        country: dominant,
+    }
 }
 
 /// A region's peak demand from its places, with each place's demand weight
@@ -537,6 +627,7 @@ fn landmass_groups(shape: &RegionShape, kept: &[usize], max_km: f64) -> Vec<Vec<
 mod tests {
     use super::*;
     use crate::demand::DEFAULT_PEAK_FACTOR;
+    use crate::report::VoltageBasis;
     use crate::request::Region;
 
     #[test]
@@ -641,6 +732,54 @@ mod tests {
         assert!((prt.unlisted_peak_mw.unwrap() - unlisted).abs() < 1e-6 * national);
         assert!((prt.peak_mw - (national * listed + unlisted)).abs() < 1e-6 * national);
         assert!(prt.peak_mw < 0.2 * national, "{prt:?}");
+    }
+
+    #[test]
+    fn levels_follow_the_dominant_country_unless_the_request_states_them() {
+        let places = Places::parse(include_bytes!("../data/populated_places.json")).unwrap();
+        // Most of Germany, with slivers of its neighbours.
+        let mut req = SynthRequest::new(Region::bbox(6.5, 47.6, 14.5, 54.5, "Germany box"));
+        let (ctx, _) = resolve_context(&req, &places, &mut Vec::new()).unwrap();
+        assert_eq!(ctx.voltage_basis, VoltageBasis::Country);
+        assert_eq!(ctx.voltage_country.as_deref(), Some("DEU"));
+        assert_eq!(ctx.voltage_levels_kv, vec![380.0, 220.0]);
+        assert!(ctx.promotion_levels_kv.is_empty());
+        // Stated levels are used as given, with 765 kV above them.
+        req.voltage_levels_kv = vec![230.0, 500.0];
+        let (ctx, _) = resolve_context(&req, &places, &mut Vec::new()).unwrap();
+        assert_eq!(ctx.voltage_basis, VoltageBasis::Request);
+        assert_eq!(ctx.voltage_levels_kv, vec![500.0, 230.0]);
+        assert_eq!(ctx.promotion_levels_kv, vec![765.0]);
+        assert_eq!(ctx.voltage_country, None);
+    }
+
+    #[test]
+    fn a_country_without_a_ladder_falls_back_and_says_so() {
+        let fallback = |code: &str| {
+            let places = Places::parse(
+                format!(r#"[{{"n":"A","lo":10.5,"la":10.5,"p":2000000,"c":"{code}"}}]"#).as_bytes(),
+            )
+            .unwrap();
+            let req = SynthRequest::new(Region::bbox(10.0, 10.0, 11.0, 11.0, "box"));
+            let mut warnings = Vec::new();
+            let (ctx, _) = resolve_context(&req, &places, &mut warnings).unwrap();
+            let warning = warnings
+                .into_iter()
+                .find(|w| w.code == "voltage_fallback")
+                .expect("a voltage_fallback warning");
+            (ctx, warning.message)
+        };
+        // An ENTSO-E member without its own entry takes the members' ladder.
+        let (ctx, message) = fallback("LUX");
+        assert_eq!(ctx.voltage_basis, VoltageBasis::Fallback);
+        assert_eq!(ctx.voltage_country.as_deref(), Some("LUX"));
+        assert_eq!(ctx.voltage_levels_kv, vec![400.0, 220.0]);
+        assert!(ctx.promotion_levels_kv.is_empty());
+        assert!(message.contains("ENTSO-E"), "{message}");
+        // Any other country takes IEC 60038's standard levels.
+        let (ctx, message) = fallback("ZZZ");
+        assert_eq!(ctx.voltage_levels_kv, vec![400.0, 220.0]);
+        assert!(message.contains("IEC 60038"), "{message}");
     }
 
     #[test]

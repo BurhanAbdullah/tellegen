@@ -25,8 +25,8 @@
 use crate::electrical::branches::{design_circuits, CircuitDesign, CorridorDraw, BASE_MVA};
 use crate::electrical::generators::DraftGenerator;
 use crate::electrical::params::{
-    LINE_CLASSES, MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_MAX_ROUNDS,
-    PLANNING_UTILISATION, STIFFENING_BATCH_SHARE, STIFFENING_BRANCH_BUDGET, STIFFENING_HV_SHARE,
+    MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_MAX_ROUNDS, PLANNING_UTILISATION,
+    STIFFENING_BATCH_SHARE, STIFFENING_BRANCH_BUDGET, STIFFENING_HV_SHARE,
     TRANSFORMER_SIZE_STEP_MVA, UPGRADE_CIRCUITS,
 };
 use crate::geom::delaunay::UnionFind;
@@ -80,9 +80,9 @@ pub struct CorridorPlan {
     pub max_loading: f64,
     /// Corridors still loaded above their rating (only when the plan hit a cap).
     pub overloaded_corridors: usize,
-    /// The level the plan added above the requested ones, when it raised a
-    /// bus to it; bus tiers then count from it.
-    pub added_level_kv: Option<f64>,
+    /// Levels the plan added above the modelled ones, highest first: those of
+    /// `above` it raised a bus to. Bus tiers count from the first of them.
+    pub added_levels_kv: Vec<f64>,
     /// Most circuits on one corridor.
     pub max_parallel_circuits: u32,
     /// Corridors at [`MAX_CIRCUITS_PER_CORRIDOR`] whose planning flow still
@@ -411,13 +411,17 @@ fn corridor_flows(
 /// add circuits (or larger banks) until no circuit runs above the
 /// utilisation target, stiffen islands whose angle spread is too wide, and
 /// fill up to `branch_target` circuits where the planned flow is heaviest.
-/// Promotion climbs `levels` and, when expanding, the 765 kV class above
-/// them: a corridor that would need more than [`MAX_CIRCUITS_PER_CORRIDOR`]
-/// circuits raises its ends instead of stacking more. Returns the final
-/// circuit designs (one per corridor) and the plan.
+/// Promotion climbs `levels` and, when expanding, the levels of `above`
+/// (highest first; the region's higher levels in service): a corridor that
+/// would need more than [`MAX_CIRCUITS_PER_CORRIDOR`] circuits raises its
+/// ends instead of stacking more, and one with no higher level left keeps
+/// the cap and is reported. Returns the final circuit designs (one per
+/// corridor) and the plan.
+#[allow(clippy::too_many_arguments)]
 pub fn plan_corridors(
     buses: &mut [DraftBus],
     levels: &[f64],
+    above: &[f64],
     corridors: &mut [Corridor],
     draws: &[CorridorDraw],
     generators: &[DraftGenerator],
@@ -470,22 +474,23 @@ pub fn plan_corridors(
     let mut circuits: Vec<u32> = corridors.iter().map(|c| c.circuits.max(1)).collect();
     let initial: usize = circuits.iter().map(|&k| k as usize).sum();
 
-    // The voltage ladder: the requested levels and, when expanding, the
-    // highest line class above them. Tiers index the ladder, so they shift by
-    // one while the extra level is available.
-    let top_class = LINE_CLASSES[LINE_CLASSES.len() - 1].kv;
-    let extended = expand && !levels.is_empty() && levels[0] < top_class - 1e-6;
-    let ladder: Vec<f64> = if extended {
-        std::iter::once(top_class)
-            .chain(levels.iter().copied())
+    // The voltage ladder: the modelled levels and, when expanding, the higher
+    // levels above them. Tiers index the ladder, so they shift by the number
+    // of higher levels while those are available.
+    let above: Vec<f64> = if expand {
+        above
+            .iter()
+            .copied()
+            .filter(|&kv| levels.first().is_some_and(|&top| kv > top + 1e-6))
             .collect()
     } else {
-        levels.to_vec()
+        Vec::new()
     };
-    if extended {
-        for bus in buses.iter_mut() {
-            bus.tier += 1;
-        }
+    let extra = above.len();
+    let extended = extra > 0;
+    let ladder: Vec<f64> = above.iter().chain(levels).copied().collect();
+    for bus in buses.iter_mut() {
+        bus.tier += extra;
     }
 
     // 1. Voltage class by power and distance.
@@ -591,7 +596,7 @@ pub fn plan_corridors(
         // branch budget.
         let mut stiffen_raise: Vec<Option<usize>> = vec![None; n];
         let hv_budget = (STIFFENING_HV_SHARE * n as f64).floor() as usize;
-        let requested_top = usize::from(extended);
+        let requested_top = extra;
         let stiffen_top =
             if extended && buses.iter().filter(|b| b.tier <= requested_top).count() >= hv_budget {
                 0
@@ -772,17 +777,18 @@ pub fn plan_corridors(
             capped_corridors += 1;
         }
     }
-    // Drop the extra level when no bus took it, so tiers index `levels` again.
-    let added_level_kv = if extended && buses.iter().any(|b| b.tier == 0) {
-        Some(top_class)
-    } else {
-        if extended {
-            for bus in buses.iter_mut() {
-                bus.tier -= 1;
-            }
-        }
-        None
-    };
+    // Drop the higher levels no bus took, so tiers count from the highest
+    // level in use.
+    let unused = buses
+        .iter()
+        .map(|b| b.tier)
+        .min()
+        .unwrap_or(extra)
+        .min(extra);
+    for bus in buses.iter_mut() {
+        bus.tier -= unused;
+    }
+    let added_levels_kv = above[unused..].to_vec();
     for (corridor, &k) in corridors.iter_mut().zip(&circuits) {
         corridor.circuits = k;
     }
@@ -802,7 +808,7 @@ pub fn plan_corridors(
         filler_circuits: filler,
         max_loading,
         overloaded_corridors: overloaded,
-        added_level_kv,
+        added_levels_kv,
         max_parallel_circuits,
         capped_corridors,
         angles: theta,

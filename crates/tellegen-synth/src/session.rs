@@ -29,13 +29,14 @@ use crate::places::Places;
 use crate::report::{
     AcPfOutcome, DemandBasis, DemandTableProvenance, GenerationReport, PlacesProvenance,
     PlanningReport, Preview, PreviewArrays, PreviewBranch, PreviewBus, Provenance, SolveOutcome,
-    Stage, StageRecord, StepOutcome, Warning, REPORT_SCHEMA,
+    Stage, StageRecord, StepOutcome, VoltageBasis, VoltageTableProvenance, Warning, REPORT_SCHEMA,
 };
 use crate::request::{DemandSpec, Source, SynthRequest};
 use crate::rng::{Stream, StreamTag};
 use crate::site::{site_buses, DraftBus};
 use crate::topology::{build_topology, Corridor};
 use crate::validate::{apply_dispatch, run_ac_pf, run_dc_opf, Clock, DcOpfRun};
+use crate::voltage::VoltageLadders;
 
 /// Producer name written into generated modules.
 pub const PRODUCER_NAME: &str = "tellegen-synth";
@@ -116,6 +117,7 @@ impl Generator {
                 sha256: places.sha256().to_owned(),
             }),
             demand_table: None,
+            voltage_table: None,
             osm: None,
             fallback_from: request.fallback_from.clone(),
         };
@@ -299,6 +301,14 @@ impl Generator {
                 areas_source_sha256: areas.source_sha256.clone(),
             });
         }
+        if context.voltage_basis != VoltageBasis::Request {
+            let table = VoltageLadders::bundled();
+            self.report.provenance.voltage_table = Some(VoltageTableProvenance {
+                schema: crate::voltage::SCHEMA.to_owned(),
+                version: table.version.clone(),
+                sha256: table.sha256.clone(),
+            });
+        }
         counts.insert("places_in_region".into(), data.cities.len() as u64);
         counts.insert("landmasses".into(), context.landmasses as u64);
         counts.insert("islands".into(), data.group_count as u64);
@@ -427,6 +437,7 @@ impl Generator {
         let (designs, plan) = plan_corridors(
             &mut self.state.buses,
             &ctx.voltage_levels_kv,
+            &ctx.promotion_levels_kv,
             &mut self.state.corridors,
             &draws,
             &generators,
@@ -481,18 +492,21 @@ impl Generator {
                 ),
             ));
         }
-        if let Some(kv) = plan.added_level_kv {
-            let raised = self.state.buses.iter().filter(|b| b.tier == 0).count();
+        if let Some(&kv) = plan.added_levels_kv.first() {
+            let added = plan.added_levels_kv.len();
+            let raised = self.state.buses.iter().filter(|b| b.tier < added).count();
             warnings.push(Warning::new(
                 "voltage_level_added",
                 format!(
-                    "{raised} bus(es) were raised to {kv} kV, above the requested levels: their corridors would otherwise need more than {UPGRADE_CIRCUITS} circuits at the highest requested level"
+                    "{raised} bus(es) were raised to {kv} kV, a level in service above the modelled ones: their corridors would otherwise need more than {UPGRADE_CIRCUITS} circuits at the highest modelled level"
                 ),
             ));
             if let Some(ctx) = self.report.context.as_mut() {
-                ctx.voltage_levels_kv.insert(0, kv);
-                ctx.voltage_classes_kv
-                    .insert(0, crate::electrical::params::line_class_for(kv).kv);
+                for (k, &level) in plan.added_levels_kv.iter().enumerate() {
+                    ctx.voltage_levels_kv.insert(k, level);
+                    ctx.voltage_classes_kv
+                        .insert(k, crate::electrical::params::line_class_for(level).kv);
+                }
             }
         }
         let name = format!("maptogrid_{}", &self.report.provenance.request_sha256[..16]);
@@ -551,7 +565,7 @@ impl Generator {
             rounds: plan.rounds,
             converged: plan.converged,
             promoted_buses: plan.promoted_buses,
-            added_level_kv: plan.added_level_kv,
+            added_level_kv: plan.added_levels_kv.first().copied(),
             max_parallel_circuits: plan.max_parallel_circuits,
             circuit_cap: MAX_CIRCUITS_PER_CORRIDOR,
             capped_corridors: plan.capped_corridors,

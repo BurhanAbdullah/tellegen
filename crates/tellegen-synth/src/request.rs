@@ -485,8 +485,11 @@ pub struct SynthRequest {
     pub fidelity: Fidelity,
     /// Nominal voltage levels, kV, highest first after resolution. Each level
     /// keeps its own kV for the per-unit base and takes the per-km parameters
-    /// of the nearest line class.
-    #[serde(default = "default_voltage_levels")]
+    /// of the nearest line class. Empty (the default) takes the national
+    /// ladder of the region's dominant country by demand
+    /// ([`crate::voltage::VoltageLadders`]); a stated list is used as given,
+    /// and the corridor plan may then add 765 kV above it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub voltage_levels_kv: Vec<f64>,
     /// Exact bus count; otherwise `density` × area decides.
     #[serde(default)]
@@ -526,10 +529,6 @@ fn default_seed() -> u64 {
     2026
 }
 
-fn default_voltage_levels() -> Vec<f64> {
-    vec![500.0, 230.0]
-}
-
 fn default_power_factor() -> f64 {
     0.95
 }
@@ -566,9 +565,6 @@ impl SynthRequest {
     /// context stage.
     pub fn validate(&self) -> Result<(), SynthError> {
         let bad = |m: String| Err(SynthError::InvalidRequest(m));
-        if self.voltage_levels_kv.is_empty() {
-            return bad("at least one voltage level is required".into());
-        }
         if !self
             .voltage_levels_kv
             .iter()

@@ -217,6 +217,22 @@ pub enum DemandBasis {
     DefaultPerBus,
 }
 
+/// Where a region's voltage levels came from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum VoltageBasis {
+    /// The request stated the levels.
+    Request,
+    /// The national ladder of the region's dominant country
+    /// (`RegionContext::voltage_country`, `Provenance::voltage_table`).
+    Country,
+    /// The dominant country has no ladder in the table: the ENTSO-E members'
+    /// ladder for a member, else IEC 60038's standard levels (warning
+    /// `voltage_fallback`).
+    Fallback,
+}
+
 /// One country's part of a region's demand under the national basis.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -270,8 +286,9 @@ pub struct RegionContext {
     pub population_in_region: f64,
     pub places_in_region: usize,
     /// Places counted in the region although just outside its polygons:
-    /// within 15 km of its edge, of a country it already holds, and moved
-    /// onto that edge (harbours and estuaries the polygons leave out).
+    /// within 15 km of its edge, of a country whose place population it
+    /// holds at least half of, and moved onto that edge (harbours and
+    /// estuaries the polygons leave out).
     pub places_snapped: usize,
     pub target_bus_count: u32,
     pub peak_demand_mw: f64,
@@ -283,10 +300,23 @@ pub struct RegionContext {
     pub fuel_mix: BTreeMap<Fuel, f64>,
     /// Branches per bus the topology aims at.
     pub branch_factor: f64,
-    /// Nominal levels, highest first.
+    /// Nominal levels, highest first; a level the corridor plan added above
+    /// them (`PlanningReport::added_level_kv`) comes first once it ran.
     pub voltage_levels_kv: Vec<f64>,
     /// The line class each level takes its per-km parameters from.
     pub voltage_classes_kv: Vec<f64>,
+    /// Where the levels came from.
+    pub voltage_basis: VoltageBasis,
+    /// The country whose ladder the levels are (table code), or whose missing
+    /// entry the fallback stands in for; absent for stated levels or a region
+    /// without places.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage_country: Option<String>,
+    /// Higher AC levels the corridor plan may raise buses to, kV, highest
+    /// first: the country's levels in service above its ladder, or 765 kV
+    /// above stated levels. Empty when there is none, as in most of Europe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub promotion_levels_kv: Vec<f64>,
 }
 
 /// One completed stage.
@@ -420,9 +450,10 @@ pub struct PlanningReport {
     /// Buses raised to the next voltage level because an incident corridor
     /// would have needed more than two circuits at the lower one.
     pub promoted_buses: usize,
-    /// A level the plan added above the requested ones (765 kV) because
-    /// corridors at the highest requested level needed more than two
-    /// circuits; absent when the requested levels sufficed.
+    /// The highest level the plan added above the modelled ones (one of
+    /// `RegionContext::promotion_levels_kv`) because corridors at the highest
+    /// modelled level needed more than two circuits; absent when the modelled
+    /// levels sufficed or the region has no higher level in service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub added_level_kv: Option<f64>,
     /// Most parallel circuits on one corridor.
@@ -682,6 +713,16 @@ pub struct PlacesProvenance {
     pub sha256: String,
 }
 
+/// The voltage ladder table behind a country or fallback voltage basis.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct VoltageTableProvenance {
+    pub schema: String,
+    pub version: String,
+    /// SHA-256 of the bundled table.
+    pub sha256: String,
+}
+
 /// The national demand table behind a national demand basis.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -732,6 +773,8 @@ pub struct Provenance {
     pub places: Option<PlacesProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demand_table: Option<DemandTableProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage_table: Option<VoltageTableProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm: Option<OsmProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -158,8 +158,10 @@ fn invalid_requests_are_rejected_before_any_stage() {
     let mut req = common::request(common::iraq_box(), 1, Some(5));
     req.generator_count = Some(6);
     assert!(Generator::new(req, places.clone(), None).is_err());
+    // No levels is valid (the region's national ladder); a non-positive one
+    // is not.
     let mut req = common::request(common::iraq_box(), 1, None);
-    req.voltage_levels_kv.clear();
+    req.voltage_levels_kv = vec![500.0, -230.0];
     assert!(Generator::new(req, places.clone(), None).is_err());
     let req = common::request(
         tellegen_synth::Region {

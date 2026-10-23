@@ -79,9 +79,10 @@ fn structure_matches_reference_ranges_across_sizes() {
 
 #[test]
 fn heavy_demand_adds_circuits_keeps_ratings_physical_and_says_so() {
-    // 15 GW on 30 buses: 500 MW per bus.
+    // 15 GW on 30 buses: 500 MW per bus, at stated 500/230 kV levels.
     let mut req = common::request(common::iraq_box(), 2026, Some(30));
     req.demand = DemandSpec::TotalMw { mw: 15_000.0 };
+    req.voltage_levels_kv = vec![500.0, 230.0];
     req.validation.run_ac_pf = false;
     req.validation.run_dc_opf = false;
     let (module, report) = generate(req, common::places(), None).unwrap();
@@ -217,10 +218,12 @@ fn far_islands_kept_are_validated_separately() {
         .all(|b| b.location.unwrap().x > 40.0));
 }
 
-/// One unit feeding a 1,400 km strip: every megawatt crosses the region.
+/// One unit feeding a 1,400 km strip at stated 500/230 kV levels, which the
+/// plan may raise to 765 kV: every megawatt crosses the region.
 fn strip_fed_from_one_unit(mw: f64) -> tellegen_synth::GenerationReport {
     let region = tellegen_synth::Region::bbox(30.0, 30.0, 45.0, 32.0, "strip");
     let mut req = common::request(region, 2026, Some(40));
+    req.voltage_levels_kv = vec![500.0, 230.0];
     req.generator_count = Some(1);
     req.demand = DemandSpec::TotalMw { mw };
     req.validation.run_ac_pf = false;
@@ -272,4 +275,38 @@ fn stiffening_stops_at_the_branch_budget_and_says_the_plan_is_incomplete() {
         "{}",
         incomplete.message
     );
+}
+
+#[test]
+fn a_country_with_no_higher_level_keeps_its_ceiling_under_heavy_load() {
+    // Germany's grid stops at 380 kV. Ten times its load on 60 buses needs
+    // far more than two circuits per corridor, and the plan may not invent a
+    // level: it stacks to the cap and says what is left.
+    let mut req = common::request(
+        tellegen_synth::Region::bbox(6.5, 47.6, 14.5, 54.5, "Germany box"),
+        2026,
+        Some(60),
+    );
+    req.demand = DemandSpec::TotalMw { mw: 750_000.0 };
+    req.validation.run_ac_pf = false;
+    req.validation.run_dc_opf = false;
+    let places = std::sync::Arc::new(
+        tellegen_synth::Places::parse(include_bytes!("../data/populated_places.json")).unwrap(),
+    );
+    let (module, report) = generate(req, places, None).unwrap();
+    let ctx = report.context.as_ref().unwrap();
+    assert_eq!(ctx.voltage_country.as_deref(), Some("DEU"));
+    assert!(ctx.promotion_levels_kv.is_empty());
+    assert_eq!(ctx.voltage_levels_kv, vec![380.0, 220.0]);
+    let plan = report.planning.as_ref().unwrap();
+    assert_eq!(plan.added_level_kv, None);
+    assert!(module
+        .value()
+        .buses()
+        .iter()
+        .all(|b| b.base_kv <= 380.0 + 1e-9));
+    let codes: Vec<&str> = report.warnings.iter().map(|w| w.code.as_str()).collect();
+    assert!(!codes.contains(&"voltage_level_added"), "{codes:?}");
+    assert!(plan.capped_corridors > 0, "{plan:?}");
+    assert!(codes.contains(&"planning_incomplete"), "{codes:?}");
 }

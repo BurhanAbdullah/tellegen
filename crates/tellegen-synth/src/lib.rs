@@ -37,6 +37,7 @@ pub mod site;
 pub mod stats;
 pub mod topology;
 pub mod validate;
+pub mod voltage;
 
 pub use error::{ErrorPayload, SynthError};
 pub use places::Places;

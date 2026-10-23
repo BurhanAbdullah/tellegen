@@ -333,7 +333,8 @@ pub const STIFFENING_HV_SHARE: f64 = 0.35;
 pub const UPGRADE_CIRCUITS: u32 = 2;
 
 /// Circuits one corridor may hold; a corridor that needs more raises its ends
-/// along the voltage ladder (up to 765 kV) instead. source: double and
+/// along the voltage ladder (up to the highest level in service, see
+/// [`crate::voltage`]) instead. source: double and
 /// quadruple circuit lines are common in Germany, India, Japan and China and
 /// six-circuit lines rare (Acosta and Tavares, IPST 2019); in the
 /// OpenStreetMap-based European grid (Xiong et al., *Scientific Data* 12:277,
