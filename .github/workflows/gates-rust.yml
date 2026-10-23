@@ -31,8 +31,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy (shipping crates, warnings denied)
         run: |
-          cargo clippy -p tellegen -p tellegen-wasm -p tellegen-server -p tellegen-cli \
-            --all-targets -- -D warnings
+          cargo clippy -p tellegen -p tellegen-synth -p tellegen-wasm -p tellegen-server \
+            -p tellegen-cli --all-targets -- -D warnings
       # Its own invocation, deliberately: the extension is linted with
       # `extension-module` ON, which is how it ships, and without
       # `--all-targets`, which would link libpython into this gate.

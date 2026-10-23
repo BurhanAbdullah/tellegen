@@ -52,3 +52,7 @@ python/tellegen/*.pyd
 __pycache__/
 .venv/
 .pytest_cache/
+
+# The synthetic generator ships its Natural Earth places table (public domain).
+!crates/tellegen-synth/data/
+!crates/tellegen-synth/data/**
