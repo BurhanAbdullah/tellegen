@@ -31,7 +31,7 @@
 		padding: 8px 20px;
 		font-size: 10.5px;
 		color: var(--text-secondary);
-		background: linear-gradient(rgba(236, 233, 226, 0), rgba(236, 233, 226, 0.9));
+		background: linear-gradient(rgb(var(--bg-rgb) / 0), rgb(var(--bg-rgb) / 0.9));
 		animation: rise 0.5s 0.24s ease-out both;
 		pointer-events: none;
 	}

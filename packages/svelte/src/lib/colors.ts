@@ -98,6 +98,47 @@ export const sensGradient = cssGradient(SENS_STOPS);
 export const sensNeutral: RGBA = SENS_STOPS[2];
 export const busNeutral: RGBA = [180, 175, 165, 200];
 
+/** Overlay colours that depend on the basemap's lightness: bus outlines,
+ * hover highlights, the selected outline, the "not yet solved" grey, and
+ * the `.pwd` substation marker. The selection blue is the same in both. */
+export interface MapPalette {
+	outline: RGBA;
+	/** The multiconductor view's bus outline, a shade stronger. */
+	outlineStrong: RGBA;
+	highlight: RGBA;
+	highlightSoft: RGBA;
+	selected: RGBA;
+	grey: RGBA;
+	greyLine: RGBA;
+	substation: RGBA;
+	substationLine: RGBA;
+}
+
+export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
+	light: {
+		outline: [46, 42, 34, 110],
+		outlineStrong: [46, 42, 34, 120],
+		highlight: [32, 36, 43, 90],
+		highlightSoft: [32, 36, 43, 70],
+		selected: [32, 36, 43, 255],
+		grey: [110, 115, 120, 200],
+		greyLine: [138, 131, 117, 150],
+		substation: [70, 92, 124, 190],
+		substationLine: [38, 52, 78, 220]
+	},
+	dark: {
+		outline: [232, 238, 244, 120],
+		outlineStrong: [232, 238, 244, 130],
+		highlight: [232, 238, 244, 90],
+		highlightSoft: [232, 238, 244, 70],
+		selected: [255, 255, 255, 255],
+		grey: [150, 160, 170, 200],
+		greyLine: [150, 160, 170, 150],
+		substation: [120, 150, 200, 190],
+		substationLine: [180, 205, 235, 220]
+	}
+};
+
 const FLAT_SENSITIVITY_TINT = 0.55;
 
 export function sensFlatColor(domain: Pick<SensitivityDomain, 'mean'>): RGBA {

@@ -4,6 +4,12 @@
 	import { getPanelLayout } from '../panels.svelte.js';
 	import { getNoticeCenter } from '../notices.svelte.js';
 	import PanelCard from './PanelCard.svelte';
+
+	// The dock insets come from `--tellegen-dock-left/right/bottom` on an
+	// ancestor (defaults 20px, 20px, 100px), so a custom shell with its own
+	// rail or status bar can move the docks without restyling them.
+	let { showToolbar = true }: { showToolbar?: boolean } = $props();
+
 	const app = getAppState();
 	const layout = getPanelLayout();
 	const notices = getNoticeCenter();
@@ -55,31 +61,33 @@
 	onpointerup={() => layout.finishGesture()}
 	onpointercancel={() => layout.finishGesture()}
 />
-<div class="panel-toolbar" style:top="{toolbarTop}px" aria-label="Panels">
-	<div class="panel-buttons">
-		{#each layout.ordered().filter((p) => p.side === 'left') as panel (panel.id)}
+{#if showToolbar}
+	<div class="panel-toolbar" style:top="{toolbarTop}px" aria-label="Panels">
+		<div class="panel-buttons">
+			{#each layout.ordered().filter((p) => p.side === 'left') as panel (panel.id)}
+				<button
+					aria-label={panel.title}
+					aria-pressed={layout.compact ? layout.drawer === panel.id : panel.open}
+					onclick={() => layout.toggle(panel)}>{panel.title}</button
+				>
+			{/each}
+		</div>
+		<div class="panel-buttons right">
+			{#each layout.ordered().filter((p) => p.side === 'right') as panel (panel.id)}
+				<button
+					aria-label={panel.title}
+					aria-pressed={layout.compact ? layout.drawer === panel.id : panel.open}
+					onclick={() => layout.toggle(panel)}>{panel.title}</button
+				>
+			{/each}
 			<button
-				aria-label={panel.title}
-				aria-pressed={layout.compact ? layout.drawer === panel.id : panel.open}
-				onclick={() => layout.toggle(panel)}>{panel.title}</button
+				class="reset-layout"
+				onclick={() => layout.reset()}
+				title="Restore the default panel positions">Reset layout</button
 			>
-		{/each}
+		</div>
 	</div>
-	<div class="panel-buttons right">
-		{#each layout.ordered().filter((p) => p.side === 'right') as panel (panel.id)}
-			<button
-				aria-label={panel.title}
-				aria-pressed={layout.compact ? layout.drawer === panel.id : panel.open}
-				onclick={() => layout.toggle(panel)}>{panel.title}</button
-			>
-		{/each}
-		<button
-			class="reset-layout"
-			onclick={() => layout.reset()}
-			title="Restore the default panel positions">Reset layout</button
-		>
-	</div>
-</div>
+{/if}
 {#if layout.storageError}<p class="layout-error" role="status" style:top="{panelTop}px">
 		{layout.storageError}
 	</p>{/if}
@@ -90,7 +98,7 @@
 {:else}
 	<div
 		class="dock left"
-		style:bottom="{Math.max(100, bottomReserve)}px"
+		style:bottom="max(var(--tellegen-dock-bottom, 100px), {bottomReserve}px)"
 		data-panel-dock="left"
 		style:top="{panelTop}px"
 		style:width="{layout.dockWidth('left')}px"
@@ -99,7 +107,7 @@
 	</div>
 	<div
 		class="dock right"
-		style:bottom="{Math.max(100, bottomReserve)}px"
+		style:bottom="max(var(--tellegen-dock-bottom, 100px), {bottomReserve}px)"
 		data-panel-dock="right"
 		style:top="{panelTop}px"
 		style:width="{layout.dockWidth('right')}px"
@@ -113,8 +121,8 @@
 	.panel-toolbar {
 		position: fixed;
 		z-index: 30;
-		left: 20px;
-		right: 20px;
+		left: var(--tellegen-dock-left, 20px);
+		right: var(--tellegen-dock-right, 20px);
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
@@ -159,7 +167,7 @@
 	.dock {
 		position: fixed;
 		z-index: 25;
-		bottom: 100px;
+		bottom: var(--tellegen-dock-bottom, 100px);
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
@@ -167,10 +175,10 @@
 		pointer-events: none;
 	}
 	.dock.left {
-		left: 20px;
+		left: var(--tellegen-dock-left, 20px);
 	}
 	.dock.right {
-		right: 20px;
+		right: var(--tellegen-dock-right, 20px);
 	}
 	.drawer {
 		position: fixed;
@@ -194,8 +202,8 @@
 	}
 	@media (max-width: 960px) {
 		.panel-toolbar {
-			left: 12px;
-			right: 12px;
+			left: var(--tellegen-dock-left, 12px);
+			right: var(--tellegen-dock-right, 12px);
 			gap: 6px;
 		}
 		.panel-buttons {

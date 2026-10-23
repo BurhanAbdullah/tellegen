@@ -79,5 +79,24 @@ software is MIT licensed.
 
 ## Maps
 
-The web app uses CARTO map tiles with OpenStreetMap attribution. Keep the map
-attribution visible in any hosted demo or derivative deployment.
+The web app's basemap comes from one of two providers, depending on whether
+the deployment has a CARTO basemap key. CARTO's terms ask for one; keys come
+from [carto.com/basemaps/apikey](https://carto.com/basemaps/apikey).
+
+- With a key, the basemap is CARTO's vector basemap (`basemaps.cartocdn.com`),
+  with OpenStreetMap data, and [OpenFreeMap](https://openfreemap.org/) is the
+  fallback.
+- Without a key, OpenFreeMap serves it (styles, vector tiles, fonts and
+  sprites from `tiles.openfreemap.org`), and the keyless CARTO style is the
+  fallback.
+
+OpenFreeMap's style and tile schema are [OpenMapTiles](https://openmaptiles.org/)
+(BSD 3-Clause for the schema, CC BY 4.0 for the design), and the map data is
+© [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors under
+the ODbL. The app modifies the OpenFreeMap styles when it renders them: road
+lines start at zoom 8, and in the dark theme water, waterways and land fills
+are recoloured.
+
+The attribution control shows the credits of whichever provider is on screen
+and cannot be switched off. Keep it visible in any hosted demo or derivative
+deployment.

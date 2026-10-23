@@ -220,7 +220,7 @@
 		background: var(--panel);
 		border: 1px solid var(--line);
 		border-radius: var(--radius-xs, 2px);
-		box-shadow: 0 4px 18px rgba(32, 36, 43, 0.14);
+		box-shadow: var(--elev-menu);
 	}
 
 	li {

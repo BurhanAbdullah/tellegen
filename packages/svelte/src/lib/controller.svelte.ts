@@ -74,6 +74,13 @@ const DEFAULT_CASE_ID = 'case500';
  * layer document from the engine's tolerant reader, its source file name, and
  * the reader's notes on records it could not use. */
 type GeoLayerFile = { name: string; layer: string; diagnostics: PowerIoDiagnostic[] };
+
+/** Whether a local case renders or will render a bus with this id. */
+function localHasBus(c: LocalCase, busId: number): boolean {
+	const buses = c.view?.buses ?? c.diagram?.view.buses ?? c.topology?.buses ?? [];
+	return buses.some((b) => b.id === busId);
+}
+
 type SavedCaseCapture = {
 	input: string;
 	solution?: string;
@@ -168,14 +175,43 @@ type DemandRangeAnchor = {
 
 export interface ControllerOptions {
 	api?: TellegenApiClient;
-	apiBase?: string;
+	/** Backend base path. `null` means there is no backend: no client is
+	 * created and nothing is ever fetched. */
+	apiBase?: string | null;
+	/** Whether `load()` fetches the bundled cases. Default `true`. With
+	 * `false`, `load()` only marks the shell loaded and frames the map. */
+	loadDefaultCases?: boolean;
 	mcTransport?: Pick<EngineTransport, 'solveMcModule' | 'applyMcGeo'> &
 		Partial<Pick<EngineTransport, 'solveMcStudy' | 'applyMcStudyGeo' | 'createMcPfSession'>>;
 }
 
+/** Input to `Controller.openBalancedModule` and `replaceLocalCase`: a
+ * balanced (transmission) powerio module, either as its JSON text or as the
+ * payload the engine's `ingestCase` already produced for it. */
+export interface OpenBalancedModuleInput {
+	/** Case label; also the stem of the `.pio.json` file name the shell shows. */
+	name: string;
+	/** Module JSON, ingested through the engine. Ignored when `payload` is set. */
+	moduleJson?: string;
+	/** An already ingested balanced payload; skips the engine round trip. */
+	payload?: IngestedCase;
+	/** A `.geo.json` layer document, for a module that carries no coordinates. */
+	geoLayer?: string;
+	/** Overrides the formulation the module declares. */
+	formulation?: Formulation;
+	/** Default `true`: add the case, make it active, and start its browser
+	 * solve. With `false` the prepared case is returned and not added. */
+	activate?: boolean;
+	/** Default `true`: fly the map to the case when it is activated. */
+	frame?: boolean;
+}
+
 export class Controller {
 	app: AppState;
-	api: TellegenApiClient;
+	/** `null` when the controller was created with `apiBase: null`; every
+	 * server path then reports "compute off" instead of fetching. */
+	api: TellegenApiClient | null;
+	readonly loadDefaultCases: boolean;
 	mcTransport: Pick<EngineTransport, 'solveMcModule' | 'applyMcGeo'> &
 		Partial<Pick<EngineTransport, 'solveMcStudy' | 'applyMcStudyGeo' | 'createMcPfSession'>>;
 	abort: AbortController | null = null;
@@ -262,6 +298,7 @@ export class Controller {
 	constructor(app: AppState, options: ControllerOptions = {}) {
 		this.app = app;
 		this.api = options.api ?? createApiClient({ apiBase: options.apiBase });
+		this.loadDefaultCases = options.loadDefaultCases ?? true;
 		this.mcTransport = options.mcTransport ?? browserWasmTransport;
 	}
 
@@ -557,8 +594,13 @@ export class Controller {
 	async ensureStudyInputJson(c: SolvableCase): Promise<string | null> {
 		if (c.studyInputJson) return c.studyInputJson;
 		if (!this.isBackendCase(c)) return null;
+		const api = this.api;
+		if (!api) {
+			c.solveFallbackReason = 'no API configured';
+			return null;
+		}
 		try {
-			const moduleJson = await this.api.getCaseModuleJson(c.id);
+			const moduleJson = await api.getCaseModuleJson(c.id);
 			c.studyInputJson = moduleJson;
 			return moduleJson;
 		} catch (e) {
@@ -840,6 +882,15 @@ export class Controller {
 	// ===== actions =====
 
 	load = (): Promise<void> => {
+		// Default cases off, or no backend at all: nothing to fetch. The shell
+		// still needs its loaded state and a framed map, and a host that opens
+		// its own cases must never see a request go out.
+		const api = this.api;
+		if (!this.loadDefaultCases || api === null) {
+			this.casesLoaded = true;
+			void this.app.requestFrame('all');
+			return Promise.resolve();
+		}
 		// A remount can call load() again before the first getCases() resolves; dedupe
 		// so two concurrent loads can't double-fetch the case list and double-fit the map.
 		if (this.loading) return this.loading;
@@ -848,14 +899,14 @@ export class Controller {
 			// copy and skip doomed requests (the SSE stream cannot see a 403). On
 			// failure assume enabled; the 403 latch in fetchServerColumn still
 			// catches a disabled deploy.
-			void this.api
+			void api
 				.getComputeStatus()
 				.then((s) => {
 					this.serverComputeOff = !s.enabled;
 				})
 				.catch(() => {});
 			try {
-				const summaries = await this.api.getCases();
+				const summaries = await api.getCases();
 				const hidden = this.readHiddenDefaultCases();
 				this.hiddenDefaults = new Set(hidden);
 				// Tear down the cases being replaced so their wasm Studies are freed and any
@@ -898,15 +949,20 @@ export class Controller {
 			if (frame && this.app.activeCaseId === c.id) this.app.requestFrame(c.id);
 			return;
 		}
+		const api = this.api;
+		if (!api) {
+			this.fail(`${c.name}: no API configured`);
+			return;
+		}
 		this.loadingBackendCase = c.id;
 		const requestedFormulation = c.formulation;
 		try {
 			const [network, dcBaseSolution] = await Promise.all([
-				c.network ? Promise.resolve(c.network) : this.api.getNetwork(c.id),
+				c.network ? Promise.resolve(c.network) : api.getNetwork(c.id),
 				// The server caches only the DC OPF base solution. Other formulations
 				// must hydrate from the browser Study so their objective, nodal values, flows, and
 				// voltage fields all come from the selected formulation.
-				requestedFormulation === 'dcopf' ? this.api.getSolution(c.id) : Promise.resolve(null)
+				requestedFormulation === 'dcopf' ? api.getSolution(c.id) : Promise.resolve(null)
 			]);
 			if (!this.app.byId(c.id)) return;
 			c.network = network;
@@ -1010,7 +1066,9 @@ export class Controller {
 		await this.hydrateFallback(this.app.removeLocal(c.id));
 	};
 
-	addAndActivateLocal = (c: LocalCase) => {
+	/** Add a prepared local case, make it active, frame it (unless `frame` is
+	 * false) and start its browser solve. */
+	addAndActivateLocal = (c: LocalCase, options: { frame?: boolean } = {}) => {
 		this.app.studyView = null;
 		this.clearSelection();
 		this.app.activeCaseId = null;
@@ -1019,7 +1077,8 @@ export class Controller {
 		if (c.formulation === 'acpf' && this.app.displayMode === 'price')
 			this.app.displayMode = 'voltage';
 		if (c.diagram) this.app.placingLocalId = null;
-		if (c.view || c.diagram || c.substations) this.app.requestFrame(c.id);
+		if ((options.frame ?? true) && (c.view || c.diagram || c.substations))
+			this.app.requestFrame(c.id);
 		this.maybeStartLocalSolve(c.id);
 	};
 
@@ -1513,7 +1572,8 @@ export class Controller {
 			'bus' in target
 				? () => this.selectBus(c.id, target.bus)
 				: () => this.selectBranch(c.id, target.branch);
-		if (this.serverComputeOff) {
+		const api = this.api;
+		if (this.serverComputeOff || !api) {
 			this.fail(this.computeOffNotice(c), retryOp);
 			return;
 		}
@@ -1524,8 +1584,8 @@ export class Controller {
 		try {
 			const col =
 				'bus' in target
-					? await this.api.getSensitivity(c.id, target.bus, c.deltas, ac.signal)
-					: await this.api.getBranchSensitivity(c.id, target.branch, c.deltas, ac.signal);
+					? await api.getSensitivity(c.id, target.bus, c.deltas, ac.signal)
+					: await api.getBranchSensitivity(c.id, target.branch, c.deltas, ac.signal);
 			if (!ac.signal.aborted) {
 				// The solution on screen came from the browser or the served base
 				// solve; the column came from the server. Label the mix.
@@ -1822,9 +1882,11 @@ export class Controller {
 	};
 
 	serverSolve = (c: CaseState, target: SensTarget | null, seq = c.solveSeq) => {
-		// Known-disabled server compute: show the notice instead of opening a
-		// stream that answers 403 without a readable body (EventSource hides it).
-		if (this.serverComputeOff) {
+		// Known-disabled server compute (or no backend at all): show the notice
+		// instead of opening a stream that answers 403 without a readable body
+		// (EventSource hides it).
+		const api = this.api;
+		if (this.serverComputeOff || !api) {
 			if (seq !== c.solveSeq) return;
 			c.solving = false;
 			if (this.isActiveSolveCase(c)) {
@@ -1839,7 +1901,7 @@ export class Controller {
 		c.solveFallbackReason ??= 'browser solve unavailable';
 		// The server computes bus columns only; a branch target streams no sensitivity.
 		const sensBus = target && 'bus' in target ? target.bus : null;
-		c.closeStream = this.api.openSolveStream(c.id, c.deltas, sensBus, {
+		c.closeStream = api.openSolveStream(c.id, c.deltas, sensBus, {
 			onsolution: (sol) => {
 				if (seq !== c.solveSeq) return;
 				c.solution = sol;
@@ -2154,42 +2216,47 @@ export class Controller {
 		if (local.studyInputJson && displays.length > 0) {
 			await this.fillFromDisplaySibling(local, displays);
 		}
-		if (!local.view && !local.diagram && local.topology) {
-			const view = {
-				...placeSyntheticTopology(local.topology, { lon: 0, lat: 0 }),
-				coordinate_space: 'diagram' as const
-			};
-			const layer = JSON.stringify({
-				type: 'FeatureCollection',
-				powerio_geo: { space: 'diagram', kind: 'synthetic' },
-				features: [
-					...view.buses.map((b) => ({
-						type: 'Feature',
-						properties: { target: 'bus', id: String(b.id) },
-						geometry: { type: 'Point', coordinates: [b.lon, b.lat] }
-					})),
-					...view.branches.map((b) => ({
-						type: 'Feature',
-						properties: {
-							target: 'branch',
-							branch_id: String(b.id),
-							from: String(b.from),
-							to: String(b.to)
-						},
-						geometry: { type: 'LineString', coordinates: b.path }
-					}))
-				]
-			});
-			local.diagram = {
-				view,
-				layer,
-				name: 'Network diagram',
-				warnings: ['No geographic coordinates; positions follow network connectivity.']
-			};
-			local.displayMode = 'diagram';
-		}
+		this.placeTopologyAsDiagram(local);
 		return { geoLayersConsumed, error };
 	};
+
+	/** A case that still has no geometry gets a connectivity layout as its
+	 * diagram, so it can render and solve without a placement step. */
+	private placeTopologyAsDiagram(local: LocalCase) {
+		if (local.view || local.diagram || !local.topology) return;
+		const view = {
+			...placeSyntheticTopology(local.topology, { lon: 0, lat: 0 }),
+			coordinate_space: 'diagram' as const
+		};
+		const layer = JSON.stringify({
+			type: 'FeatureCollection',
+			powerio_geo: { space: 'diagram', kind: 'synthetic' },
+			features: [
+				...view.buses.map((b) => ({
+					type: 'Feature',
+					properties: { target: 'bus', id: String(b.id) },
+					geometry: { type: 'Point', coordinates: [b.lon, b.lat] }
+				})),
+				...view.branches.map((b) => ({
+					type: 'Feature',
+					properties: {
+						target: 'branch',
+						branch_id: String(b.id),
+						from: String(b.from),
+						to: String(b.to)
+					},
+					geometry: { type: 'LineString', coordinates: b.path }
+				}))
+			]
+		});
+		local.diagram = {
+			view,
+			layer,
+			name: 'Network diagram',
+			warnings: ['No geographic coordinates; positions follow network connectivity.']
+		};
+		local.displayMode = 'diagram';
+	}
 
 	/** Retain diagram geometry separately from the electrical case's geographic data. */
 	private fillFromDisplaySibling = async (c: LocalCase, displays: DisplayFile[]) => {
@@ -2793,13 +2860,9 @@ export class Controller {
 				'The displayed edits have no matching saved result. Finish solving before saving them.'
 			);
 		}
-		if (
-			c instanceof CaseState &&
-			c.solution &&
-			c.formulation === 'dcopf' &&
-			this.api.getSavedCase
-		) {
-			const snapshot = await this.api.getSavedCase(c.id);
+		const api = this.api;
+		if (c instanceof CaseState && c.solution && c.formulation === 'dcopf' && api?.getSavedCase) {
+			const snapshot = await api.getSavedCase(c.id);
 			if (
 				snapshot.base_input !== base ||
 				JSON.stringify(snapshot.display_solution) !== JSON.stringify(c.solution)
@@ -2828,6 +2891,82 @@ export class Controller {
 			coordsKind: summary.coords_kind,
 			view
 		});
+	};
+
+	/** Ingest module text through the engine and require a balanced network. */
+	private async ingestBalancedModule(name: string, moduleJson: string | undefined) {
+		if (moduleJson === undefined)
+			throw new Error(`${name}: openBalancedModule needs moduleJson or payload`);
+		const result = await ingestJsonDrop(new TextEncoder().encode(moduleJson));
+		if (result.kind === 'transmission') return result.payload;
+		if (result.kind === 'module' && !('model' in result.payload)) return result.payload;
+		throw new Error(`${name}: not a balanced network module (${result.kind})`);
+	}
+
+	/** Open a balanced powerio module from memory, the programmatic twin of
+	 * dropping a `.pio.json` file: ingest (unless `payload` is given), apply an
+	 * optional geographic layer, lay out a module without coordinates as a
+	 * diagram, then add and activate it. Resolves to the new case; throws when
+	 * the module is not a balanced network or the geographic layer matches
+	 * nothing. */
+	openBalancedModule = async (input: OpenBalancedModuleInput): Promise<LocalCase> => {
+		this.app.parsingFile = true;
+		try {
+			const payload =
+				input.payload ?? (await this.ingestBalancedModule(input.name, input.moduleJson));
+			const local = this.localFromBalancedPayload(`${input.name}.pio.json`, {
+				...payload,
+				name: input.name
+			});
+			if (input.formulation) local.formulation = input.formulation;
+			if (input.geoLayer) {
+				await this.applyGeoLayers(local, [
+					{ name: `${input.name}.geo.json`, layer: input.geoLayer, diagnostics: [] }
+				]);
+			}
+			this.placeTopologyAsDiagram(local);
+			if (input.activate !== false) this.addAndActivateLocal(local, { frame: input.frame });
+			return local;
+		} finally {
+			this.app.parsingFile = false;
+		}
+	};
+
+	/** Swap a local case for a new module in place: same slot in the case list,
+	 * same formulation unless `input.formulation` says otherwise, same display
+	 * mode when the new case supports it, and the selected bus kept when the
+	 * new case has it. The previous case's Study is freed. */
+	replaceLocalCase = async (
+		previous: LocalCase,
+		input: OpenBalancedModuleInput
+	): Promise<LocalCase> => {
+		const wasActive = this.app.activeLocalId === previous.id;
+		const selectedBus = wasActive ? this.app.selectedBus : null;
+		const displayMode = previous.displayMode;
+		const next = await this.openBalancedModule({
+			...input,
+			formulation: input.formulation ?? previous.formulation,
+			activate: false
+		});
+		if (displayMode === 'diagram' ? next.diagram : next.view) next.displayMode = displayMode;
+		const slot = this.app.localCases.findIndex((c) => c.id === previous.id);
+		// A seq bump invalidates any in-flight browser solve of the old case.
+		previous.solveSeq = (previous.solveSeq ?? 0) + 1;
+		this.disposeStudy(previous);
+		if (wasActive) {
+			this.addAndActivateLocal(next, { frame: input.frame });
+		} else {
+			this.app.localCases = [...this.app.localCases, next];
+			this.maybeStartLocalSolve(next.id);
+		}
+		const cases = this.app.localCases.filter((c) => c.id !== previous.id && c.id !== next.id);
+		cases.splice(slot < 0 ? cases.length : slot, 0, next);
+		this.app.localCases = cases;
+		if (this.app.placingLocalId === previous.id) this.app.placingLocalId = null;
+		if (selectedBus !== null && localHasBus(next, selectedBus)) {
+			void this.selectLocalBus(next.id, selectedBus);
+		}
+		return next;
 	};
 
 	/** Build (or reuse) the case's Study and commit it at the current edit state, so a
@@ -3156,6 +3295,7 @@ export class Controller {
 	};
 
 	restoreDefaultCases = () => {
+		if (!this.loadDefaultCases) return;
 		try {
 			if (typeof localStorage !== 'undefined') localStorage.removeItem(HIDDEN_DEFAULT_CASES_KEY);
 		} catch {
