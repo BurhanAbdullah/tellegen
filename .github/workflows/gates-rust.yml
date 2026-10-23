@@ -75,7 +75,7 @@ jobs:
           python3 crates/tellegen/tests/generate_mc_load_oracle.py
           cargo test -p tellegen --test mc_load_oracle
       - name: Test the wasm adapter as it ships
-        run: cargo test -p tellegen-wasm --features conic
+        run: cargo test -p tellegen-wasm --features conic,synth
       # Mirrors `just mc-pf-regression`: the generated ~10,000-bus,
       # ~32,000-terminal retained-session regression (#132). It fails only on
       # deterministic properties (warm/fresh agreement, one factorization, no

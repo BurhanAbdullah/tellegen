@@ -684,18 +684,24 @@ impl Generator {
         Ok(module)
     }
 
-    /// The module as PowerIO IR text, from `Electrify` on. Idempotent.
-    pub fn module_json(&self) -> Result<String, SynthError> {
-        let module = match &self.state.module {
-            Some(m) => m.clone(),
+    /// The module: the network with its producer and generation history,
+    /// from `Electrify` on. Before `Finalize` it reflects the network as the
+    /// stages so far left it. Idempotent.
+    pub fn module(&self) -> Result<PioModule<BalancedNetwork>, SynthError> {
+        match &self.state.module {
+            Some(m) => Ok(m.clone()),
             None => {
                 let net = self
                     .network()
                     .ok_or_else(|| SynthError::State("no network before Electrify".to_owned()))?;
-                self.make_module(net)?
+                self.make_module(net)
             }
-        };
-        tellegen::ir::serialize_module(&module).map_err(SynthError::Build)
+        }
+    }
+
+    /// The module as PowerIO IR text, from `Electrify` on. Idempotent.
+    pub fn module_json(&self) -> Result<String, SynthError> {
+        tellegen::ir::serialize_module(&self.module()?).map_err(SynthError::Build)
     }
 
     /// The typed module and the report; `Done` only.

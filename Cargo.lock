@@ -2012,6 +2012,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tellegen",
+ "tellegen-synth",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]

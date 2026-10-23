@@ -34,7 +34,7 @@ deny:
 
 # CI gate: test the wasm adapter as it ships (`default = []`, so `test` skips it).
 wasm-adapter-test:
-    cargo test -p tellegen-wasm --features conic
+    cargo test -p tellegen-wasm --features conic,synth
 
 # CI gate: the EPL-2.0 pounce backend must never enter a shipped (wasm/server/cli) build.
 epl-guard:
