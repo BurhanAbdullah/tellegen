@@ -795,14 +795,17 @@
 	}
 
 	async function loadMapModules() {
-		const [maplibre, deckMap, layers, worker] = await Promise.all([
+		const [maplibre, deckMap, layers, workerUrl] = await Promise.all([
 			import('maplibre-gl'),
 			import('@deck.gl/maplibre'),
 			import('@deck.gl/layers'),
-			import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')
+			// A package export, not a relative import: its `development`
+			// condition keeps the worker's `?worker&url` import out of the dev
+			// server's pre-bundle (see maplibre-worker.dev.ts).
+			import('@tellegen/svelte/maplibre-worker').then((m) => m.maplibreWorkerUrl())
 		]);
 		// Bundle the worker with its shared imports and configure it before creating a map.
-		maplibre.setWorkerUrl(worker.default);
+		maplibre.setWorkerUrl(workerUrl);
 		return {
 			maplibregl: maplibre,
 			MapLibreOverlay: deckMap.MapLibreOverlay,

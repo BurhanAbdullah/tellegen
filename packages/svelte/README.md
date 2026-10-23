@@ -236,6 +236,15 @@ A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
 tiles, fonts and sprites are all fetched.
 
+The map needs no Vite settings, in a build or in the dev server. MapLibre's
+worker comes from a `?worker&url` import, which a production build bundles
+with its shared chunk. Vite's dev server pre-bundles this package and cannot
+pre-bundle that import, so the package's `./maplibre-worker` export has a
+`development` condition that loads it at run time, outside the pre-bundle.
+That export is internal to `TellegenMap`. A host that excluded
+`@tellegen/svelte` from `optimizeDeps` to work around this can drop the
+exclusion.
+
 ## Dark theme
 
 `<TellegenProvider theme="dark">` (or `<TellegenViewer theme="dark">`) sets

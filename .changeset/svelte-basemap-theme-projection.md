@@ -37,6 +37,11 @@ host passed), and the reasons given to `onBasemapFallback` and
 is `MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
 `cartoApiKey`, and the default shell passes it and `theme` to its map.
 
+The map now runs in a host's Vite dev server with no `optimizeDeps` settings.
+MapLibre's worker URL comes from a new internal `./maplibre-worker` export,
+whose `development` condition keeps the worker's `?worker&url` import out of
+the dev server's pre-bundle, which stopped the dev server at startup.
+
 The controller gains `openBalancedModule({ name, moduleJson | payload,
 geoLayer?, formulation?, activate?, frame? })` and
 `replaceLocalCase(previous, input)` to open a balanced powerio module from
