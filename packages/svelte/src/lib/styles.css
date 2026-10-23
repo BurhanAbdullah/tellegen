@@ -125,8 +125,8 @@
 	--line: #34465a; /* decorative separators only */
 	--border-strong: #6f8aa6; /* 3.4:1, component boundaries */
 	--ink: #e8eef4; /* 15.3:1 */
-	--ink-dim: #b4c1cd; /* 9.8:1 */
-	--ink-faint: #93a4b4; /* 7.0:1 */
+	--ink-dim: #b4c1cd; /* 9.7:1 */
+	--ink-faint: #95a6b6; /* 7.14:1, and 7.02:1 on the opaque --paper of a panel card */
 	--accent: #ffb24d;
 	--accent-bright: #ffc46e; /* 11.4:1 */
 	--accent-soft: rgba(255, 178, 77, 0.14);
