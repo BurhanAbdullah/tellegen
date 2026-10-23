@@ -1,10 +1,18 @@
 //! National electricity demand: the yearly demand Ember reports per country
 //! (via Our World in Data's energy dataset, CC BY 4.0), bundled as
 //! `data/national_demand.json` and derived by
-//! `scripts/derive-national-demand.py`. The population demand basis turns a
-//! country's demand into a peak per head of the places table, so a region
-//! covering a whole country reproduces that country's peak and a region
-//! spanning several countries weights each place by its own country.
+//! `scripts/derive-national-demand.py`, and each country's area (Natural
+//! Earth, public domain), bundled as `data/country_areas.json` and derived by
+//! `scripts/derive-country-areas.py`.
+//!
+//! The national demand basis splits a country's peak in two. The share its
+//! listed places explain (their population over the national population)
+//! follows those places. The rest, the people the places table does not
+//! list, is spread over the country's area: a region takes it in proportion
+//! to the country area it covers, never more than its share of the country's
+//! listed population. A region covering a whole country therefore
+//! reproduces that country's peak, and a box holding a country's few listed
+//! places no longer takes all of its demand.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -19,6 +27,16 @@ pub const SCHEMA: &str = "tellegen.synth-national-demand/1";
 
 /// Hours in a year, converting annual energy to an average load.
 const HOURS_PER_YEAR: f64 = 8760.0;
+
+/// Schema tag of the bundled area table.
+pub const AREAS_SCHEMA: &str = "tellegen.synth-country-areas/1";
+
+/// Share of a country's area a region must cover to take all of the
+/// country's unlisted demand. A whole-country selection measures a few
+/// percent less than the table's area where its outline is more generalised
+/// (1:110m against the table's 1:50m) or small islands are left out.
+/// Modelling choice, no source.
+pub const COUNTRY_AREA_COVERAGE: f64 = 0.95;
 
 /// Peak demand as a multiple of the annual average load (the inverse of the
 /// annual load factor). source: annual load factors of 0.58–0.77 in the
@@ -187,6 +205,101 @@ impl NationalDemand {
     pub fn world_intensity(&self, peak_factor: f64) -> f64 {
         self.world.average_mw() / self.world.population * peak_factor
     }
+
+    /// Population of every place of each country in `places`, by table code.
+    pub fn listed_population(&self, places: &Places) -> BTreeMap<String, f64> {
+        let mut population: BTreeMap<String, f64> = BTreeMap::new();
+        for (code, &total) in places.country_population() {
+            *population
+                .entry(self.canonical(code).to_owned())
+                .or_default() += total;
+        }
+        population
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AreasFile {
+    schema: String,
+    source: String,
+    source_url: String,
+    source_sha256: String,
+    #[allow(dead_code)]
+    note: String,
+    areas_km2: BTreeMap<String, f64>,
+}
+
+/// Country areas by places-table code (Natural Earth `ADM0_A3`), km².
+#[derive(Clone, Debug)]
+pub struct CountryAreas {
+    pub source: String,
+    pub source_url: String,
+    /// SHA-256 of the admin-0 file the areas were derived from.
+    pub source_sha256: String,
+    /// SHA-256 of the area table itself.
+    pub sha256: String,
+    areas: BTreeMap<String, f64>,
+}
+
+impl CountryAreas {
+    /// Parse and check an area table.
+    pub fn parse(bytes: &[u8]) -> Result<Self, String> {
+        let file: AreasFile =
+            serde_json::from_slice(bytes).map_err(|e| format!("country area table: {e}"))?;
+        if file.schema != AREAS_SCHEMA {
+            return Err(format!(
+                "country area table: schema {:?}, expected {AREAS_SCHEMA:?}",
+                file.schema
+            ));
+        }
+        if let Some((code, area)) = file
+            .areas_km2
+            .iter()
+            .find(|(_, &a)| !(a.is_finite() && a >= 0.0))
+        {
+            return Err(format!("country area table: {code} has area {area}"));
+        }
+        Ok(Self {
+            source: file.source,
+            source_url: file.source_url,
+            source_sha256: file.source_sha256,
+            sha256: Sha256::digest(bytes)
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect(),
+            areas: file.areas_km2,
+        })
+    }
+
+    /// The bundled table, parsed once per process.
+    pub fn bundled() -> &'static CountryAreas {
+        static TABLE: OnceLock<CountryAreas> = OnceLock::new();
+        TABLE.get_or_init(|| {
+            Self::parse(include_bytes!("../data/country_areas.json"))
+                .expect("the bundled country area table parses")
+        })
+    }
+
+    pub fn len(&self) -> usize {
+        self.areas.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.areas.is_empty()
+    }
+
+    /// Area of a national demand table country, km²: every places-table code
+    /// that names it (aliases included). `None` when no code has an area.
+    pub fn country_km2(&self, table: &NationalDemand, code: &str) -> Option<f64> {
+        let mut found = None;
+        for (place_code, &area) in &self.areas {
+            if table.canonical(place_code) == code {
+                *found.get_or_insert(0.0) += area;
+            }
+        }
+        found.filter(|&a| a > 0.0)
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +353,23 @@ mod tests {
         assert!(!k.contains_key("ZZZ"));
         let world = table.world_intensity(1.3);
         assert!((0.0003..0.001).contains(&world), "{world}");
+    }
+
+    #[test]
+    fn the_bundled_areas_cover_the_places_and_sum_aliases() {
+        let areas = CountryAreas::bundled();
+        let table = NationalDemand::bundled();
+        assert!(areas.len() > 200, "{}", areas.len());
+        assert_eq!(areas.sha256.len(), 64);
+        // Natural Earth's outline at 1:50m: about 9.4 million km² with Alaska.
+        let usa = areas.country_km2(table, "USA").unwrap();
+        assert!((9.0e6..9.9e6).contains(&usa), "{usa}");
+        // Finland takes the Åland Islands, which the places table codes ALD.
+        let fin = areas.country_km2(table, "FIN").unwrap();
+        assert!(fin > areas.areas["FIN"], "{fin}");
+        assert!(areas.country_km2(table, "XXX").is_none());
+        let bad = r#"{"schema":"tellegen.synth-country-areas/1","source":"s","source_url":"u","source_sha256":"x","note":"n","areas_km2":{"AAA":-1}}"#;
+        assert!(CountryAreas::parse(bad.as_bytes()).is_err());
     }
 
     #[test]

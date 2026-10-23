@@ -233,10 +233,23 @@ pub struct CountryDemand {
     /// Peak demand of those places, MW.
     pub peak_mw: f64,
     /// The country's national peak (annual average load × peak factor), MW;
-    /// `peak_mw` equals it when the region holds every place of the country.
-    /// Absent for the world fallback.
+    /// `peak_mw` equals it when the region holds every place and at least 95%
+    /// of the area of the country. Absent for the world fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub national_peak_mw: Option<f64>,
+    /// Population of the country's listed places over its national
+    /// population, at most 1: the share of its peak that follows its places.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listed_share: Option<f64>,
+    /// Share of the country's area the region covers (each part of the region
+    /// counted to the country of its nearest place); absent without an area.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_share: Option<f64>,
+    /// Of `peak_mw`, the part of the country's unlisted demand the region
+    /// takes: in proportion to the area it covers, never beyond its share of
+    /// the country's listed population, MW.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unlisted_peak_mw: Option<f64>,
 }
 
 /// The region as the generator resolved it.
@@ -684,6 +697,11 @@ pub struct DemandTableProvenance {
     pub source_sha256: String,
     /// Peak demand as a multiple of the annual average load.
     pub peak_factor: f64,
+    /// SHA-256 of the bundled country area table the unlisted demand spreads
+    /// over.
+    pub areas_sha256: String,
+    /// SHA-256 of the admin-0 file the areas were derived from.
+    pub areas_source_sha256: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

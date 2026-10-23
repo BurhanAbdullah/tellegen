@@ -14,7 +14,7 @@ use powerio::{BalancedNetwork, HistoryEntry, HistoryId, HistoryKind, PioModule, 
 use crate::build::{build_network, BuiltNetwork};
 use crate::calibrate::Calibrator;
 use crate::context::{resolve_context, ContextData};
-use crate::demand::NationalDemand;
+use crate::demand::{CountryAreas, NationalDemand};
 use crate::electrical::branches::{draw_corridors, expand_circuits, spread_sigma, DraftBranch};
 use crate::electrical::generators::{place_generators, DraftGenerator};
 use crate::electrical::loads::assign_loads;
@@ -286,6 +286,7 @@ impl Generator {
             (context.demand_basis, &self.request.demand)
         {
             let table = NationalDemand::bundled();
+            let areas = CountryAreas::bundled();
             self.report.provenance.demand_table = Some(DemandTableProvenance {
                 schema: crate::demand::SCHEMA.to_owned(),
                 year: table.year,
@@ -294,6 +295,8 @@ impl Generator {
                 sha256: table.sha256.clone(),
                 source_sha256: table.source_sha256.clone(),
                 peak_factor: *peak_factor,
+                areas_sha256: areas.sha256.clone(),
+                areas_source_sha256: areas.source_sha256.clone(),
             });
         }
         counts.insert("places_in_region".into(), data.cities.len() as u64);

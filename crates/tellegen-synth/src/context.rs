@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::demand::NationalDemand;
+use crate::demand::{CountryAreas, NationalDemand, COUNTRY_AREA_COVERAGE};
 use crate::error::SynthError;
 use crate::geom::region::RegionShape;
 use crate::geom::{haversine_km, wrap_lon};
@@ -116,7 +116,7 @@ pub fn resolve_context(
         Some(count) => (count, None),
         None => {
             let mut sizing = places.in_region(&shape);
-            let peak = size_demand(&req.demand, places, &mut sizing).peak_mw;
+            let peak = size_demand(&req.demand, places, &mut sizing, &shape).peak_mw;
             (
                 demand_bus_count(req.density, shape.area_km2, peak),
                 Some(peak),
@@ -223,7 +223,7 @@ pub fn resolve_context(
         .collect();
     let population: f64 = cities.iter().map(|c| c.place.population).sum();
 
-    let sized = size_demand(&req.demand, places, &mut cities);
+    let sized = size_demand(&req.demand, places, &mut cities, &shape);
     let (peak_demand_mw, demand_basis) = if sized.basis == DemandBasis::TotalMw
         || sized.peak_mw > 0.0
     {
@@ -306,12 +306,90 @@ struct DemandSizing {
     by_country: Vec<CountryDemand>,
 }
 
-/// Size demand from `spec`. Under the national basis each place draws its
-/// country's peak per head of `places` ([`NationalDemand::place_intensity`])
-/// and a place whose country has no entry the world average per person;
-/// with `per_capita_kw` every person draws that average; a stated total
-/// leaves the population weights as they are.
-fn size_demand(spec: &DemandSpec, places: &Places, cities: &mut [PlacedCity]) -> DemandSizing {
+/// Samples a region's area is split into when it is shared among the
+/// countries of its places, each sample taking the country of its nearest
+/// place. Modelling choice: a share to a few percent is all the demand split
+/// needs, and the cost stays a few milliseconds for a continent.
+const AREA_SAMPLES: f64 = 1024.0;
+
+/// The region's area by country of its nearest place (table codes), km².
+/// Every polygon of the selection counts, islands the network leaves out
+/// included: leaving one out removes its listed places, and with them its
+/// share of the country's demand, not a share by area, which would charge
+/// an empty territory such as French Guiana or Alaska as if it were
+/// populated. Samples sit on a regular grid in each polygon, weighted by
+/// cos(lat) so they share the polygon's spherical area.
+fn area_by_country(
+    shape: &RegionShape,
+    cities: &[PlacedCity],
+    table: &NationalDemand,
+) -> BTreeMap<String, f64> {
+    let mut out = BTreeMap::new();
+    if cities.is_empty() {
+        return out;
+    }
+    let total = shape.area_km2;
+    if total <= 0.0 {
+        return out;
+    }
+    let nearest = |lon: f64, lat: f64| -> &str {
+        let k = lat.to_radians().cos();
+        let (_, j) = cities
+            .iter()
+            .enumerate()
+            .map(|(j, c)| (((c.lon - lon) * k).powi(2) + (c.lat - lat).powi(2), j))
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+            .expect("a city");
+        table.canonical(&cities[j].place.iso_a3)
+    };
+    for poly in &shape.polygons {
+        let target = (AREA_SAMPLES * poly.area_km2 / total).max(1.0);
+        let dlat = (poly.area_km2 / target).sqrt().max(1e-3) / 111.0;
+        let bb = *poly.bbox();
+        let mid = 0.5 * (bb.south + bb.north);
+        let dlon = dlat / mid.to_radians().cos().abs().max(0.05);
+        let mut points = Vec::new();
+        let mut lat = bb.south + 0.5 * dlat;
+        while lat < bb.north {
+            let mut lon = bb.west + 0.5 * dlon;
+            while lon < bb.east {
+                if poly.contains(lon, lat) {
+                    points.push((lon, lat));
+                }
+                lon += dlon;
+            }
+            lat += dlat;
+        }
+        if points.is_empty() {
+            points.push(poly.rings[0][0]);
+        }
+        let weight: f64 = points.iter().map(|p| p.1.to_radians().cos()).sum();
+        for (lon, lat) in points {
+            let share = if weight > 0.0 {
+                lat.to_radians().cos() / weight
+            } else {
+                1.0
+            };
+            *out.entry(nearest(lon, lat).to_owned()).or_default() += poly.area_km2 * share;
+        }
+    }
+    out
+}
+
+/// Size demand from `spec`. Under the national basis each country's peak
+/// splits into the share its listed places explain, which follows them, and
+/// the unlisted rest, which the region takes in proportion to the country
+/// area it covers (by nearest place) but never beyond its share of the
+/// country's listed population
+/// ([`crate::demand`]); a place whose country has no entry draws the world
+/// average per person. With `per_capita_kw` every person draws that
+/// average; a stated total leaves the population weights as they are.
+fn size_demand(
+    spec: &DemandSpec,
+    places: &Places,
+    cities: &mut [PlacedCity],
+    shape: &RegionShape,
+) -> DemandSizing {
     let (per_capita_kw, peak_factor) = match spec {
         DemandSpec::TotalMw { mw } => {
             return DemandSizing {
@@ -336,29 +414,62 @@ fn size_demand(spec: &DemandSpec, places: &Places, cities: &mut [PlacedCity]) ->
         };
     }
     let table = NationalDemand::bundled();
-    let intensity = table.place_intensity(places, peak_factor);
+    let areas = CountryAreas::bundled();
+    let listed = table.listed_population(places);
     let world = table.world_intensity(peak_factor);
+    let covered = area_by_country(shape, cities, table);
     let mut by_country: BTreeMap<String, CountryDemand> = BTreeMap::new();
-    for city in cities.iter_mut() {
+    for city in cities.iter() {
         let code = table.canonical(&city.place.iso_a3);
-        let national = table
-            .country(code)
-            .zip(intensity.get(code))
-            .map(|(entry, &k)| (entry, k));
-        city.demand_weight = city.place.population * national.map_or(world, |(_, k)| k);
         let share = by_country
             .entry(code.to_owned())
             .or_insert_with(|| CountryDemand {
                 code: code.to_owned(),
-                year: national.map(|(entry, _)| entry.year),
+                year: None,
                 places: 0,
                 population: 0.0,
                 peak_mw: 0.0,
-                national_peak_mw: national.map(|(entry, _)| entry.average_mw() * peak_factor),
+                national_peak_mw: None,
+                listed_share: None,
+                area_share: None,
+                unlisted_peak_mw: None,
             });
         share.places += 1;
         share.population += city.place.population;
-        share.peak_mw += city.demand_weight;
+    }
+    // Each country's peak in the region, and the peak per person of its
+    // places there.
+    let mut intensity: BTreeMap<String, f64> = BTreeMap::new();
+    for (code, share) in by_country.iter_mut() {
+        let (Some(entry), Some(&total)) = (table.country(code), listed.get(code)) else {
+            share.peak_mw = share.population * world;
+            intensity.insert(code.clone(), world);
+            continue;
+        };
+        if !(total > 0.0 && share.population > 0.0) {
+            intensity.insert(code.clone(), 0.0);
+            continue;
+        }
+        let national = entry.average_mw() * peak_factor;
+        let explained = (total / entry.population).min(1.0);
+        let held = (share.population / total).min(1.0);
+        let area_share = areas
+            .country_km2(table, code)
+            .map(|a| covered.get(code).copied().unwrap_or(0.0) / a);
+        let unlisted_share = area_share
+            .map_or(held, |a| held.min(a / COUNTRY_AREA_COVERAGE))
+            .min(1.0);
+        let unlisted = national * (1.0 - explained) * unlisted_share;
+        share.year = Some(entry.year);
+        share.national_peak_mw = Some(national);
+        share.listed_share = Some(explained);
+        share.area_share = area_share;
+        share.unlisted_peak_mw = Some(unlisted);
+        share.peak_mw = national * explained * held + unlisted;
+        intensity.insert(code.clone(), share.peak_mw / share.population);
+    }
+    for city in cities.iter_mut() {
+        city.demand_weight = city.place.population * intensity[table.canonical(&city.place.iso_a3)];
     }
     let mut by_country: Vec<CountryDemand> = by_country.into_values().collect();
     by_country.sort_by(|a, b| {
@@ -516,13 +627,20 @@ mod tests {
         assert_eq!((zzz.year, zzz.national_peak_mw), (None, None));
         let world = NationalDemand::bundled().world_intensity(DEFAULT_PEAK_FACTOR);
         assert!((zzz.peak_mw - 2_000_000.0 * world).abs() < 1e-6 * zzz.peak_mw);
-        // PRT's only place here carries all of Portugal's peak.
+        // PRT's only place in this table is in the box, but the box covers
+        // a sliver of Portugal's area: it takes the place's listed share and
+        // that sliver of the unlisted rest, not Portugal's whole peak.
         let prt = ctx
             .demand_by_country
             .iter()
             .find(|c| c.code == "PRT")
             .unwrap();
-        assert!((prt.peak_mw - prt.national_peak_mw.unwrap()).abs() < 1e-6 * prt.peak_mw);
+        let (national, listed) = (prt.national_peak_mw.unwrap(), prt.listed_share.unwrap());
+        let unlisted =
+            national * (1.0 - listed) * (prt.area_share.unwrap() / COUNTRY_AREA_COVERAGE);
+        assert!((prt.unlisted_peak_mw.unwrap() - unlisted).abs() < 1e-6 * national);
+        assert!((prt.peak_mw - (national * listed + unlisted)).abs() < 1e-6 * national);
+        assert!(prt.peak_mw < 0.2 * national, "{prt:?}");
     }
 
     #[test]
@@ -534,15 +652,30 @@ mod tests {
         assert_eq!(ctx.demand_basis, DemandBasis::National);
         assert!(ctx.population_in_region > 5_000_000.0);
         assert_eq!(data.cities[0].place.name, "Baghdad");
-        // Every Iraqi place of the table lies in the box, so the box carries
-        // Iraq's national peak.
-        let irq = ctx
-            .demand_by_country
-            .iter()
-            .find(|c| c.code == "IRQ")
-            .unwrap();
-        let national = irq.national_peak_mw.unwrap();
-        assert!((irq.peak_mw - national).abs() < 1e-6 * national);
+        // Every Iraqi and Iranian place of this small table lies in the box.
+        // Their listed shares follow them; the box takes the unlisted rest in
+        // proportion to the area it covers: much of Iraq, a sliver of Iran.
+        let country = |code: &str| {
+            ctx.demand_by_country
+                .iter()
+                .find(|c| c.code == code)
+                .unwrap()
+        };
+        for code in ["IRQ", "IRN"] {
+            let c = country(code);
+            let (national, listed) = (c.national_peak_mw.unwrap(), c.listed_share.unwrap());
+            let unlisted = national
+                * (1.0 - listed)
+                * (c.area_share.unwrap() / COUNTRY_AREA_COVERAGE).min(1.0);
+            assert!((c.peak_mw - (national * listed + unlisted)).abs() < 1e-6 * national);
+        }
+        let (irq, irn) = (country("IRQ"), country("IRN"));
+        assert!((0.4..0.8).contains(&irq.area_share.unwrap()), "{irq:?}");
+        assert!(irn.area_share.unwrap() < 0.15, "{irn:?}");
+        assert!(
+            irn.peak_mw < 0.15 * irn.national_peak_mw.unwrap(),
+            "{irn:?}"
+        );
         assert!(ctx.peak_demand_mw / ctx.target_bus_count as f64 <= MW_PER_BUS_BAND.1 + 1e-9);
 
         let req = SynthRequest::new(Region::bbox(-30.0, -50.0, -10.0, -30.0, "South Atlantic"));
