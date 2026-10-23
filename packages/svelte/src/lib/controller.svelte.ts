@@ -64,7 +64,7 @@ import {
 	type PowerIoDiagnostic,
 	type SensTarget
 } from '@tellegen/engine';
-import { errorText, extent, formulationLabel, rgbaCss } from './format.js';
+import { browserSolveFailure, errorText, extent, formulationLabel, rgbaCss } from './format.js';
 import { DEAD_ZONE_MW } from './slider.js';
 
 const HIDDEN_DEFAULT_CASES_KEY = 'tellegen.hiddenDefaultCases.v1';
@@ -1876,9 +1876,9 @@ export class Controller {
 				return;
 			}
 			c.solving = false;
-			this.app.error = `${c.label}: browser solve unavailable${
-				c.solveFallbackReason ? `: ${c.solveFallbackReason}` : ''
-			}`;
+			const failure = browserSolveFailure(c.label, c.solveFallbackReason);
+			this.app.error = failure.message;
+			this.app.errorDetail = failure.detail;
 		});
 	};
 
