@@ -1,6 +1,9 @@
 mod common;
 
-use tellegen_synth::electrical::params::{class_ratio, MAX_ANGLE_SPREAD_RAD, PLANNING_UTILISATION};
+use tellegen_synth::electrical::params::{
+    class_ratio, MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_UTILISATION,
+    STIFFENING_BRANCH_BUDGET,
+};
 use tellegen_synth::{generate, DemandSpec};
 
 /// Demand in line with the ACTIVSg2000 case (67 GW on 2000 buses, about
@@ -212,4 +215,61 @@ fn far_islands_kept_are_validated_separately() {
         .buses()
         .iter()
         .all(|b| b.location.unwrap().x > 40.0));
+}
+
+/// One unit feeding a 1,400 km strip: every megawatt crosses the region.
+fn strip_fed_from_one_unit(mw: f64) -> tellegen_synth::GenerationReport {
+    let region = tellegen_synth::Region::bbox(30.0, 30.0, 45.0, 32.0, "strip");
+    let mut req = common::request(region, 2026, Some(40));
+    req.generator_count = Some(1);
+    req.demand = DemandSpec::TotalMw { mw };
+    req.validation.run_ac_pf = false;
+    req.validation.run_dc_opf = false;
+    generate(req, common::places(), None).unwrap().1
+}
+
+#[test]
+fn a_corridor_short_of_capacity_at_the_circuit_cap_raises_its_ends_to_765_kv() {
+    let report = strip_fed_from_one_unit(35_000.0);
+    let plan = report.planning.as_ref().unwrap();
+    assert_eq!(plan.circuit_cap, MAX_CIRCUITS_PER_CORRIDOR);
+    assert!(plan.max_parallel_circuits <= plan.circuit_cap, "{plan:?}");
+    assert_eq!(plan.added_level_kv, Some(765.0));
+    let codes: Vec<&str> = report.warnings.iter().map(|w| w.code.as_str()).collect();
+    assert!(codes.contains(&"voltage_level_added"), "{codes:?}");
+    assert_eq!(report.context.as_ref().unwrap().voltage_levels_kv[0], 765.0);
+    let elements = report.elements.as_ref().unwrap();
+    assert!(elements
+        .branches
+        .iter()
+        .all(|b| b.circuits <= MAX_CIRCUITS_PER_CORRIDOR));
+    // What 765 kV and the cap still cannot carry is reported, not stacked.
+    if plan.capped_corridors > 0 {
+        assert!(codes.contains(&"planning_incomplete"), "{codes:?}");
+    }
+}
+
+#[test]
+fn stiffening_stops_at_the_branch_budget_and_says_the_plan_is_incomplete() {
+    let report = strip_fed_from_one_unit(15_000.0);
+    let plan = report.planning.as_ref().unwrap();
+    let n = report.stats.as_ref().unwrap().n_buses as f64;
+    assert!(!plan.converged, "{plan:?}");
+    assert!(plan.angle_spread_deg > MAX_ANGLE_SPREAD_RAD.to_degrees());
+    // Stiffening adds a circuit only below the budget; capacity may add more.
+    let budget = (STIFFENING_BRANCH_BUDGET * n).floor() as usize;
+    assert!(
+        plan.branches <= budget.max(plan.branch_target) + plan.capacity_circuits,
+        "{plan:?}"
+    );
+    let incomplete = report
+        .warnings
+        .iter()
+        .find(|w| w.code == "planning_incomplete")
+        .expect("planning_incomplete");
+    assert!(
+        incomplete.message.contains("angle spread"),
+        "{}",
+        incomplete.message
+    );
 }

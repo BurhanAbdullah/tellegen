@@ -22,6 +22,26 @@ fn same_request_gives_byte_identical_module_and_report() {
 }
 
 #[test]
+fn the_default_request_is_byte_identical_across_runs() {
+    // The automatic bus count, national demand, place snapping and the
+    // adequacy areas all take part.
+    let req = common::request(common::iraq_box(), 5, None);
+    let (m1, r1) = generate(req.clone(), common::places(), None).expect("first");
+    let (m2, r2) = generate(req, common::places(), None).expect("second");
+    assert_eq!(
+        tellegen::ir::serialize_module(&m1).unwrap(),
+        tellegen::ir::serialize_module(&m2).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_string(&r1).unwrap(),
+        serde_json::to_string(&r2).unwrap()
+    );
+    let ctx = r1.context.as_ref().unwrap();
+    assert!(!ctx.demand_by_country.is_empty());
+    assert!(r1.provenance.demand_table.is_some());
+}
+
+#[test]
 fn seed_changes_positions_and_hash_ignores_field_order() {
     let a = common::request(common::iraq_box(), 1, Some(40));
     let mut b = a.clone();
