@@ -313,6 +313,7 @@ const powerioNames = [
   "powerio-dist",
   "powerio-matrix",
   "powerio-prob",
+  "powerio-tnd",
   "powerio-tx",
 ];
 

@@ -1,16 +1,16 @@
 # PowerIO 0.11 consumer review
 
-Tellegen uses the published PowerIO 0.11.5 crates. All six PowerIO components
-resolve from crates.io at 0.11.5 with registry checksums. The release tag
-[`v0.11.5`](https://github.com/eigenergy/powerio/releases/tag/v0.11.5) identifies
-commit `341d72767f8ff3d535a9bb0aca5cb9d32e886694`.
-`evidence/webmcp/powerio-releases.json` records published release revisions.
+Tellegen uses the published PowerIO 0.11.6 crates. All seven PowerIO components
+resolve from crates.io at 0.11.6 with registry checksums.
+`evidence/webmcp/powerio-releases.json` maps each release tag, such as
+[`v0.11.6`](https://github.com/eigenergy/powerio/releases/tag/v0.11.6), to its
+commit.
 
 Pull requests that change the dependency manifests, lockfile, or pin scripts
 run the `PowerIO Candidate` workflow against the committed dependency set.
 Manual dispatch can test a full PowerIO commit SHA using temporary Git patches
 and a disposable lockfile. Both paths verify one common version and source for
-all six components before exercising Rust, WebAssembly, WebMCP, and browser
+all seven components before exercising Rust, WebAssembly, WebMCP, and browser
 integration.
 
 Tellegen consumes PowerIO modules at its public entry points. `DcNetwork` and
@@ -27,15 +27,27 @@ The PowerIO release, stored IR generation, and C ABI are independent:
 
 | Concern            | Current value                        | Tellegen integration                             |
 | ------------------ | ------------------------------------ | ------------------------------------------------ |
-| Rust crate release | `0.11.5`                             | dependency requirement `0.11.5`                  |
+| Rust crate release | `0.11.6`                             | dependency requirement `0.11.6`                  |
 | Stored IR          | `"schema": "pio-ir"`, `"version": 2` | sole durable browser and CLI JSON boundary       |
-| Producer           | `powerio` `0.11.5`                   | records which release wrote an IR document       |
+| Producer           | `powerio` `0.11.6`                   | records which release wrote an IR document       |
 | C ABI              | `7`                                  | unchanged and not used as an IR or crate version |
 
 The historical `powerio.module` version 1 document and bare balanced-network
 model JSON are not current input formats. Regenerate those documents from
 their original case data. Checked-in evidence produced with the old candidate
 is historical and must be rerun before it is cited for this release.
+
+## Cargo features
+
+The `powerio` facade enables a `sincal` feature by default. It reads SINCAL
+projects through `powerio-tnd` and a bundled SQLite, which the wasm engine
+could only link with a C compiler that targets WebAssembly. Tellegen reads no
+SINCAL projects, so the workspace depends on `powerio` with
+`default-features = false`, and on `powerio-tx` and `powerio-dist` the same
+way so no SINCAL code comes in through them. The CLI, server and browser
+therefore list no SINCAL format, and PowerIO refuses a SINCAL source or target
+with `REQUEST.SINCAL.FEATURE_DISABLED`. `powerio-tnd` itself, which composes
+transmission and distribution models, is always part of the facade.
 
 ## Current module API
 

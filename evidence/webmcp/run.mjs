@@ -15,6 +15,7 @@ const POWERIO_PACKAGES = new Set([
   "powerio-dist",
   "powerio-matrix",
   "powerio-prob",
+  "powerio-tnd",
   "powerio-tx",
 ]);
 const EXPECTED_PREPARATION_FAILURES = new Map([

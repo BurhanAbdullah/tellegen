@@ -42,16 +42,6 @@ ignore = [
     # codegen; there is no safe upgrade until that matmul stack drops it. Re-evaluate
     # on faer upgrades. https://rustsec.org/advisories/RUSTSEC-2024-0436
     "RUSTSEC-2024-0436",
-    # `zip` 8.x (via powerio-tx, which requires `^8.6`): unsafe behaviour in
-    # `ZipArchive::extract` / `ZipStreamReader::extract`, which write archives to disk
-    # (SUID/SGID bits, symlinks escaping the destination, permissions through symlinks).
-    # PowerIO only reads CGMES archives in memory entry by entry, rejects symlink and
-    # nested entries, and never calls `extract`; tellegen does not use `zip` directly.
-    # Fixed in zip 9; remove these once PowerIO moves to it:
-    # https://github.com/eigenergy/powerio/issues/649
-    "RUSTSEC-2026-0367",
-    "RUSTSEC-2026-0368",
-    "RUSTSEC-2026-0369",
 ]
 
 [bans]
