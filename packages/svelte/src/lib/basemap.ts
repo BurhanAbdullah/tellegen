@@ -10,6 +10,13 @@ import type { StyleSpecification } from 'maplibre-gl';
 export type BasemapTheme = 'light' | 'dark';
 export type BasemapStyle = string | StyleSpecification;
 
+/** `TellegenMap`'s `theme` prop: the basemap theme, which also picks the
+ * overlay palette. */
+export type MapTheme = BasemapTheme;
+/** `TellegenMap`'s `projection` prop. MapLibre's globe falls back to
+ * Mercator at high zoom on its own. */
+export type MapProjection = 'mercator' | 'globe';
+
 export interface BasemapSpec {
 	primary: BasemapStyle;
 	fallback: BasemapStyle | null;
@@ -99,7 +106,8 @@ export interface BasemapMapLike {
 	on(type: string, listener: (event: BasemapMapEvent) => void): unknown;
 	off(type: string, listener: (event: BasemapMapEvent) => void): unknown;
 	setStyle(style: BasemapStyle, options?: { diff?: boolean }): unknown;
-	isStyleLoaded(): boolean;
+	/** MapLibre types this `boolean | void`; only `true` counts as loaded. */
+	isStyleLoaded(): boolean | void;
 }
 
 export interface BasemapFallbackHandlers {
@@ -162,7 +170,7 @@ export function attachBasemapFallback(
 	options: BasemapFallbackOptions = {}
 ): () => void {
 	const now = options.now ?? (() => Date.now());
-	let styleLoaded = map.isStyleLoaded();
+	let styleLoaded = map.isStyleLoaded() === true;
 	let fellBack = false;
 	let failed = false;
 	let tileFailures = 0;

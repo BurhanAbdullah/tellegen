@@ -1,12 +1,13 @@
 <script lang="ts">
 	import 'maplibre-gl/dist/maplibre-gl.css';
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import type { Layer, PickingInfo } from '@deck.gl/core';
 	import type { IconLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 	import type { MapLibreOverlay } from '@deck.gl/maplibre';
 	import type { LngLatBoundsLike, Map as MapLibreMap } from 'maplibre-gl';
 	import type { NetworkBranch, NetworkBus } from './api.js';
 	import {
+		MAP_PALETTE,
 		branchColor,
 		branchWidth,
 		busNeutral,
@@ -18,8 +19,21 @@
 		sensitivityDomain,
 		type SensitivityDomain
 	} from './colors.js';
+	import {
+		attachBasemapFallback,
+		resolveBasemap,
+		type BasemapFallbackReason,
+		type BasemapStyle,
+		type MapProjection,
+		type MapTheme
+	} from './basemap.js';
 	import { caseDeltas, caseRatings, displayMetaFor, displaySeriesFor } from './display.js';
-	import { CaseState, type DisplayMode, type LocalCase } from './state.svelte.js';
+	import {
+		CaseState,
+		type CameraSnapshot,
+		type DisplayMode,
+		type LocalCase
+	} from './state.svelte.js';
 	import {
 		attachmentColor,
 		edgeColor,
@@ -40,6 +54,8 @@
 	import type { RGBA } from './colors.js';
 	import DiagramCanvas from './components/DiagramCanvas.svelte';
 
+	const DEFAULT_CAMERA: CameraSnapshot = { center: [-85, 36], zoom: 4.5, bearing: 0, pitch: 0 };
+
 	let {
 		onbusclick,
 		onlocalbusclick,
@@ -48,7 +64,18 @@
 		onmultibusclick,
 		onmultiedgeclick,
 		onplacecase,
-		onmapclick
+		onmapclick,
+		mapStyle,
+		fallbackMapStyle,
+		theme = 'light',
+		projection = 'mercator',
+		initialCamera = DEFAULT_CAMERA,
+		hideBasemapLabels = true,
+		extraLayers = [],
+		attribution = 'compact',
+		onMapReady,
+		onBasemapFallback,
+		onBasemapError
 	}: {
 		onbusclick: (caseId: string, busId: number) => void;
 		onlocalbusclick: (caseId: string, busId: number) => void;
@@ -58,6 +85,36 @@
 		onmultiedgeclick?: (caseId: string, edgeId: string) => void;
 		onplacecase: (lon: number, lat: number) => void;
 		onmapclick: () => void;
+		/** Primary basemap: a style URL or inline style. Default: the OpenFreeMap
+		 * style for `theme`. Changing it (or `fallbackMapStyle`, `theme`,
+		 * `hideBasemapLabels`, `attribution`) rebuilds the map in place and keeps
+		 * the camera. */
+		mapStyle?: BasemapStyle;
+		/** Basemap used when the primary cannot be shown; `null` disables the
+		 * switch. Default: the matching CARTO vector style. */
+		fallbackMapStyle?: BasemapStyle | null;
+		/** Picks the default basemaps and the overlay palette (bus outlines,
+		 * hover highlight, unsolved grey). */
+		theme?: MapTheme;
+		/** Re-applied after every `style.load`, so a basemap switch keeps it. */
+		projection?: MapProjection;
+		/** Camera for the first paint; read once per mount. */
+		initialCamera?: CameraSnapshot;
+		/** Hide the basemap's `symbol` layers after every `style.load`. */
+		hideBasemapLabels?: boolean;
+		/** deck.gl layers drawn after tellegen's own, in the same overlay. */
+		extraLayers?: Layer[];
+		/** Attribution control mode. There is no off switch: tile licences
+		 * require the credit on screen. */
+		attribution?: 'compact' | 'full';
+		/** Called once the map and overlay exist, with an optional cleanup. It
+		 * fires again after a context-loss or basemap remount, after the previous
+		 * cleanup ran. */
+		onMapReady?: (map: MapLibreMap, overlay: MapLibreOverlay) => void | (() => void);
+		/** The primary basemap failed and the fallback was requested. */
+		onBasemapFallback?: (reason: BasemapFallbackReason) => void;
+		/** No basemap can be shown; the network layers still draw. */
+		onBasemapError?: (reason: BasemapFallbackReason) => void;
 	} = $props();
 
 	const app = getAppState();
@@ -104,7 +161,16 @@
 		else onbranchclick?.(diagramCaseId, branchId);
 	}
 
-	const STYLE = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
+	const basemap = $derived(resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels }));
+	// Read as three values, not one object, so a theme change that resolves
+	// to the same styles does not rebuild the map.
+	const basemapPrimary = $derived(basemap.primary);
+	const basemapFallback = $derived(basemap.fallback);
+	const basemapHideLabels = $derived(basemap.hideLabels);
+	const palette = $derived(MAP_PALETTE[theme]);
+	// Set once a map has existed in this component instance: a rebuild (context
+	// loss or basemap change) restores the camera instead of reframing.
+	let hadMap = false;
 	const CUE_MARGIN_PX = 64;
 	const BRANCH_FOCUS_MS = 850;
 	const BRANCH_FOCUS_MAX_ZOOM = 9.5;
@@ -759,6 +825,18 @@
 	}
 
 	function initMap(container: HTMLDivElement) {
+		// Attachments re-run when state they read changes, so reading the
+		// resolved basemap and attribution mode here is what rebuilds the map
+		// when those props change. The camera is read once: it is initial.
+		const spec = {
+			primary: basemapPrimary,
+			fallback: basemapFallback,
+			hideLabels: basemapHideLabels
+		};
+		const compactAttribution = attribution === 'compact';
+		const camera = untrack(() => initialCamera);
+		const restoreCamera = hadMap;
+		hadMap = true;
 		let cleanup = () => {};
 		let cancelled = false;
 		void loadMapModules()
@@ -767,11 +845,27 @@
 				layerCtors = { PathLayer, ScatterplotLayer, IconLayer };
 				const m = new maplibregl.Map({
 					container,
-					style: STYLE,
-					center: [-85, 36],
-					zoom: 4.5,
+					style: spec.primary,
+					center: camera.center,
+					zoom: camera.zoom,
+					bearing: camera.bearing,
+					pitch: camera.pitch,
 					canvasContextAttributes: { antialias: true },
-					attributionControl: { compact: true }
+					attributionControl: { compact: compactAttribution }
+				});
+				// `setStyle` (the fallback path included) drops the projection and
+				// shows every layer again, so both are re-applied on each load.
+				const applyStyleExtras = () => {
+					m.setProjection({ type: untrack(() => projection) });
+					if (!spec.hideLabels) return;
+					for (const layer of m.getStyle().layers) {
+						if (layer.type === 'symbol') m.setLayoutProperty(layer.id, 'visibility', 'none');
+					}
+				};
+				m.on('style.load', applyStyleExtras);
+				const detachFallback = attachBasemapFallback(m, spec, {
+					onFallback: (reason) => onBasemapFallback?.(reason),
+					onFailure: (reason) => onBasemapError?.(reason)
 				});
 				const o = buildOverlay(MapLibreOverlay);
 				m.addControl(o);
@@ -858,11 +952,13 @@
 
 				map = m;
 				overlay = o;
+				const detachReady = onMapReady?.(m, o);
 				// Frame the active grid once the map is ready. The initial frame request
 				// (from the case load) can fire before the async map import finishes and
 				// be lost; re-issuing it here ensures the first view is the active case,
-				// not the default world view. A remount opens at the default view too.
-				if (mapGen > 0 && app.camera) m.jumpTo(app.camera);
+				// not the default world view. A rebuilt map opens at the default view
+				// too, so it restores the camera the last map saved.
+				if (restoreCamera && app.camera) m.jumpTo(app.camera);
 				else if (app.cameraSeq === handledCameraSeq)
 					app.requestFrame(app.activeCaseId ?? app.activeLocalId ?? 'all');
 				if (mapGen > 0) {
@@ -884,6 +980,9 @@
 					m.off('load', syncCues);
 					m.off('move', syncCues);
 					m.off('resize', syncCues);
+					m.off('style.load', applyStyleExtras);
+					detachFallback();
+					detachReady?.();
 					app.settleFrame();
 					m.remove();
 					map = null;
@@ -899,8 +998,23 @@
 		};
 	}
 
+	// A projection change applies at once when the style is ready. While a
+	// style is still loading (the first paint, or just after a basemap switch)
+	// MapLibre throws, and the `style.load` handler above applies it instead.
+	$effect(() => {
+		const type = projection;
+		const m = map;
+		if (!m) return;
+		try {
+			m.setProjection({ type });
+		} catch {
+			// style not loaded yet; applyStyleExtras runs on style.load
+		}
+	});
+
 	// Sync deck.gl layers with app state. New layer instances diff cheaply;
-	// updateTriggers tell deck.gl when accessor outputs changed.
+	// updateTriggers tell deck.gl when accessor outputs changed. Host layers
+	// (`extraLayers`) draw after tellegen's own at both exits.
 	$effect(() => {
 		if (!overlay || !layerCtors) return;
 		const { PathLayer, ScatterplotLayer, IconLayer } = layerCtors;
@@ -953,12 +1067,12 @@
 					getFillColor: (b) => {
 						const value = values.get(b.id);
 						return value === undefined
-							? [110, 115, 120, 200]
+							? palette.grey
 							: priceColor((value - domain.lo) / Math.max(domain.hi - domain.lo, 1e-12));
 					},
 					pickable: true,
 					stroked: true,
-					getLineColor: [46, 42, 34, 110],
+					getLineColor: palette.outline,
 					lineWidthUnits: 'pixels',
 					onClick: (info: PickingInfo) => {
 						const bus = info.object as NetworkBus | undefined;
@@ -967,10 +1081,10 @@
 						app.selectedBus = bus.id;
 						return true;
 					},
-					updateTriggers: { getFillColor: [study, mode] }
+					updateTriggers: { getFillColor: [study, mode, theme] }
 				})
 			);
-			overlay.setProps({ layers });
+			overlay.setProps({ layers: [...layers, ...extraLayers] });
 			return;
 		}
 		for (const c of app.cases) {
@@ -998,7 +1112,7 @@
 					miterLimit: 2,
 					pickable: true,
 					autoHighlight: true,
-					highlightColor: [32, 36, 43, 90],
+					highlightColor: palette.highlight,
 					onClick: (info: PickingInfo) => {
 						const branch = info.object as NetworkBranch | undefined;
 						if (!branch || !onbranchclick) return false;
@@ -1021,13 +1135,13 @@
 					billboard: true,
 					getLineColor: (b) =>
 						c.id === app.activeCaseId && b.id === app.selectedBus
-							? [32, 36, 43, 255]
-							: [46, 42, 34, 110],
+							? palette.selected
+							: palette.outline,
 					getLineWidth: (b) => (c.id === app.activeCaseId && b.id === app.selectedBus ? 2.5 : 1),
 					lineWidthUnits: 'pixels',
 					pickable: true,
 					autoHighlight: true,
-					highlightColor: [32, 36, 43, 70],
+					highlightColor: palette.highlightSoft,
 					onClick: (info: PickingInfo) => {
 						const bus = info.object as NetworkBus | undefined;
 						if (!bus) return false;
@@ -1036,7 +1150,7 @@
 					},
 					updateTriggers: {
 						getFillColor: [display],
-						getLineColor: [app.selectedBus, app.activeCaseId],
+						getLineColor: [app.selectedBus, app.activeCaseId, theme],
 						getLineWidth: [app.selectedBus, app.activeCaseId]
 					}
 				})
@@ -1058,7 +1172,7 @@
 								? [47, 111, 187, 255]
 								: d
 									? branchColor(d.loading.get(b.id) ?? 0, b.status === 1)
-									: [138, 131, 117, 150],
+									: palette.greyLine,
 						getWidth: (b) =>
 							c.id === app.activeLocalId && b.id === app.selectedBranch
 								? Math.max((d ? branchWidth(d.loading.get(b.id) ?? 0) : 1.5) + 2, 4.5)
@@ -1072,7 +1186,7 @@
 						miterLimit: 2,
 						pickable: true,
 						autoHighlight: true,
-						highlightColor: [32, 36, 43, 90],
+						highlightColor: palette.highlight,
 						onClick: (info: PickingInfo) => {
 							const branch = info.object as NetworkBranch | undefined;
 							if (!branch || !onlocalbranchclick) return false;
@@ -1080,7 +1194,7 @@
 							return true;
 						},
 						updateTriggers: {
-							getColor: [display, app.selectedBranch, app.activeLocalId],
+							getColor: [display, app.selectedBranch, app.activeLocalId, theme],
 							getWidth: [display, app.selectedBranch, app.activeLocalId]
 						}
 					}),
@@ -1090,18 +1204,18 @@
 						getPosition: (b) => [b.lon, b.lat],
 						getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
 						radiusUnits: 'pixels',
-						getFillColor: d ? busFill(c.id) : [110, 115, 120, 200],
+						getFillColor: d ? busFill(c.id) : palette.grey,
 						stroked: true,
 						billboard: true,
 						getLineColor: (b) =>
 							c.id === app.activeLocalId && b.id === app.selectedBus
-								? [32, 36, 43, 255]
-								: [46, 42, 34, 110],
+								? palette.selected
+								: palette.outline,
 						getLineWidth: (b) => (c.id === app.activeLocalId && b.id === app.selectedBus ? 2.5 : 1),
 						lineWidthUnits: 'pixels',
 						pickable: true,
 						autoHighlight: true,
-						highlightColor: [32, 36, 43, 70],
+						highlightColor: palette.highlightSoft,
 						onClick: (info: PickingInfo) => {
 							const bus = info.object as NetworkBus | undefined;
 							if (!bus) return false;
@@ -1110,7 +1224,7 @@
 						},
 						updateTriggers: {
 							getFillColor: [display],
-							getLineColor: [app.selectedBus, app.activeLocalId],
+							getLineColor: [app.selectedBus, app.activeLocalId, theme],
 							getLineWidth: [app.selectedBus, app.activeLocalId]
 						}
 					})
@@ -1130,15 +1244,15 @@
 						getRadius: 5,
 						radiusUnits: 'pixels',
 						radiusMinPixels: 3,
-						getFillColor: [70, 92, 124, 190],
+						getFillColor: palette.substation,
 						stroked: true,
 						billboard: true,
-						getLineColor: [38, 52, 78, 220],
+						getLineColor: palette.substationLine,
 						getLineWidth: 1,
 						lineWidthUnits: 'pixels',
 						pickable: true,
 						autoHighlight: true,
-						highlightColor: [32, 36, 43, 70]
+						highlightColor: palette.highlightSoft
 					})
 				);
 			}
@@ -1167,7 +1281,7 @@
 					miterLimit: 2,
 					pickable: true,
 					autoHighlight: true,
-					highlightColor: [32, 36, 43, 90],
+					highlightColor: palette.highlight,
 					onClick: (info: PickingInfo) => {
 						const e = info.object as PlacedMultiEdge | undefined;
 						if (!e || !onmultiedgeclick) return false;
@@ -1210,15 +1324,15 @@
 					billboard: true,
 					getLineColor: (b) =>
 						selectedId === b.id
-							? [32, 36, 43, 255]
+							? palette.selected
 							: b.has_source
 								? [63, 111, 187, 220]
-								: [46, 42, 34, 120],
+								: palette.outline,
 					getLineWidth: (b) => (selectedId === b.id ? 2.5 : b.has_source ? 2 : 1),
 					lineWidthUnits: 'pixels',
 					pickable: true,
 					autoHighlight: true,
-					highlightColor: [32, 36, 43, 70],
+					highlightColor: palette.highlightSoft,
 					onClick: (info: PickingInfo) => {
 						const bus = info.object as PlacedMultiBus | undefined;
 						if (!bus) return false;
@@ -1226,13 +1340,13 @@
 						return true;
 					},
 					updateTriggers: {
-						getLineColor: [selectedId],
+						getLineColor: [selectedId, theme],
 						getLineWidth: [selectedId]
 					}
 				})
 			);
 		}
-		overlay.setProps({ layers });
+		overlay.setProps({ layers: [...layers, ...extraLayers] });
 	});
 
 	$effect(() => {
@@ -1438,13 +1552,13 @@
 	}
 
 	.multi-detail :global(.mc-leader) {
-		stroke: rgba(32, 36, 43, 0.35);
+		stroke: rgb(var(--ink-rgb) / 0.35);
 		stroke-width: 1;
 		stroke-dasharray: 2 2;
 	}
 
 	.multi-detail :global(.mc-ground line) {
-		stroke: #3a3a3a;
+		stroke: var(--ink-dim);
 		stroke-width: 1.3;
 	}
 
@@ -1568,7 +1682,7 @@
 		color: var(--text-accent);
 		font-size: 11px;
 		cursor: pointer;
-		box-shadow: 0 4px 18px rgba(32, 36, 43, 0.1);
+		box-shadow: var(--elev-2);
 	}
 
 	@media (max-width: 420px) {
@@ -1607,7 +1721,7 @@
 		min-width: 0;
 		max-width: calc(100vw - 96px);
 		box-sizing: border-box;
-		background: rgba(252, 251, 247, 0.75);
+		background: rgb(var(--paper-rgb) / 0.75);
 		font-family: var(--font-mono);
 		font-size: 10px;
 		white-space: nowrap;
@@ -1648,7 +1762,7 @@
 		line-height: 1.5;
 		padding: 8px 10px !important;
 		border-radius: 2px;
-		box-shadow: 0 2px 10px rgba(32, 36, 43, 0.12);
+		box-shadow: var(--elev-1);
 	}
 
 	@media (max-width: 760px) {
