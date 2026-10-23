@@ -25,6 +25,8 @@ export {
 	attachBasemapFallback,
 	cartoStyleUrl,
 	defaultBasemap,
+	isOpenFreeMapStyle,
+	openFreeMapEdits,
 	resolveBasemap
 } from './basemap.js';
 export { MAP_PALETTE } from './colors.js';
@@ -90,7 +92,8 @@ export type {
 	BasemapStyle,
 	BasemapTheme,
 	MapProjection,
-	MapTheme
+	MapTheme,
+	StyleEdit
 } from './basemap.js';
 export type { MapPalette } from './colors.js';
 export type { DisplayOption } from './display.js';

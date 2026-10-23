@@ -24,6 +24,7 @@
 		orgLabel,
 		showFooter,
 		theme,
+		cartoApiKey,
 		children
 	}: Props = $props();
 
@@ -35,7 +36,8 @@
 			orgHref,
 			orgLabel,
 			showFooter,
-			theme
+			theme,
+			cartoApiKey
 		})
 	);
 	const app = createAppState();

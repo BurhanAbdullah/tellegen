@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import type { StyleSpecification } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	CARTO_STYLES,
@@ -5,6 +7,8 @@ import {
 	attachBasemapFallback,
 	cartoStyleUrl,
 	defaultBasemap,
+	isOpenFreeMapStyle,
+	openFreeMapEdits,
 	resolveBasemap,
 	type BasemapFallbackReason,
 	type BasemapMapEvent,
@@ -81,17 +85,36 @@ describe('style URLs', () => {
 		);
 	});
 
-	it('defaults to OpenFreeMap with the matching no-label CARTO fallback', () => {
+	it('without a CARTO key, leads with OpenFreeMap and falls back to keyless CARTO', () => {
 		expect(defaultBasemap('light')).toEqual({
 			primary: OPENFREEMAP_STYLES.light,
 			fallback: CARTO_STYLES['light-nolabels'],
 			hideLabels: true
 		});
-		expect(defaultBasemap('dark', { hideLabels: false, cartoApiKey: 'k' })).toEqual({
+		expect(defaultBasemap('dark', { hideLabels: false, cartoApiKey: '' })).toEqual({
 			primary: OPENFREEMAP_STYLES.dark,
-			fallback: `${CARTO_STYLES.dark}?key=k`,
+			fallback: CARTO_STYLES.dark,
 			hideLabels: false
 		});
+	});
+
+	it('with a CARTO key, leads with the keyed CARTO style and falls back to OpenFreeMap', () => {
+		expect(defaultBasemap('light', { cartoApiKey: 'k' })).toEqual({
+			primary: `${CARTO_STYLES['light-nolabels']}?key=k`,
+			fallback: OPENFREEMAP_STYLES.light,
+			hideLabels: true
+		});
+		expect(defaultBasemap('dark', { cartoApiKey: 'k' })).toEqual({
+			primary: `${CARTO_STYLES['dark-nolabels']}?key=k`,
+			fallback: OPENFREEMAP_STYLES.dark,
+			hideLabels: true
+		});
+		expect(defaultBasemap('dark', { hideLabels: false, cartoApiKey: 'k' }).primary).toBe(
+			`${CARTO_STYLES.dark}?key=k`
+		);
+		expect(resolveBasemap({ theme: 'light', hideBasemapLabels: true, cartoApiKey: 'k' })).toEqual(
+			defaultBasemap('light', { cartoApiKey: 'k' })
+		);
 	});
 
 	it('lets explicit styles win and null switch the fallback off', () => {
@@ -120,6 +143,109 @@ describe('style URLs', () => {
 				cartoApiKey: 'ignored-when-fallback-is-explicit'
 			}).fallback
 		).toBe('https://b.example/s.json');
+	});
+});
+
+// Trimmed copies of the styles served on 2026-10-23: each keeps its sources and
+// every layer's id, type, source, source-layer and zoom range, plus the paint
+// of the background, water and land layers.
+const fixture = (name: string) =>
+	JSON.parse(
+		readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8')
+	) as StyleSpecification;
+const ofmDark = fixture('openfreemap-dark');
+const ofmPositron = fixture('openfreemap-positron');
+const cartoDarkMatter = fixture('carto-dark-matter');
+const sourceLayer = (style: StyleSpecification, id: string) => {
+	const layer = style.layers.find((l) => l.id === id)!;
+	return 'source-layer' in layer ? layer['source-layer'] : undefined;
+};
+
+describe('OpenFreeMap tuning', () => {
+	it('recognises OpenFreeMap styles by their tile source, not their URL', () => {
+		expect(isOpenFreeMapStyle(ofmDark)).toBe(true);
+		expect(isOpenFreeMapStyle(ofmPositron)).toBe(true);
+		expect(isOpenFreeMapStyle(cartoDarkMatter)).toBe(false);
+		expect(isOpenFreeMapStyle({ version: 8, sources: {}, layers: [] })).toBe(false);
+	});
+
+	it('starts every road line at z8, keeping its upper zoom', () => {
+		for (const [style, theme] of [
+			[ofmDark, 'dark'],
+			[ofmPositron, 'light']
+		] as const) {
+			const roads = style.layers.filter(
+				(l) => l.type === 'line' && 'source-layer' in l && l['source-layer'] === 'transportation'
+			);
+			const lowRoads = roads.filter((l) => (l.minzoom ?? 0) < 8);
+			expect(lowRoads.length).toBeGreaterThan(0);
+			const zoomEdits = openFreeMapEdits(style, theme).filter((e) => e.kind === 'zoom-range');
+			expect(zoomEdits.map((e) => e.layer).sort()).toEqual(lowRoads.map((l) => l.id).sort());
+			for (const edit of zoomEdits) {
+				const layer = style.layers.find((l) => l.id === edit.layer)!;
+				expect(edit).toEqual({
+					kind: 'zoom-range',
+					layer: layer.id,
+					minzoom: 8,
+					maxzoom: layer.maxzoom ?? 24
+				});
+			}
+		}
+	});
+
+	it('changes no colours in the light theme', () => {
+		expect(openFreeMapEdits(ofmPositron, 'light').every((e) => e.kind === 'zoom-range')).toBe(true);
+		expect(openFreeMapEdits(ofmDark, 'light').every((e) => e.kind === 'zoom-range')).toBe(true);
+	});
+
+	it('in the dark theme, gives water Dark Matter colours and lays land on one tone', () => {
+		const paints = openFreeMapEdits(ofmDark, 'dark').filter((e) => e.kind === 'paint');
+		const byLayer = new Map(paints.map((e) => [e.layer, e]));
+		const water = ofmDark.layers.filter((l) => sourceLayer(ofmDark, l.id) === 'water');
+		const waterways = ofmDark.layers.filter(
+			(l) => sourceLayer(ofmDark, l.id) === 'waterway' && l.type === 'line'
+		);
+		expect(water.length).toBeGreaterThan(0);
+		for (const layer of water.filter((l) => l.type === 'fill')) {
+			expect(byLayer.get(layer.id)).toMatchObject({ property: 'fill-color', value: '#2c353c' });
+		}
+		for (const layer of waterways) {
+			expect(byLayer.get(layer.id)).toMatchObject({ property: 'line-color', value: '#3f5a6d' });
+		}
+		// Land fills take the style's own background, except a patterned fill,
+		// whose colour MapLibre ignores.
+		const background = ofmDark.layers.find((l) => l.type === 'background')!;
+		const land = (background.paint as Record<string, unknown>)['background-color'];
+		const landFills = ofmDark.layers.filter(
+			(l) =>
+				l.type === 'fill' &&
+				['landuse', 'landcover', 'park'].includes(sourceLayer(ofmDark, l.id) ?? '')
+		);
+		expect(landFills.length).toBeGreaterThan(0);
+		for (const layer of landFills) {
+			const patterned = (layer.paint as Record<string, unknown>)['fill-pattern'] !== undefined;
+			expect(byLayer.get(layer.id)).toEqual(
+				patterned
+					? undefined
+					: { kind: 'paint', layer: layer.id, property: 'fill-color', value: land }
+			);
+		}
+		// Nothing else is repainted.
+		const expected = new Set(
+			[...water.filter((l) => l.type === 'fill'), ...waterways, ...landFills].map((l) => l.id)
+		);
+		expect(paints.every((e) => expected.has(e.layer))).toBe(true);
+	});
+
+	it('follows source-layer, not layer ids', () => {
+		const renamed: StyleSpecification = {
+			...ofmDark,
+			layers: ofmDark.layers.map((l) => ({ ...l, id: `renamed-${l.id}` }))
+		};
+		const strip = (id: string) => id.replace(/^renamed-/, '');
+		expect(openFreeMapEdits(renamed, 'dark').map((e) => ({ ...e, layer: strip(e.layer) }))).toEqual(
+			openFreeMapEdits(ofmDark, 'dark')
+		);
 	});
 });
 

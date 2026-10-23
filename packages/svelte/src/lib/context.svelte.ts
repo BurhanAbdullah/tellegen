@@ -17,6 +17,9 @@ export interface TellegenUiConfig {
 	/** `'dark'` sets `data-theme="dark"` on the document root while the
 	 * provider is mounted, which switches the `styles.css` tokens. */
 	theme: 'light' | 'dark';
+	/** CARTO basemap key for the default shell's map; empty for none. See
+	 * `TellegenMap`'s `cartoApiKey`. */
+	cartoApiKey: string;
 }
 
 export type TellegenUiOptions = Partial<TellegenUiConfig>;
@@ -28,7 +31,8 @@ export const DEFAULT_TELLEGEN_UI_CONFIG: TellegenUiConfig = {
 	orgHref: 'https://github.com/eigenergy',
 	orgLabel: 'eigenergy group @ michigan ece',
 	showFooter: true,
-	theme: 'light'
+	theme: 'light',
+	cartoApiKey: ''
 };
 
 export function resolveTellegenUiConfig(options: TellegenUiOptions = {}): TellegenUiConfig {
@@ -40,7 +44,8 @@ export function resolveTellegenUiConfig(options: TellegenUiOptions = {}): Telleg
 		orgHref: options.orgHref ?? DEFAULT_TELLEGEN_UI_CONFIG.orgHref,
 		orgLabel: options.orgLabel ?? DEFAULT_TELLEGEN_UI_CONFIG.orgLabel,
 		showFooter: options.showFooter ?? DEFAULT_TELLEGEN_UI_CONFIG.showFooter,
-		theme: options.theme ?? DEFAULT_TELLEGEN_UI_CONFIG.theme
+		theme: options.theme ?? DEFAULT_TELLEGEN_UI_CONFIG.theme,
+		cartoApiKey: options.cartoApiKey ?? DEFAULT_TELLEGEN_UI_CONFIG.cartoApiKey
 	};
 }
 

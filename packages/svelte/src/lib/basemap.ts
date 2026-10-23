@@ -1,10 +1,14 @@
 import type { StyleSpecification } from 'maplibre-gl';
 
-/** Basemap selection and fallback for `TellegenMap`.
+/** Basemap selection, fallback and tuning for `TellegenMap`.
  *
- * The primary basemap is an OpenFreeMap style (no key, CORS open). The
- * fallback is the matching CARTO vector style, optionally keyed. A host can
- * replace either with its own style URL or inline `StyleSpecification`, or
+ * CARTO's vector styles sit quietly under a network overlay, and CARTO's
+ * basemap terms ask for an API key (free for non-commercial use, from
+ * carto.com/basemaps/apikey). With a key, the CARTO style leads and
+ * OpenFreeMap (no key, CORS open) is the fallback. Without one, OpenFreeMap
+ * leads and the keyless CARTO style is the fallback. Whenever an OpenFreeMap
+ * style renders, `openFreeMapEdits` tunes it towards CARTO's look. A host can
+ * replace either style with its own URL or inline `StyleSpecification`, or
  * disable the fallback with `null`. */
 
 export type BasemapTheme = 'light' | 'dark';
@@ -44,31 +48,34 @@ export function cartoStyleUrl(style: string, apiKey?: string): string {
 }
 
 export interface DefaultBasemapOptions {
-	/** Appended to the CARTO fallback URL. */
+	/** CARTO basemap key, sent as `key=`. With one, CARTO leads and
+	 * OpenFreeMap is the fallback; without one, the order flips. Restrict the
+	 * key to the hosts that serve your app. */
 	cartoApiKey?: string;
-	/** Default `true`: the CARTO fallback uses the `-nolabels` variant and the
-	 * OpenFreeMap primary has its label layers hidden on load. */
+	/** Default `true`: the CARTO style uses its `-nolabels` variant, and label
+	 * layers are hidden on load whichever style renders. */
 	hideLabels?: boolean;
 }
 
-/** OpenFreeMap primary and CARTO fallback for a theme. */
+/** The default primary and fallback for a theme, ordered by whether a CARTO
+ * key is at hand. */
 export function defaultBasemap(
 	theme: BasemapTheme,
 	options: DefaultBasemapOptions = {}
 ): BasemapSpec {
 	const hideLabels = options.hideLabels ?? true;
 	const variant = hideLabels ? (`${theme}-nolabels` as const) : theme;
-	return {
-		primary: OPENFREEMAP_STYLES[theme],
-		fallback: cartoStyleUrl(CARTO_STYLES[variant], options.cartoApiKey),
-		hideLabels
-	};
+	const carto = cartoStyleUrl(CARTO_STYLES[variant], options.cartoApiKey);
+	const openFreeMap = OPENFREEMAP_STYLES[theme];
+	return options.cartoApiKey
+		? { primary: carto, fallback: openFreeMap, hideLabels }
+		: { primary: openFreeMap, fallback: carto, hideLabels };
 }
 
 export interface ResolveBasemapInput {
-	/** Overrides the OpenFreeMap primary. */
+	/** Overrides the default primary. */
 	mapStyle?: BasemapStyle;
-	/** Overrides the CARTO fallback; `null` disables the fallback. */
+	/** Overrides the default fallback; `null` disables the fallback. */
 	fallbackMapStyle?: BasemapStyle | null;
 	theme: BasemapTheme;
 	hideBasemapLabels: boolean;
@@ -87,6 +94,79 @@ export function resolveBasemap(input: ResolveBasemapInput): BasemapSpec {
 		fallback: input.fallbackMapStyle === undefined ? defaults.fallback : input.fallbackMapStyle,
 		hideLabels: input.hideBasemapLabels
 	};
+}
+
+const OPENFREEMAP_TILES = 'https://tiles.openfreemap.org/';
+/** Road lines start here on an OpenFreeMap style. Below it, the road web
+ * reads like grid lines under a network overlay. */
+const ROAD_MIN_ZOOM = 8;
+/** CARTO Dark Matter's water and waterway colours, which stand clear of
+ * near-black land. */
+const DARK_WATER = '#2c353c';
+const DARK_WATERWAY = '#3f5a6d';
+const LAND_SOURCE_LAYERS = new Set(['landuse', 'landcover', 'park']);
+
+/** Whether a style draws on OpenFreeMap's tiles, whichever URL loaded it. */
+export function isOpenFreeMapStyle(style: StyleSpecification): boolean {
+	return Object.values(style.sources ?? {}).some((source) => {
+		const urls = [
+			'url' in source ? source.url : undefined,
+			...('tiles' in source ? (source.tiles ?? []) : [])
+		];
+		return urls.some((url) => typeof url === 'string' && url.startsWith(OPENFREEMAP_TILES));
+	});
+}
+
+/** One change to a loaded style, applied through the map's own API. */
+export type StyleEdit =
+	| { kind: 'zoom-range'; layer: string; minzoom: number; maxzoom: number }
+	| { kind: 'paint'; layer: string; property: 'fill-color' | 'line-color'; value: string };
+
+/** Edits that let an OpenFreeMap style sit under a network overlay the way
+ * CARTO's styles do.
+ *
+ * - Road lines (`transportation`) start at z8.
+ * - In the dark theme, water and waterways take Dark Matter's colours, and
+ *   plain land fills (`landuse`, `landcover`, `park`) take the style's
+ *   background colour, so the water stands out against one tone of land.
+ *
+ * Layers are matched by `source-layer`, not by id, so the edits still apply
+ * when OpenFreeMap renames its layers. */
+export function openFreeMapEdits(style: StyleSpecification, theme: BasemapTheme): StyleEdit[] {
+	const paintOf = (layer: StyleSpecification['layers'][number]) =>
+		(layer.paint ?? {}) as Record<string, unknown>;
+	const background = style.layers.find((layer) => layer.type === 'background');
+	const backgroundColor = background ? paintOf(background)['background-color'] : undefined;
+	// A plain colour only; an expression is left alone rather than guessed at.
+	const land = typeof backgroundColor === 'string' ? backgroundColor : undefined;
+	const edits: StyleEdit[] = [];
+	for (const layer of style.layers) {
+		const sourceLayer = 'source-layer' in layer ? layer['source-layer'] : undefined;
+		if (sourceLayer === undefined) continue;
+		if (sourceLayer === 'transportation' && layer.type === 'line') {
+			if ((layer.minzoom ?? 0) < ROAD_MIN_ZOOM) {
+				edits.push({
+					kind: 'zoom-range',
+					layer: layer.id,
+					minzoom: ROAD_MIN_ZOOM,
+					maxzoom: layer.maxzoom ?? 24
+				});
+			}
+		} else if (theme === 'dark' && sourceLayer === 'water' && layer.type === 'fill') {
+			edits.push({ kind: 'paint', layer: layer.id, property: 'fill-color', value: DARK_WATER });
+		} else if (theme === 'dark' && sourceLayer === 'waterway' && layer.type === 'line') {
+			edits.push({ kind: 'paint', layer: layer.id, property: 'line-color', value: DARK_WATERWAY });
+		} else if (
+			theme === 'dark' &&
+			land !== undefined &&
+			layer.type === 'fill' &&
+			LAND_SOURCE_LAYERS.has(sourceLayer) &&
+			paintOf(layer)['fill-pattern'] === undefined
+		) {
+			edits.push({ kind: 'paint', layer: layer.id, property: 'fill-color', value: land });
+		}
+	}
+	return edits;
 }
 
 export type BasemapFallbackReason =

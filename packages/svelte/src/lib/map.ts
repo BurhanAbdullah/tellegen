@@ -8,6 +8,8 @@ export {
 	attachBasemapFallback,
 	cartoStyleUrl,
 	defaultBasemap,
+	isOpenFreeMapStyle,
+	openFreeMapEdits,
 	resolveBasemap
 } from './basemap.js';
 export type {
@@ -17,7 +19,8 @@ export type {
 	BasemapStyle,
 	BasemapTheme,
 	MapProjection,
-	MapTheme
+	MapTheme,
+	StyleEdit
 } from './basemap.js';
 export {
 	MAP_PALETTE,

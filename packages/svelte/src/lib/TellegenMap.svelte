@@ -21,6 +21,8 @@
 	} from './colors.js';
 	import {
 		attachBasemapFallback,
+		isOpenFreeMapStyle,
+		openFreeMapEdits,
 		resolveBasemap,
 		type BasemapFallbackReason,
 		type BasemapStyle,
@@ -71,6 +73,7 @@
 		projection = 'mercator',
 		initialCamera = DEFAULT_CAMERA,
 		hideBasemapLabels = true,
+		cartoApiKey,
 		extraLayers = [],
 		attribution = 'compact',
 		onMapReady,
@@ -85,13 +88,15 @@
 		onmultiedgeclick?: (caseId: string, edgeId: string) => void;
 		onplacecase: (lon: number, lat: number) => void;
 		onmapclick: () => void;
-		/** Primary basemap: a style URL or inline style. Default: the OpenFreeMap
-		 * style for `theme`. Changing it (or `fallbackMapStyle`, `theme`,
-		 * `hideBasemapLabels`, `attribution`) rebuilds the map in place and keeps
-		 * the camera. */
+		/** Primary basemap: a style URL or inline style. Default: the CARTO style
+		 * for `theme` when `cartoApiKey` is set, else the OpenFreeMap style.
+		 * Changing it (or `fallbackMapStyle`, `theme`, `hideBasemapLabels`,
+		 * `cartoApiKey`, `attribution`) rebuilds the map in place and keeps the
+		 * camera. */
 		mapStyle?: BasemapStyle;
 		/** Basemap used when the primary cannot be shown; `null` disables the
-		 * switch. Default: the matching CARTO vector style. */
+		 * switch. Default: whichever of the CARTO and OpenFreeMap styles is not
+		 * the default primary. */
 		fallbackMapStyle?: BasemapStyle | null;
 		/** Picks the default basemaps and the overlay palette (bus outlines,
 		 * hover highlight, unsolved grey). */
@@ -102,6 +107,11 @@
 		initialCamera?: CameraSnapshot;
 		/** Hide the basemap's `symbol` layers after every `style.load`. */
 		hideBasemapLabels?: boolean;
+		/** CARTO basemap key (free for non-commercial use from
+		 * carto.com/basemaps/apikey; restrict it to your hosts). With one, the
+		 * CARTO style leads and OpenFreeMap is the fallback; without one, the
+		 * order flips. */
+		cartoApiKey?: string;
 		/** deck.gl layers drawn after tellegen's own, in the same overlay. */
 		extraLayers?: Layer[];
 		/** Attribution control mode. There is no off switch: tile licences
@@ -162,7 +172,7 @@
 	}
 
 	const basemap = $derived(
-		resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels })
+		resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels, cartoApiKey })
 	);
 	// Read as three values, not one object, so a theme change that resolves
 	// to the same styles does not rebuild the map.
@@ -859,9 +869,22 @@
 				// shows every layer again, so both are re-applied on each load.
 				const applyStyleExtras = () => {
 					m.setProjection({ type: untrack(() => projection) });
-					if (!spec.hideLabels) return;
-					for (const layer of m.getStyle().layers) {
-						if (layer.type === 'symbol') m.setLayoutProperty(layer.id, 'visibility', 'none');
+					const style = m.getStyle();
+					if (spec.hideLabels) {
+						for (const layer of style.layers) {
+							if (layer.type === 'symbol') m.setLayoutProperty(layer.id, 'visibility', 'none');
+						}
+					}
+					// OpenFreeMap renders as the primary or as the fallback; either
+					// way it is tuned towards CARTO's quieter look.
+					if (!isOpenFreeMapStyle(style)) return;
+					const edits = openFreeMapEdits(
+						style,
+						untrack(() => theme)
+					);
+					for (const edit of edits) {
+						if (edit.kind === 'paint') m.setPaintProperty(edit.layer, edit.property, edit.value);
+						else m.setLayerZoomRange(edit.layer, edit.minzoom, edit.maxzoom);
 					}
 				};
 				m.on('style.load', applyStyleExtras);

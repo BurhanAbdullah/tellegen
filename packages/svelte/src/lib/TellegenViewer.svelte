@@ -10,7 +10,8 @@
 		orgHref,
 		orgLabel,
 		showFooter,
-		theme
+		theme,
+		cartoApiKey
 	}: TellegenUiOptions = $props();
 </script>
 
@@ -22,6 +23,7 @@
 	{orgLabel}
 	{showFooter}
 	{theme}
+	{cartoApiKey}
 >
 	<TellegenShell />
 </TellegenProvider>
