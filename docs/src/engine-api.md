@@ -93,6 +93,38 @@ PowerIO module onto a disposable host, so the returned
 `CapacityPlanOutcomeJson` is an unapplied proposal and cancellation does not
 invalidate the retained interactive Study.
 
+## Synthetic Grid Generation
+
+- `createSynthSession(request, { osm?, places?, signal? })`: opens a staged
+  generation on the dedicated synthetic worker (`synthEngineHost()`) and
+  returns a `BrowserSynthSession`:
+  - `advance({ withPreview? })` runs one stage (`context`, `site_buses`,
+    `topology`, `electrify`, `dc_opf`, `calibrate` once per iteration,
+    `ac_pf`, `finalize`) and returns its `StepOutcome`;
+  - `run(onStep?, signal?)` loops it and resolves to the `GenerationReport`;
+  - `preview()` returns transferred typed arrays for binary map layers;
+  - `report()`, `takeModule()` (pio-ir with bus locations and branch routes),
+    `ingest()` (the `IngestedCase` a dropped `.pio.json` of that module
+    produces), and `exportGridfm()`;
+  - `cancel(reason?)` terminates the synthetic worker (interactive studies
+    are untouched), and `free()` releases the session;
+  - `hostKind` is `"worker"`, or `"direct"` when the page runs it.
+- `generateSynthetic(request, options?)`: every stage in one request; returns
+  `{ moduleJson, report, ingest }`.
+- `syntheticOverpassQueries(request)`: the Overpass QL for a region, one query
+  per bounding box. Pass the fetched documents as the `osm` option with
+  `source: "osm"`.
+- `loadSyntheticPlaces(bytes)`, `fetchSyntheticPlaces()`, `syntheticPlacesUrl()`:
+  the Natural Earth places table shipped as `data/populated_places.json`;
+  sessions load it on first use.
+- Refusals reject with `SynthEngineError`, whose `code` is one of
+  `invalid_request`, `region`, `places`, `osm`, `osm_insufficient` (with bus
+  and branch counts), `build`, `engine`, `state`, `cancelled`.
+- `@tellegen/engine/synth` exports the generated request and report types,
+  and `synthSchema` validates a pasted request at run time.
+
+See [Synthetic Grid Generation](synthetic-generation.md) for the pipeline.
+
 ## Migrating To 0.2
 
 - `ingestCase` now takes `Uint8Array`, not a string. Encode an in-memory string
