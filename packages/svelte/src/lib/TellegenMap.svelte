@@ -161,7 +161,9 @@
 		else onbranchclick?.(diagramCaseId, branchId);
 	}
 
-	const basemap = $derived(resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels }));
+	const basemap = $derived(
+		resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels })
+	);
 	// Read as three values, not one object, so a theme change that resolves
 	// to the same styles does not rebuild the map.
 	const basemapPrimary = $derived(basemap.primary);

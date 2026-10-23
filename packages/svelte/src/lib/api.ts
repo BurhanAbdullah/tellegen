@@ -154,9 +154,7 @@ export function createApiClient(
 	options?: TellegenApiClientOptions & { apiBase?: string }
 ): TellegenApiClient;
 export function createApiClient(options?: TellegenApiClientOptions): TellegenApiClient | null;
-export function createApiClient(
-	options: TellegenApiClientOptions = {}
-): TellegenApiClient | null {
+export function createApiClient(options: TellegenApiClientOptions = {}): TellegenApiClient | null {
 	if (options.apiBase === null) return null;
 	const apiBase = options.apiBase ?? '/api';
 	const fetchImpl = options.fetch ?? defaultFetch();

@@ -99,9 +99,11 @@ describe('style URLs', () => {
 		expect(resolveBasemap({ theme: 'dark', hideBasemapLabels: true })).toEqual(
 			defaultBasemap('dark')
 		);
-		expect(
-			resolveBasemap({ mapStyle: inline, theme: 'light', hideBasemapLabels: false })
-		).toEqual({ primary: inline, fallback: CARTO_STYLES.light, hideLabels: false });
+		expect(resolveBasemap({ mapStyle: inline, theme: 'light', hideBasemapLabels: false })).toEqual({
+			primary: inline,
+			fallback: CARTO_STYLES.light,
+			hideLabels: false
+		});
 		expect(
 			resolveBasemap({
 				mapStyle: 'https://a.example/s.json',
@@ -223,11 +225,19 @@ describe('attachBasemapFallback', () => {
 		const { onFallback } = attach(map);
 		map.emit('style.load');
 		for (let i = 0; i < 6; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(0, 'Failed to fetch')
+			});
 		}
 		expect(map.styles).toHaveLength(0);
 		expect(consoleError).toHaveBeenCalledTimes(6);
-		map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+		map.emit('error', {
+			sourceId: 'openmaptiles',
+			tile: {},
+			error: ajaxError(0, 'Failed to fetch')
+		});
 		expect(map.styles).toHaveLength(1);
 		expect(onFallback.mock.calls[0][0]).toEqual({
 			kind: 'tiles-unavailable',
@@ -241,11 +251,19 @@ describe('attachBasemapFallback', () => {
 		const { onFallback } = attach(map);
 		map.emit('style.load');
 		for (let i = 0; i < 4; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(0, 'Failed to fetch')
+			});
 		}
 		map.emit('sourcedata', { sourceId: 'openmaptiles', dataType: 'source', tile: {} });
 		for (let i = 0; i < 6; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(0, 'Failed to fetch')
+			});
 		}
 		expect(map.styles).toHaveLength(0);
 		expect(onFallback).not.toHaveBeenCalled();
@@ -257,13 +275,25 @@ describe('attachBasemapFallback', () => {
 		const { onFallback } = attach(map, {}, () => t);
 		map.emit('style.load');
 		for (let i = 0; i < 6; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(0, 'Failed to fetch')
+			});
 		}
 		t = 10_001;
-		map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+		map.emit('error', {
+			sourceId: 'openmaptiles',
+			tile: {},
+			error: ajaxError(0, 'Failed to fetch')
+		});
 		expect(onFallback).not.toHaveBeenCalled();
 		for (let i = 0; i < 6; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(0, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(0, 'Failed to fetch')
+			});
 		}
 		expect(onFallback).toHaveBeenCalledTimes(1);
 	});
@@ -273,7 +303,11 @@ describe('attachBasemapFallback', () => {
 		const { onFallback } = attach(map);
 		map.emit('style.load');
 		for (let i = 0; i < 10; i++) {
-			map.emit('error', { sourceId: 'openmaptiles', tile: {}, error: ajaxError(500, 'Failed to fetch') });
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(500, 'Failed to fetch')
+			});
 		}
 		expect(onFallback).not.toHaveBeenCalled();
 		expect(consoleError).toHaveBeenCalledTimes(10);

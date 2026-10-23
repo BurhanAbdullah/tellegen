@@ -64,8 +64,28 @@ const geoView = {
 		gen_mw: id === 1 ? 90 : 0
 	})),
 	branches: [
-		{ id: 0, from: 1, to: 2, rate_mw: 100, status: 1, path: [[-80.9, 34], [-80.8, 34]] },
-		{ id: 1, from: 2, to: 3, rate_mw: 100, status: 1, path: [[-80.8, 34], [-80.7, 34]] }
+		{
+			id: 0,
+			from: 1,
+			to: 2,
+			rate_mw: 100,
+			status: 1,
+			path: [
+				[-80.9, 34],
+				[-80.8, 34]
+			]
+		},
+		{
+			id: 1,
+			from: 2,
+			to: 3,
+			rate_mw: 100,
+			status: 1,
+			path: [
+				[-80.8, 34],
+				[-80.7, 34]
+			]
+		}
 	]
 } as unknown as NonNullable<IngestedCase['view']>;
 
@@ -103,7 +123,10 @@ describe('openBalancedModule', () => {
 
 	it('ingests module text through the engine when no payload is given', async () => {
 		const { app, ctrl } = host();
-		engine.ingestJsonDrop.mockResolvedValue({ kind: 'module', payload: payload({ name: 'ieee3' }) });
+		engine.ingestJsonDrop.mockResolvedValue({
+			kind: 'module',
+			payload: payload({ name: 'ieee3' })
+		});
 		const local = await ctrl.openBalancedModule({ name: 'from-text', moduleJson: '{"pio":1}' });
 		expect(engine.ingestJsonDrop).toHaveBeenCalledTimes(1);
 		const [bytes] = engine.ingestJsonDrop.mock.calls[0] as [Uint8Array];
@@ -115,9 +138,7 @@ describe('openBalancedModule', () => {
 	it('accepts a transmission payload and rejects anything else', async () => {
 		const { ctrl, app } = host();
 		engine.ingestJsonDrop.mockResolvedValueOnce({ kind: 'transmission', payload: payload() });
-		await expect(
-			ctrl.openBalancedModule({ name: 'tx', moduleJson: '{}' })
-		).resolves.toBeDefined();
+		await expect(ctrl.openBalancedModule({ name: 'tx', moduleJson: '{}' })).resolves.toBeDefined();
 		engine.ingestJsonDrop.mockResolvedValueOnce({
 			kind: 'distribution',
 			payload: { model: 'multiconductor' }
@@ -152,7 +173,11 @@ describe('openBalancedModule', () => {
 		};
 		engine.applyGeo.mockResolvedValue(applied);
 		const layer = JSON.stringify({ type: 'FeatureCollection', features: [] });
-		const local = await ctrl.openBalancedModule({ name: 'placed', payload: payload(), geoLayer: layer });
+		const local = await ctrl.openBalancedModule({
+			name: 'placed',
+			payload: payload(),
+			geoLayer: layer
+		});
 		expect(engine.applyGeo).toHaveBeenCalledWith('{"module":"stub"}', layer);
 		expect(local.studyInputJson).toBe('with-geo');
 		expect(local.view).toBe(geoView);
@@ -180,7 +205,11 @@ describe('openBalancedModule', () => {
 
 	it('activates without flying the map when frame is false', async () => {
 		const { app, ctrl, frame, solve } = host();
-		const local = await ctrl.openBalancedModule({ name: 'still', payload: payload(), frame: false });
+		const local = await ctrl.openBalancedModule({
+			name: 'still',
+			payload: payload(),
+			frame: false
+		});
 		expect(app.activeLocalId).toBe(local.id);
 		expect(frame).not.toHaveBeenCalled();
 		expect(solve).toHaveBeenCalledWith(local, null);

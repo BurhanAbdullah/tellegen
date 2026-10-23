@@ -80,6 +80,7 @@ function localHasBus(c: LocalCase, busId: number): boolean {
 	const buses = c.view?.buses ?? c.diagram?.view.buses ?? c.topology?.buses ?? [];
 	return buses.some((b) => b.id === busId);
 }
+
 type SavedCaseCapture = {
 	input: string;
 	solution?: string;

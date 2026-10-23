@@ -52,7 +52,10 @@ export interface DefaultBasemapOptions {
 }
 
 /** OpenFreeMap primary and CARTO fallback for a theme. */
-export function defaultBasemap(theme: BasemapTheme, options: DefaultBasemapOptions = {}): BasemapSpec {
+export function defaultBasemap(
+	theme: BasemapTheme,
+	options: DefaultBasemapOptions = {}
+): BasemapSpec {
 	const hideLabels = options.hideLabels ?? true;
 	const variant = hideLabels ? (`${theme}-nolabels` as const) : theme;
 	return {
@@ -220,7 +223,10 @@ export function attachBasemapFallback(
 			passThrough(event);
 			return;
 		}
-		if ((status !== undefined && FORBIDDEN_STATUSES.has(status)) || FORBIDDEN_MESSAGE.test(message)) {
+		if (
+			(status !== undefined && FORBIDDEN_STATUSES.has(status)) ||
+			FORBIDDEN_MESSAGE.test(message)
+		) {
 			fallBack({ kind: 'source-forbidden', message, status: status ?? 0, sourceId });
 			return;
 		}
