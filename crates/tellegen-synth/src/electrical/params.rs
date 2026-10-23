@@ -308,6 +308,21 @@ pub const MAX_ANGLE_SPREAD_RAD: f64 = 0.775_397_496_610_753;
 /// that each round re-measures the spread before reinforcing more.
 pub const STIFFENING_BATCH_SHARE: f64 = 0.05;
 
+/// Branches per bus up to which the plan adds circuits to narrow an island's
+/// angle spread; beyond it the spread is reported as unfinished rather than
+/// met by a network denser than real ones. source: Birchfield et al. 2017
+/// report branch-to-bus ratios of 1.2–1.5 for North American transmission
+/// systems (the range of `density_branch_factor`); the budget leaves about a
+/// tenth above the densest of them, a modelling choice.
+pub const STIFFENING_BRANCH_BUDGET: f64 = 1.6;
+
+/// Share of buses at or above the highest requested level up to which the
+/// plan raises buses to narrow an island's angle spread. source: Birchfield
+/// et al. 2017, Table II: 8–35% of buses sit at the highest voltage level of
+/// the North American systems surveyed (the `hv_share` range of the
+/// published calibration targets).
+pub const STIFFENING_HV_SHARE: f64 = 0.35;
+
 /// Circuits a corridor may need at its voltage before its ends are raised to
 /// the next level. source: transmission planning chooses the voltage class
 /// from the power and distance a corridor must carry, through each class's
@@ -317,12 +332,14 @@ pub const STIFFENING_BATCH_SHARE: f64 = 0.05;
 /// carries the same power on less right of way and with a smaller angle.
 pub const UPGRADE_CIRCUITS: u32 = 2;
 
-/// Circuits one corridor may hold. A corridor between aggregated buses
-/// stands for several real rights of way, so it may carry more circuits than
-/// one tower line; the cap only stops a runaway plan. source: European and
-/// North American corridors carry up to four circuits per tower line and
-/// metropolitan substations terminate several such lines (ENTSO-E grid map).
-pub const MAX_CIRCUITS_PER_CORRIDOR: u32 = 16;
+/// Circuits one corridor may hold; a corridor that needs more raises its ends
+/// along the voltage ladder (up to 765 kV) instead. source: double and
+/// quadruple circuit lines are common in Germany, India, Japan and China and
+/// six-circuit lines rare (Acosta and Tavares, IPST 2019); in the
+/// OpenStreetMap-based European grid (Xiong et al., *Scientific Data* 12:277,
+/// 2025, Zenodo dataset v0.3) 99.5% of the 7,100 overhead lines at 220 kV and
+/// above carry one or two circuits per voltage level and none more than four.
+pub const MAX_CIRCUITS_PER_CORRIDOR: u32 = 4;
 
 /// Share of a generator's reactive capability the reactive plan counts on at
 /// peak; the rest stays in reserve for contingencies and voltage control.

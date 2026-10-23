@@ -407,6 +407,17 @@ pub struct PlanningReport {
     /// Buses raised to the next voltage level because an incident corridor
     /// would have needed more than two circuits at the lower one.
     pub promoted_buses: usize,
+    /// A level the plan added above the requested ones (765 kV) because
+    /// corridors at the highest requested level needed more than two
+    /// circuits; absent when the requested levels sufficed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added_level_kv: Option<f64>,
+    /// Most parallel circuits on one corridor.
+    pub max_parallel_circuits: u32,
+    /// Parallel circuits one corridor may hold.
+    pub circuit_cap: u32,
+    /// Corridors at the cap whose planning flow still needs more circuits.
+    pub capped_corridors: usize,
     /// Branches the requested branch factor asks for.
     pub branch_target: usize,
     /// Branches in the network.

@@ -25,8 +25,9 @@
 use crate::electrical::branches::{design_circuits, CircuitDesign, CorridorDraw, BASE_MVA};
 use crate::electrical::generators::DraftGenerator;
 use crate::electrical::params::{
-    MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_MAX_ROUNDS, PLANNING_UTILISATION,
-    STIFFENING_BATCH_SHARE, TRANSFORMER_SIZE_STEP_MVA, UPGRADE_CIRCUITS,
+    LINE_CLASSES, MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_MAX_ROUNDS,
+    PLANNING_UTILISATION, STIFFENING_BATCH_SHARE, STIFFENING_BRANCH_BUDGET, STIFFENING_HV_SHARE,
+    TRANSFORMER_SIZE_STEP_MVA, UPGRADE_CIRCUITS,
 };
 use crate::geom::delaunay::UnionFind;
 use crate::site::DraftBus;
@@ -79,6 +80,88 @@ pub struct CorridorPlan {
     pub max_loading: f64,
     /// Corridors still loaded above their rating (only when the plan hit a cap).
     pub overloaded_corridors: usize,
+    /// The level the plan added above the requested ones, when it raised a
+    /// bus to it; bus tiers then count from it.
+    pub added_level_kv: Option<f64>,
+    /// Most circuits on one corridor.
+    pub max_parallel_circuits: u32,
+    /// Corridors at [`MAX_CIRCUITS_PER_CORRIDOR`] whose planning flow still
+    /// needs more circuits at the highest level.
+    pub capped_corridors: usize,
+    /// Bus angles of the final planning case, radians.
+    pub angles: Vec<f64>,
+}
+
+/// Raise every marked bus to its marked tier of `ladder`, and every corridor
+/// to the higher voltage of its ends. Returns how many buses moved.
+fn raise_buses(
+    buses: &mut [DraftBus],
+    corridors: &mut [Corridor],
+    raise: &[Option<usize>],
+    ladder: &[f64],
+) -> usize {
+    let mut moved = 0;
+    for (bus, to) in buses.iter_mut().zip(raise) {
+        let Some(to) = *to else { continue };
+        if to < bus.tier {
+            bus.tier = to;
+            bus.base_kv = ladder[to];
+            bus.annotation = format!(
+                "{} (raised to {} kV: an incident corridor's planned flow needs more than {UPGRADE_CIRCUITS} circuits at the lower voltage)",
+                bus.annotation, bus.base_kv
+            );
+            moved += 1;
+        }
+    }
+    if moved > 0 {
+        for c in corridors.iter_mut() {
+            c.kv = buses[c.a].base_kv.max(buses[c.b].base_kv);
+        }
+    }
+    moved
+}
+
+/// Redesign every corridor at its ends' current voltages, keeping each
+/// transformer bank at least as large as the plan already made it.
+fn redesign(
+    buses: &[DraftBus],
+    corridors: &[Corridor],
+    generators: &[DraftGenerator],
+    draws: &[CorridorDraw],
+    bank_floor: &[f64],
+) -> Vec<CircuitDesign> {
+    let mut designs = design_circuits(buses, corridors, generators, draws);
+    for (d, &floor) in designs.iter_mut().zip(bank_floor) {
+        if let Some(mva) = d.transformer_mva {
+            let keep = floor.min(d.line_rate);
+            if keep > mva {
+                d.set_transformer_mva(keep);
+            }
+        }
+    }
+    designs
+}
+
+/// Mark both ends of corridor `c` for the tier above its higher end.
+fn mark_raise(raise: &mut [Option<usize>], buses: &[DraftBus], c: &Corridor) -> bool {
+    mark_raise_to(raise, buses, c, 0)
+}
+
+/// [`mark_raise`], but never above tier `top`.
+fn mark_raise_to(
+    raise: &mut [Option<usize>],
+    buses: &[DraftBus],
+    c: &Corridor,
+    top: usize,
+) -> bool {
+    let tier = buses[c.a].tier.min(buses[c.b].tier);
+    if tier <= top {
+        return false;
+    }
+    for end in [c.a, c.b] {
+        raise[end] = Some(raise[end].map_or(tier - 1, |t| t.min(tier - 1)));
+    }
+    true
 }
 
 /// Least-cost outputs of quadratic-cost units meeting `demand` on an
@@ -143,6 +226,18 @@ pub fn dc_angles(
     injection: &[f64],
     grounds: &[usize],
 ) -> Vec<f64> {
+    dc_angles_from(n, edges, injection, grounds, None)
+}
+
+/// [`dc_angles`] started from `guess` (the previous planning round's angles,
+/// which a round changes little), to the same tolerance on the residual.
+fn dc_angles_from(
+    n: usize,
+    edges: &[(usize, usize, f64)],
+    injection: &[f64],
+    grounds: &[usize],
+    guess: Option<&[f64]>,
+) -> Vec<f64> {
     let mut grounded = vec![false; n];
     for &g in grounds {
         grounded[g] = true;
@@ -176,12 +271,25 @@ pub fn dc_angles(
     };
     let dot = |u: &[f64], v: &[f64]| u.iter().zip(v).map(|(a, b)| a * b).sum::<f64>();
 
-    let mut x = vec![0.0; n];
-    let mut r: Vec<f64> = (0..n)
+    let b: Vec<f64> = (0..n)
         .map(|i| if grounded[i] { 0.0 } else { injection[i] })
         .collect();
-    let norm0 = dot(&r, &r).sqrt();
+    let norm0 = dot(&b, &b).sqrt();
+    let mut x = match guess {
+        Some(g) if g.len() == n => (0..n)
+            .map(|i| if grounded[i] { 0.0 } else { g[i] })
+            .collect(),
+        _ => vec![0.0; n],
+    };
     if norm0 == 0.0 {
+        return vec![0.0; n];
+    }
+    let mut r = vec![0.0; n];
+    apply(&x, &mut r);
+    for i in 0..n {
+        r[i] = b[i] - r[i];
+    }
+    if dot(&r, &r).sqrt() <= 1e-11 * norm0 {
         return x;
     }
     let mut z = vec![0.0; n];
@@ -240,6 +348,42 @@ fn planning_angles(
     (edges, theta)
 }
 
+/// One planning round's DC case: corridor susceptances `(a, b, pu)`, bus
+/// angles (radians) and planned flows (MW).
+struct PlanningCase {
+    edges: Vec<(usize, usize, f64)>,
+    theta: Vec<f64>,
+    flows: Vec<f64>,
+}
+
+/// The planning case of one round, the angles started from the previous
+/// round's.
+fn planning_state(
+    n: usize,
+    designs: &[CircuitDesign],
+    circuits: &[u32],
+    injection_mw: &[f64],
+    grounds: &[usize],
+    guess: Option<&[f64]>,
+) -> PlanningCase {
+    let edges: Vec<(usize, usize, f64)> = designs
+        .iter()
+        .zip(circuits)
+        .map(|(d, &k)| (d.from, d.to, susceptance(d) * k as f64))
+        .collect();
+    let p: Vec<f64> = injection_mw.iter().map(|v| v / BASE_MVA).collect();
+    let theta = dc_angles_from(n, &edges, &p, grounds, guess);
+    let flows = edges
+        .iter()
+        .map(|&(a, b, w)| w * (theta[a] - theta[b]) * BASE_MVA)
+        .collect();
+    PlanningCase {
+        edges,
+        theta,
+        flows,
+    }
+}
+
 /// Planned flow per corridor (MW, from `design.from` to `design.to`) for the
 /// given circuit counts and per-bus net injections (MW).
 fn corridor_flows(
@@ -261,7 +405,10 @@ fn corridor_flows(
 /// add circuits (or larger banks) until no circuit runs above the
 /// utilisation target, stiffen islands whose angle spread is too wide, and
 /// fill up to `branch_target` circuits where the planned flow is heaviest.
-/// Returns the final circuit designs (one per corridor) and the plan.
+/// Promotion climbs `levels` and, when expanding, the 765 kV class above
+/// them: a corridor that would need more than [`MAX_CIRCUITS_PER_CORRIDOR`]
+/// circuits raises its ends instead of stacking more. Returns the final
+/// circuit designs (one per corridor) and the plan.
 pub fn plan_corridors(
     buses: &mut [DraftBus],
     levels: &[f64],
@@ -317,49 +464,44 @@ pub fn plan_corridors(
     let mut circuits: Vec<u32> = corridors.iter().map(|c| c.circuits.max(1)).collect();
     let initial: usize = circuits.iter().map(|&k| k as usize).sum();
 
+    // The voltage ladder: the requested levels and, when expanding, the
+    // highest line class above them. Tiers index the ladder, so they shift by
+    // one while the extra level is available.
+    let top_class = LINE_CLASSES[LINE_CLASSES.len() - 1].kv;
+    let extended = expand && !levels.is_empty() && levels[0] < top_class - 1e-6;
+    let ladder: Vec<f64> = if extended {
+        std::iter::once(top_class)
+            .chain(levels.iter().copied())
+            .collect()
+    } else {
+        levels.to_vec()
+    };
+    if extended {
+        for bus in buses.iter_mut() {
+            bus.tier += 1;
+        }
+    }
+
     // 1. Voltage class by power and distance.
+    let mut bank_floor = vec![0.0; corridors.len()];
     let mut designs = design_circuits(buses, corridors, generators, draws);
     let mut promoted = 0usize;
-    for _ in 1..if expand { levels.len() } else { 1 } {
+    for _ in 1..if expand { ladder.len() } else { 1 } {
         let flows = corridor_flows(n, &designs, &circuits, &injection, &grounds);
         let mut raise: Vec<Option<usize>> = vec![None; n];
         for (k, c) in corridors.iter().enumerate() {
             let d = &designs[k];
             let line_capacity = PLANNING_UTILISATION * d.line_rate * d.rate_spread;
-            if flows[k].abs() <= UPGRADE_CIRCUITS as f64 * line_capacity {
-                continue;
-            }
-            let tier = buses[c.a].tier.min(buses[c.b].tier);
-            if tier == 0 {
-                continue;
-            }
-            for end in [c.a, c.b] {
-                let to = raise[end].map_or(tier - 1, |t| t.min(tier - 1));
-                raise[end] = Some(to);
+            if flows[k].abs() > UPGRADE_CIRCUITS as f64 * line_capacity {
+                mark_raise(&mut raise, buses, c);
             }
         }
-        let mut changed = false;
-        for (i, to) in raise.iter().enumerate() {
-            let Some(to) = *to else { continue };
-            if to < buses[i].tier {
-                let bus = &mut buses[i];
-                bus.tier = to;
-                bus.base_kv = levels[to];
-                bus.annotation = format!(
-                    "{} (raised to {} kV: an incident corridor's planned flow needs more than {UPGRADE_CIRCUITS} circuits at the lower voltage)",
-                    bus.annotation, bus.base_kv
-                );
-                promoted += 1;
-                changed = true;
-            }
-        }
-        if !changed {
+        let moved = raise_buses(buses, corridors, &raise, &ladder);
+        if moved == 0 {
             break;
         }
-        for c in corridors.iter_mut() {
-            c.kv = buses[c.a].base_kv.max(buses[c.b].base_kv);
-        }
-        designs = design_circuits(buses, corridors, generators, draws);
+        promoted += moved;
+        designs = redesign(buses, corridors, generators, draws, &bank_floor);
     }
 
     // 2. Capacity and stiffening, repeated until both hold: stiffening moves
@@ -372,11 +514,25 @@ pub fn plan_corridors(
     let mut stiffening = 0usize;
     let mut rounds = 0;
     let mut converged = corridors.is_empty() || !expand;
+    let mut warm: Option<Vec<f64>> = None;
     while expand && rounds < PLANNING_MAX_ROUNDS && !corridors.is_empty() {
         rounds += 1;
-        let flows = corridor_flows(n, &designs, &circuits, &injection, &grounds);
+        let PlanningCase {
+            edges,
+            theta,
+            flows,
+        } = planning_state(
+            n,
+            &designs,
+            &circuits,
+            &injection,
+            &grounds,
+            warm.as_deref(),
+        );
+        warm = Some(theta.clone());
         let mut added = false;
         let mut capped = false;
+        let mut raise: Vec<Option<usize>> = vec![None; n];
         for (c, d) in designs.iter_mut().enumerate() {
             // Rating the corridor needs so the planning flow stays at the
             // utilisation target.
@@ -391,6 +547,7 @@ pub fn plan_corridors(
                     .min(d.line_rate);
                 if next > mva {
                     d.set_transformer_mva(next);
+                    bank_floor[c] = next;
                     upsized[c] = true;
                     added = true;
                     if required <= circuits[c] as f64 * d.rate_a {
@@ -399,6 +556,10 @@ pub fn plan_corridors(
                 }
             }
             let need = (required / d.rate_a).ceil() as u32;
+            if need > UPGRADE_CIRCUITS && mark_raise(&mut raise, buses, &corridors[c]) {
+                // A higher level carries it on fewer circuits.
+                continue;
+            }
             capped |= need > MAX_CIRCUITS_PER_CORRIDOR;
             let need = need.min(MAX_CIRCUITS_PER_CORRIDOR);
             if need > circuits[c] {
@@ -406,11 +567,26 @@ pub fn plan_corridors(
                 added = true;
             }
         }
+        let moved = raise_buses(buses, corridors, &raise, &ladder);
+        if moved > 0 {
+            promoted += moved;
+            designs = redesign(buses, corridors, generators, draws, &bank_floor);
+            continue;
+        }
         if added {
             continue;
         }
-        // Capacity holds; stiffen any island whose spread is too wide.
-        let (edges, theta) = planning_angles(n, &designs, &circuits, &injection, &grounds);
+        // Capacity holds; stiffen any island whose spread is too wide (the
+        // round's angles still describe the unchanged network). Stiffening
+        // raises buses only within the requested levels (the level the plan
+        // may add above them answers capacity, not angle) and adds circuits
+        // only while the network stays within its branch budget.
+        let mut stiffen_raise: Vec<Option<usize>> = vec![None; n];
+        let stiffen_top = usize::from(extended);
+        let budget = (STIFFENING_BRANCH_BUDGET * n as f64).floor() as usize;
+        let mut total: usize = circuits.iter().map(|&k| k as usize).sum();
+        let hv_budget = (STIFFENING_HV_SHARE * n as f64).floor() as usize;
+        let mut hv = buses.iter().filter(|b| b.tier <= stiffen_top).count();
         let mut spread_ok = true;
         let mut stiffened = false;
         for (ci, members) in buses_of.iter().enumerate() {
@@ -438,7 +614,12 @@ pub fn plan_corridors(
             let mut gains: Vec<(f64, usize)> = corridors
                 .iter()
                 .enumerate()
-                .filter(|(k, c)| component[c.a] == root && circuits[*k] < MAX_CIRCUITS_PER_CORRIDOR)
+                .filter(|(k, c)| {
+                    component[c.a] == root
+                        && ((circuits[*k] < MAX_CIRCUITS_PER_CORRIDOR && total < budget)
+                            || (buses[c.a].tier.min(buses[c.b].tier) > stiffen_top
+                                && hv < hv_budget))
+                })
                 .map(|(k, _)| {
                     let d = &designs[k];
                     let gain =
@@ -468,13 +649,36 @@ pub fn plan_corridors(
                 if d.transformer_mva.is_some_and(|m| m < d.line_rate) {
                     let full = d.line_rate;
                     d.set_transformer_mva(full);
+                    bank_floor[k] = full;
                     upsized[k] = true;
-                } else {
+                } else if hv < hv_budget
+                    && mark_raise_to(&mut stiffen_raise, buses, &corridors[k], stiffen_top)
+                {
+                    let c = &corridors[k];
+                    hv += [c.a, c.b]
+                        .iter()
+                        .filter(|&&end| {
+                            buses[end].tier > stiffen_top
+                                && stiffen_raise[end].is_some_and(|t| t <= stiffen_top)
+                        })
+                        .count();
+                    // A higher requested level narrows the angle more than
+                    // another circuit at this one (230 to 500 kV about
+                    // sevenfold per circuit) and adds no branch.
+                } else if circuits[k] < MAX_CIRCUITS_PER_CORRIDOR && total < budget {
                     circuits[k] += 1;
                     stiffening += 1;
+                    total += 1;
+                } else {
+                    continue;
                 }
                 stiffened = true;
             }
+        }
+        let moved = raise_buses(buses, corridors, &stiffen_raise, &ladder);
+        if moved > 0 {
+            promoted += moved;
+            designs = redesign(buses, corridors, generators, draws, &bank_floor);
         }
         if stiffened {
             continue;
@@ -538,16 +742,33 @@ pub fn plan_corridors(
         .fold(0.0, f64::max);
     let mut max_loading: f64 = 0.0;
     let mut overloaded = 0;
+    let mut capped_corridors = 0;
     for (c, d) in designs.iter().enumerate() {
         let l = flows[c].abs() / (circuits[c] as f64 * d.rate_a);
         max_loading = max_loading.max(l);
         if l > 1.0 + 1e-9 {
             overloaded += 1;
         }
+        let need = flows[c].abs() / PLANNING_UTILISATION / d.rate_a;
+        if expand && circuits[c] >= MAX_CIRCUITS_PER_CORRIDOR && need > circuits[c] as f64 + 1e-9 {
+            capped_corridors += 1;
+        }
     }
+    // Drop the extra level when no bus took it, so tiers index `levels` again.
+    let added_level_kv = if extended && buses.iter().any(|b| b.tier == 0) {
+        Some(top_class)
+    } else {
+        if extended {
+            for bus in buses.iter_mut() {
+                bus.tier -= 1;
+            }
+        }
+        None
+    };
     for (corridor, &k) in corridors.iter_mut().zip(&circuits) {
         corridor.circuits = k;
     }
+    let max_parallel_circuits = circuits.iter().copied().max().unwrap_or(0);
     let plan = CorridorPlan {
         circuits,
         dispatch,
@@ -563,6 +784,10 @@ pub fn plan_corridors(
         filler_circuits: filler,
         max_loading,
         overloaded_corridors: overloaded,
+        added_level_kv,
+        max_parallel_circuits,
+        capped_corridors,
+        angles: theta,
     };
     (designs, plan)
 }

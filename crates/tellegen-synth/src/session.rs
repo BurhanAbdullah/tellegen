@@ -18,7 +18,9 @@ use crate::demand::NationalDemand;
 use crate::electrical::branches::{draw_corridors, expand_circuits, spread_sigma, DraftBranch};
 use crate::electrical::generators::{place_generators, DraftGenerator};
 use crate::electrical::loads::assign_loads;
-use crate::electrical::params::{MAX_ANGLE_SPREAD_RAD, PLANNING_UTILISATION};
+use crate::electrical::params::{
+    MAX_ANGLE_SPREAD_RAD, MAX_CIRCUITS_PER_CORRIDOR, PLANNING_UTILISATION, UPGRADE_CIRCUITS,
+};
 use crate::electrical::planning::{plan_corridors, PlanMode};
 use crate::electrical::reactive::plan_shunts;
 use crate::error::SynthError;
@@ -465,10 +467,28 @@ impl Generator {
             warnings.push(Warning::new(
                 "planning_incomplete",
                 format!(
-                    "the corridor plan stopped at its round or circuit cap after {} round(s): {} corridor(s) above their rating in the planning case (highest loading {:.2}), widest island angle spread {:.1}°",
-                    plan.rounds, plan.overloaded_corridors, plan.max_loading, plan.angle_spread_deg
+                    "the corridor plan stopped at its round or circuit cap after {} round(s): {} corridor(s) above their rating in the planning case (highest loading {:.2}), {} corridor(s) at the {MAX_CIRCUITS_PER_CORRIDOR}-circuit cap still short of capacity, widest island angle spread {:.1}°",
+                    plan.rounds,
+                    plan.overloaded_corridors,
+                    plan.max_loading,
+                    plan.capped_corridors,
+                    plan.angle_spread_deg
                 ),
             ));
+        }
+        if let Some(kv) = plan.added_level_kv {
+            let raised = self.state.buses.iter().filter(|b| b.tier == 0).count();
+            warnings.push(Warning::new(
+                "voltage_level_added",
+                format!(
+                    "{raised} bus(es) were raised to {kv} kV, above the requested levels: their corridors would otherwise need more than {UPGRADE_CIRCUITS} circuits at the highest requested level"
+                ),
+            ));
+            if let Some(ctx) = self.report.context.as_mut() {
+                ctx.voltage_levels_kv.insert(0, kv);
+                ctx.voltage_classes_kv
+                    .insert(0, crate::electrical::params::line_class_for(kv).kv);
+            }
         }
         let name = format!("maptogrid_{}", &self.report.provenance.request_sha256[..16]);
         let (hvdc, coords_kind, osm_ids, makeup) = match self.state.osm.as_ref() {
@@ -526,6 +546,10 @@ impl Generator {
             rounds: plan.rounds,
             converged: plan.converged,
             promoted_buses: plan.promoted_buses,
+            added_level_kv: plan.added_level_kv,
+            max_parallel_circuits: plan.max_parallel_circuits,
+            circuit_cap: MAX_CIRCUITS_PER_CORRIDOR,
+            capped_corridors: plan.capped_corridors,
             branch_target,
             branches: branches.len(),
             capacity_circuits: plan.capacity_circuits,
