@@ -91,15 +91,29 @@
 {#if layout.storageError}<p class="layout-error" role="status" style:top="{panelTop}px">
 		{layout.storageError}
 	</p>{/if}
+<!-- The docks and the drawer take focus (tabindex -1) when a closed panel has
+	 no toolbar button or opener to hand it back to. The drawer stays rendered,
+	 at zero height, while no panel is open in it. -->
 {#if layout.compact}
-	{#if drawer}<div class="drawer" style:bottom="{bottomReserve}px" style:height="{drawerHeight}px">
-			<PanelCard panel={drawer} mobile />
-		</div>{/if}
+	<div
+		class="drawer"
+		data-panel-drawer
+		role="region"
+		aria-label="Panels"
+		tabindex="-1"
+		style:bottom="{bottomReserve}px"
+		style:height="{drawer ? drawerHeight : 0}px"
+	>
+		{#if drawer}<PanelCard panel={drawer} mobile />{/if}
+	</div>
 {:else}
 	<div
 		class="dock left"
 		style:bottom="max(var(--tellegen-dock-bottom, 100px), {bottomReserve}px)"
 		data-panel-dock="left"
+		role="region"
+		aria-label="Left panels"
+		tabindex="-1"
 		style:top="{panelTop}px"
 		style:width="{layout.dockWidth('left')}px"
 	>
@@ -109,6 +123,9 @@
 		class="dock right"
 		style:bottom="max(var(--tellegen-dock-bottom, 100px), {bottomReserve}px)"
 		data-panel-dock="right"
+		role="region"
+		aria-label="Right panels"
+		tabindex="-1"
 		style:top="{panelTop}px"
 		style:width="{layout.dockWidth('right')}px"
 	>
