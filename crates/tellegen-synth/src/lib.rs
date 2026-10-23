@@ -24,11 +24,14 @@ pub mod calibrate;
 pub mod context;
 pub mod electrical;
 pub mod error;
+pub mod export;
 pub mod geom;
+pub mod osm;
 pub mod places;
 pub mod report;
 pub mod request;
 pub mod rng;
+pub mod session;
 pub mod site;
 pub mod stats;
 pub mod topology;
@@ -46,6 +49,7 @@ pub use request::{
     CalibrationOptions, CalibrationTargets, DemandSpec, Density, FarIslandPolicy, Fidelity, Fuel,
     IslandOptions, Limits, OsmIslands, OsmOptions, Region, Source, SynthRequest, ValidationOptions,
 };
+pub use session::{generate, Generator};
 
 /// The crate version written into module producers and report provenance.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
