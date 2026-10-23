@@ -338,6 +338,8 @@ impl Generator {
             &mut rng,
         );
         counts.insert("buses_promoted".into(), loads.promoted as u64);
+        counts.insert("buses_load_capped".into(), loads.capped as u64);
+        counts.insert("load_spilled_mw".into(), loads.spilled_mw.round() as u64);
         if loads.uniform
             && ctx.places_in_region > 0
             && self.request.fidelity == crate::request::Fidelity::High

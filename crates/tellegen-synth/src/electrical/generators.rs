@@ -35,6 +35,33 @@ pub struct DraftGenerator {
     pub slack: bool,
 }
 
+/// Smallest catchment weight a unit keeps, as a share of the mean, so a unit
+/// far from load still receives a plant of its fuel's size.
+const CATCHMENT_FLOOR: f64 = 0.05;
+
+/// The load nearest each unit bus: every bus of `members` adds its load to
+/// the unit in `units` closest to it, MW.
+fn catchment_load(buses: &[DraftBus], members: &[usize], units: &[usize]) -> Vec<f64> {
+    let mut out = vec![0.0; units.len()];
+    for &i in members {
+        let (lon, lat) = (buses[i].lon, buses[i].lat);
+        let k = lat.to_radians().cos();
+        let nearest = units
+            .iter()
+            .enumerate()
+            .map(|(slot, &u)| {
+                let dx = (buses[u].lon - lon) * k;
+                let dy = buses[u].lat - lat;
+                (dx * dx + dy * dy, slot)
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        if let Some((_, slot)) = nearest {
+            out[slot] += buses[i].load_mw;
+        }
+    }
+    out
+}
+
 /// Default unit count for `n` buses.
 pub fn default_generator_count(n: usize) -> usize {
     let hi = n.max(1);
@@ -177,6 +204,18 @@ pub fn place_generators(
         for &bus in ranked.iter().take(count) {
             let (fuel, raw) = draw(rng);
             drafts.push((bus, fuel, raw));
+        }
+        // Regional adequacy: each unit's share of the island's capacity
+        // scales with the load nearest to it, so every part of the island can
+        // cover its own peak and the network carries balancing transfers, not
+        // the whole island's demand.
+        let units: Vec<usize> = drafts.iter().map(|d| d.0).collect();
+        let catchment = catchment_load(buses, &island_buses[&island], &units);
+        let mean = catchment.iter().sum::<f64>() / catchment.len().max(1) as f64;
+        if mean > 0.0 {
+            for (draft, load) in drafts.iter_mut().zip(&catchment) {
+                draft.2 *= (load / mean).max(CATCHMENT_FLOOR);
+            }
         }
         let sizes = loop {
             let raw: Vec<f64> = drafts.iter().map(|d| d.2).collect();
