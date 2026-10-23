@@ -1,12 +1,14 @@
 //! Generation: units are sited where the network is strong and demand is
 //! high (nodal degree, local load, voltage), one per bus, with fuels drawn
-//! from the regional mix, relative sizes from a log-normal per fuel, and the
-//! reserve-margin capacity target of each island shared out among them. No
+//! from the regional mix and relative sizes from a log-normal per fuel. The
+//! units of an island are grouped into adequacy areas of about
+//! [`ADEQUACY_AREA_MW`] of the load nearest them, and each area's
+//! reserve-margin capacity is shared out among its units by their sizes. No
 //! bus collects more than its voltage class can plausibly evacuate
-//! ([`bus_generation_cap_mw`]): a share above the cap spills onto the other
-//! units, and when every unit is at its cap the next ranked bus gets a plant.
-//! Costs are quadratic by fuel. The largest unit of each island sets its
-//! reference bus.
+//! ([`bus_generation_cap_mw`]): a share above the cap spills onto the area's
+//! other units, and when every unit of the area is at its cap the area's next
+//! ranked bus gets a plant. Costs are quadratic by fuel. The largest unit of
+//! each island sets its reference bus.
 
 use std::collections::BTreeMap;
 
@@ -35,31 +37,129 @@ pub struct DraftGenerator {
     pub slack: bool,
 }
 
-/// Smallest catchment weight a unit keeps, as a share of the mean, so a unit
-/// far from load still receives a plant of its fuel's size.
+/// Peak load of one adequacy area, MW: an island's units are grouped into
+/// areas of about this much load, and each area holds the reserve-margin
+/// capacity of its own load, so the network carries balancing transfers
+/// between neighbours rather than one side of a country's demand to the
+/// other. source: the Lower 48 is operated by 66 balancing authorities (EIA,
+/// "U.S. electric system is made up of interconnections and balancing
+/// authorities", Today in Energy, 20 July 2016), about 11 GW each of its
+/// 2025 peak; the area size is a modelling choice at that scale.
+pub const ADEQUACY_AREA_MW: f64 = 10_000.0;
+
+/// Smallest weight an adequacy area keeps, as a share of the mean area's
+/// load, so an area far from load still receives plants of its fuels' size.
+/// Modelling choice, no source.
 const CATCHMENT_FLOOR: f64 = 0.05;
 
-/// The load nearest each unit bus: every bus of `members` adds its load to
-/// the unit in `units` closest to it, MW.
-fn catchment_load(buses: &[DraftBus], members: &[usize], units: &[usize]) -> Vec<f64> {
-    let mut out = vec![0.0; units.len()];
-    for &i in members {
-        let (lon, lat) = (buses[i].lon, buses[i].lat);
-        let k = lat.to_radians().cos();
-        let nearest = units
-            .iter()
-            .enumerate()
-            .map(|(slot, &u)| {
-                let dx = (buses[u].lon - lon) * k;
-                let dy = buses[u].lat - lat;
-                (dx * dx + dy * dy, slot)
+/// Lloyd iterations grouping units into adequacy areas.
+const AREA_ITERATIONS: usize = 12;
+
+/// For every bus of `members`, the slot in `units` of the unit nearest it.
+fn nearest_unit(buses: &[DraftBus], members: &[usize], units: &[usize]) -> Vec<usize> {
+    members
+        .iter()
+        .map(|&i| {
+            let (lon, lat) = (buses[i].lon, buses[i].lat);
+            let k = lat.to_radians().cos();
+            units
+                .iter()
+                .enumerate()
+                .map(|(slot, &u)| {
+                    let dx = (buses[u].lon - lon) * k;
+                    let dy = buses[u].lat - lat;
+                    (dx * dx + dy * dy, slot)
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+                .map_or(0, |(_, slot)| slot)
+        })
+        .collect()
+}
+
+/// Group `units` into adequacy areas of about [`ADEQUACY_AREA_MW`] of
+/// `catchment` load each: load-weighted k-means on the units' positions,
+/// seeded at the largest catchment and then at the unit farthest (by
+/// load-weighted squared distance) from the seeds so far. Returns each unit's
+/// area, numbered from 0 with no empty area.
+fn adequacy_areas(buses: &[DraftBus], units: &[usize], catchment: &[f64]) -> Vec<usize> {
+    let m = units.len();
+    let load: f64 = catchment.iter().sum();
+    let areas = ((load / ADEQUACY_AREA_MW).round() as usize).clamp(1, m.max(1));
+    if areas <= 1 {
+        return vec![0; m];
+    }
+    let mean_lat = units.iter().map(|&u| buses[u].lat).sum::<f64>() / m as f64;
+    let k = mean_lat.to_radians().cos();
+    let at: Vec<(f64, f64)> = units
+        .iter()
+        .map(|&u| (buses[u].lon * k, buses[u].lat))
+        .collect();
+    let weight: Vec<f64> = catchment.iter().map(|&c| c.max(1e-6)).collect();
+    let d2 = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2);
+    let first = (0..m)
+        .max_by(|&a, &b| weight[a].total_cmp(&weight[b]).then(b.cmp(&a)))
+        .expect("a unit");
+    let mut centres = vec![at[first]];
+    let mut nearest: Vec<f64> = at.iter().map(|&p| d2(p, at[first])).collect();
+    while centres.len() < areas {
+        let next = (0..m)
+            .max_by(|&a, &b| {
+                (weight[a] * nearest[a])
+                    .total_cmp(&(weight[b] * nearest[b]))
+                    .then(b.cmp(&a))
             })
-            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-        if let Some((_, slot)) = nearest {
-            out[slot] += buses[i].load_mw;
+            .expect("a unit");
+        if nearest[next] <= 0.0 {
+            break;
+        }
+        centres.push(at[next]);
+        for (d, &p) in nearest.iter_mut().zip(&at) {
+            *d = d.min(d2(p, at[next]));
         }
     }
-    out
+    let assign = |centres: &[(f64, f64)]| -> Vec<usize> {
+        at.iter()
+            .map(|&p| {
+                (0..centres.len())
+                    .min_by(|&a, &b| {
+                        d2(p, centres[a])
+                            .total_cmp(&d2(p, centres[b]))
+                            .then(a.cmp(&b))
+                    })
+                    .expect("a centre")
+            })
+            .collect()
+    };
+    let mut area = assign(&centres);
+    for _ in 0..AREA_ITERATIONS {
+        let mut sum = vec![(0.0, 0.0, 0.0); centres.len()];
+        for (u, &a) in area.iter().enumerate() {
+            sum[a].0 += weight[u] * at[u].0;
+            sum[a].1 += weight[u] * at[u].1;
+            sum[a].2 += weight[u];
+        }
+        for (c, s) in centres.iter_mut().zip(&sum) {
+            if s.2 > 0.0 {
+                *c = (s.0 / s.2, s.1 / s.2);
+            }
+        }
+        let next = assign(&centres);
+        if next == area {
+            break;
+        }
+        area = next;
+    }
+    // Number the areas that kept units from 0, in order of first appearance.
+    let mut renumber = vec![usize::MAX; centres.len()];
+    let mut used = 0;
+    for a in area.iter_mut() {
+        if renumber[*a] == usize::MAX {
+            renumber[*a] = used;
+            used += 1;
+        }
+        *a = renumber[*a];
+    }
+    area
 }
 
 /// Default unit count for `n` buses.
@@ -205,39 +305,126 @@ pub fn place_generators(
             let (fuel, raw) = draw(rng);
             drafts.push((bus, fuel, raw));
         }
-        // Regional adequacy: each unit's share of the island's capacity
-        // scales with the load nearest to it, so every part of the island can
-        // cover its own peak and the network carries balancing transfers, not
-        // the whole island's demand.
+        // Regional adequacy: units are grouped into areas of about
+        // ADEQUACY_AREA_MW of the load nearest them, and each area's units
+        // share the reserve-margin capacity of that load by their drawn sizes.
+        // An area whose units all reach their bus caps grows onto its next
+        // ranked bus; capacity no area can hold is shared over the island.
+        let members = &island_buses[&island];
         let units: Vec<usize> = drafts.iter().map(|d| d.0).collect();
-        let catchment = catchment_load(buses, &island_buses[&island], &units);
-        let mean = catchment.iter().sum::<f64>() / catchment.len().max(1) as f64;
-        if mean > 0.0 {
-            for (draft, load) in drafts.iter_mut().zip(&catchment) {
-                draft.2 *= (load / mean).max(CATCHMENT_FLOOR);
+        let owner = nearest_unit(buses, members, &units);
+        let mut catchment = vec![0.0; units.len()];
+        for (&i, &slot) in members.iter().zip(&owner) {
+            catchment[slot] += buses[i].load_mw;
+        }
+        let mut area = adequacy_areas(buses, &units, &catchment);
+        let area_count = area.iter().max().map_or(1, |&a| a + 1);
+        let mut area_load = vec![0.0; area_count];
+        for (slot, &a) in area.iter().enumerate() {
+            area_load[a] += catchment[slot];
+        }
+        let mean = area_load.iter().sum::<f64>() / area_count as f64;
+        let weights: Vec<f64> = area_load
+            .iter()
+            .map(|&l| {
+                if mean > 0.0 {
+                    l.max(CATCHMENT_FLOOR * mean)
+                } else {
+                    1.0
+                }
+            })
+            .collect();
+        let weight_total: f64 = weights.iter().sum();
+        // Each island bus belongs to the area of its nearest unit; an area
+        // grows onto its own buses only.
+        let bus_area: BTreeMap<usize, usize> = members
+            .iter()
+            .zip(&owner)
+            .map(|(&i, &slot)| (i, area[slot]))
+            .collect();
+        let mut hosts: std::collections::BTreeSet<usize> = units.iter().copied().collect();
+        let mut sizes = vec![0.0; drafts.len()];
+        let mut leftover = 0.0;
+        for (a, weight) in weights.iter().enumerate() {
+            let target = capacity * weight / weight_total;
+            loop {
+                let slots: Vec<usize> = (0..drafts.len()).filter(|&k| area[k] == a).collect();
+                let raw: Vec<f64> = slots.iter().map(|&k| drafts[k].2).collect();
+                let caps: Vec<f64> = slots.iter().map(|&k| cap_of(&buses[drafts[k].0])).collect();
+                if let Some(shares) = share_under_caps(target, &raw, &caps) {
+                    for (&k, v) in slots.iter().zip(shares) {
+                        sizes[k] = v;
+                    }
+                    break;
+                }
+                // Every unit of the area sits at its bus's cap. A default
+                // count grows onto the area's next ranked bus; a requested
+                // count is honoured and the units exceed their caps, which
+                // the report says.
+                if requested.is_some() {
+                    let raw_total: f64 = raw.iter().sum::<f64>().max(1e-9);
+                    for (&k, r) in slots.iter().zip(&raw) {
+                        sizes[k] = target * r / raw_total;
+                    }
+                    break;
+                }
+                let next = ranked
+                    .iter()
+                    .copied()
+                    .find(|b| bus_area.get(b) == Some(&a) && !hosts.contains(b));
+                if let Some(bus) = next {
+                    let (fuel, raw) = draw(rng);
+                    drafts.push((bus, fuel, raw));
+                    area.push(a);
+                    sizes.push(0.0);
+                    hosts.insert(bus);
+                    spilled += 1;
+                    continue;
+                }
+                for (&k, c) in slots.iter().zip(&caps) {
+                    sizes[k] = *c;
+                }
+                leftover += target - caps.iter().sum::<f64>();
+                break;
             }
         }
-        let sizes = loop {
-            let raw: Vec<f64> = drafts.iter().map(|d| d.2).collect();
-            let caps: Vec<f64> = drafts.iter().map(|d| cap_of(&buses[d.0])).collect();
-            if let Some(sizes) = share_under_caps(capacity, &raw, &caps) {
-                break sizes;
+        // Capacity no area could hold goes to the island's units with room,
+        // then onto the island's next ranked buses.
+        if leftover > 1e-9 {
+            loop {
+                let raw: Vec<f64> = drafts.iter().map(|d| d.2).collect();
+                let room: Vec<f64> = drafts
+                    .iter()
+                    .zip(&sizes)
+                    .map(|(d, s)| (cap_of(&buses[d.0]) - s).max(0.0))
+                    .collect();
+                if let Some(extra) = share_under_caps(leftover, &raw, &room) {
+                    for (s, e) in sizes.iter_mut().zip(extra) {
+                        *s += e;
+                    }
+                    break;
+                }
+                if let Some(bus) = ranked.iter().copied().find(|b| !hosts.contains(b)) {
+                    let (fuel, raw) = draw(rng);
+                    drafts.push((bus, fuel, raw));
+                    area.push(0);
+                    sizes.push(0.0);
+                    hosts.insert(bus);
+                    spilled += 1;
+                    continue;
+                }
+                let raw_total: f64 = raw.iter().sum::<f64>().max(1e-9);
+                for (s, r) in sizes.iter_mut().zip(&raw) {
+                    *s += leftover * r / raw_total;
+                }
+                break;
             }
-            // Every unit sits at its bus's cap. A default count grows onto the
-            // next ranked bus; a requested count is honoured and the units
-            // exceed their caps, which the report says.
-            if requested.is_none() && drafts.len() < ranked.len() {
-                let bus = ranked[drafts.len()];
-                let (fuel, raw) = draw(rng);
-                drafts.push((bus, fuel, raw));
-                spilled += 1;
-                continue;
-            }
-            let raw_total: f64 = raw.iter().sum::<f64>().max(1e-9);
-            let sizes: Vec<f64> = raw.iter().map(|r| capacity * r / raw_total).collect();
-            over_cap += sizes.iter().zip(&caps).filter(|(s, c)| s > c).count();
-            break sizes;
-        };
+        }
+        over_cap += drafts
+            .iter()
+            .zip(&sizes)
+            .filter(|(d, s)| **s > cap_of(&buses[d.0]) + 1e-6)
+            .count();
         let first = gens.len();
         for ((bus, fuel, _), size) in drafts.into_iter().zip(sizes) {
             let pmax = size.max(MIN_UNIT_MW);
@@ -293,6 +480,61 @@ pub fn place_generators(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::resolve_context;
+    use crate::places::Places;
+    use crate::report::ElementSource;
+    use crate::request::{DemandSpec, Region};
+    use crate::rng::StreamTag;
+
+    #[test]
+    fn each_adequacy_area_holds_its_own_reserve_margin() {
+        // Two load centres 2,000 km apart, 30 GW each on 40 buses of 750 MW:
+        // the units near each must hold 1 + reserve margin of its load, and
+        // a centre whose first units reach their caps grows onto its own
+        // buses, not the other centre's.
+        let mut req = SynthRequest::new(Region::bbox(0.0, 0.0, 21.0, 1.0, "two centres"));
+        req.demand = DemandSpec::TotalMw { mw: 60_000.0 };
+        req.target_bus_count = Some(80);
+        let (ctx, _) = resolve_context(&req, &Places::empty(), &mut Vec::new()).unwrap();
+        // Equal scores rank by index, so the centres alternate.
+        let mut buses: Vec<DraftBus> = (0..80)
+            .map(|i| DraftBus {
+                lon: if i % 2 == 0 { 0.0 } else { 20.0 } + 0.15 * ((i / 2) % 8) as f64,
+                lat: 0.2 * ((i / 2) / 8) as f64,
+                name: format!("b{i}"),
+                place: None,
+                tier: 0,
+                base_kv: 500.0,
+                kind: BusKind::Load,
+                confidence: 1.0,
+                polygon: 0,
+                island: 0,
+                source: ElementSource::Synthetic,
+                population_weight: 1.0 / 80.0,
+                load_mw: 750.0,
+                load_mvar: 0.0,
+                annotation: String::new(),
+            })
+            .collect();
+        let mut rng = Stream::new(7, StreamTag::Generators);
+        let gens = place_generators(&mut buses, &[], &ctx, &req, &mut rng, &mut Vec::new());
+        let held = |west: bool| -> f64 {
+            gens.iter()
+                .filter(|g| (buses[g.bus].lon < 10.0) == west)
+                .map(|g| g.pmax_mw)
+                .sum()
+        };
+        let need = (1.0 + req.reserve_margin) * 30_000.0;
+        for west in [true, false] {
+            assert!(
+                (held(west) - need).abs() < 1e-6 * need,
+                "{} vs {need}",
+                held(west)
+            );
+        }
+        let cap = bus_generation_cap_mw(500.0);
+        assert!(gens.iter().all(|g| g.pmax_mw <= cap + 1e-6));
+    }
 
     #[test]
     fn shares_respect_caps_and_spill() {
