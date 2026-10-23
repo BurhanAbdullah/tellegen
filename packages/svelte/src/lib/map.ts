@@ -15,11 +15,15 @@ export {
 export type {
 	BasemapFallbackReason,
 	BasemapMapLike,
+	BasemapProvider,
 	BasemapSpec,
 	BasemapStyle,
+	BasemapSwitch,
 	BasemapTheme,
+	DefaultBasemap,
 	MapProjection,
 	MapTheme,
+	ResolvedBasemap,
 	StyleEdit
 } from './basemap.js';
 export {

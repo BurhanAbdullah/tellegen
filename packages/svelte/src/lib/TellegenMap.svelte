@@ -110,7 +110,7 @@
 		/** CARTO basemap key (free for non-commercial use from
 		 * carto.com/basemaps/apikey; restrict it to your hosts). With one, the
 		 * CARTO style leads and OpenFreeMap is the fallback; without one, the
-		 * order flips. */
+		 * order flips. Trimmed; a blank key counts as none. */
 		cartoApiKey?: string;
 		/** deck.gl layers drawn after tellegen's own, in the same overlay. */
 		extraLayers?: Layer[];
@@ -121,9 +121,12 @@
 		 * fires again after a context-loss or basemap remount, after the previous
 		 * cleanup ran. */
 		onMapReady?: (map: MapLibreMap, overlay: MapLibreOverlay) => void | (() => void);
-		/** The primary basemap failed and the fallback was requested. */
+		/** The primary basemap failed and the fallback was requested. The
+		 * reason's `from` and `to` name the providers (`'carto'`,
+		 * `'openfreemap'` or `'custom'`). */
 		onBasemapFallback?: (reason: BasemapFallbackReason) => void;
-		/** No basemap can be shown; the network layers still draw. */
+		/** No basemap can be shown; the network layers still draw. The reason's
+		 * `from` names the provider that failed last, and `to` is `null`. */
 		onBasemapError?: (reason: BasemapFallbackReason) => void;
 	} = $props();
 
@@ -174,11 +177,13 @@
 	const basemap = $derived(
 		resolveBasemap({ mapStyle, fallbackMapStyle, theme, hideBasemapLabels, cartoApiKey })
 	);
-	// Read as three values, not one object, so a theme change that resolves
+	// Read as separate values, not one object, so a theme change that resolves
 	// to the same styles does not rebuild the map.
 	const basemapPrimary = $derived(basemap.primary);
 	const basemapFallback = $derived(basemap.fallback);
 	const basemapHideLabels = $derived(basemap.hideLabels);
+	const basemapPrimaryProvider = $derived(basemap.primaryProvider);
+	const basemapFallbackProvider = $derived(basemap.fallbackProvider);
 	const palette = $derived(MAP_PALETTE[theme]);
 	// Set once a map has existed in this component instance: a rebuild (context
 	// loss or basemap change) restores the camera instead of reframing.
@@ -790,14 +795,17 @@
 	}
 
 	async function loadMapModules() {
-		const [maplibre, deckMap, layers, worker] = await Promise.all([
+		const [maplibre, deckMap, layers, workerUrl] = await Promise.all([
 			import('maplibre-gl'),
 			import('@deck.gl/maplibre'),
 			import('@deck.gl/layers'),
-			import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')
+			// A package export, not a relative import: its `development`
+			// condition keeps the worker's `?worker&url` import out of the dev
+			// server's pre-bundle (see maplibre-worker.dev.ts).
+			import('@tellegen/svelte/maplibre-worker').then((m) => m.maplibreWorkerUrl())
 		]);
 		// Bundle the worker with its shared imports and configure it before creating a map.
-		maplibre.setWorkerUrl(worker.default);
+		maplibre.setWorkerUrl(workerUrl);
 		return {
 			maplibregl: maplibre,
 			MapLibreOverlay: deckMap.MapLibreOverlay,
@@ -843,7 +851,9 @@
 		const spec = {
 			primary: basemapPrimary,
 			fallback: basemapFallback,
-			hideLabels: basemapHideLabels
+			hideLabels: basemapHideLabels,
+			primaryProvider: basemapPrimaryProvider,
+			fallbackProvider: basemapFallbackProvider
 		};
 		const compactAttribution = attribution === 'compact';
 		const camera = untrack(() => initialCamera);

@@ -88,11 +88,15 @@ export type { ControllerOptions, OpenBalancedModuleInput } from './controller.sv
 export type {
 	BasemapFallbackReason,
 	BasemapMapLike,
+	BasemapProvider,
 	BasemapSpec,
 	BasemapStyle,
+	BasemapSwitch,
 	BasemapTheme,
+	DefaultBasemap,
 	MapProjection,
 	MapTheme,
+	ResolvedBasemap,
 	StyleEdit
 } from './basemap.js';
 export type { MapPalette } from './colors.js';

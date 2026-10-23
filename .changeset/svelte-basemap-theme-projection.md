@@ -9,7 +9,7 @@ one; keys are free for non-commercial use from carto.com/basemaps/apikey.
 - With `cartoApiKey`, the keyed CARTO style leads (positron-nolabels or
   dark-matter-nolabels), and OpenFreeMap is the fallback.
 - Without a key, OpenFreeMap leads, and the keyless CARTO style is the
-  fallback.
+  fallback. The key is trimmed, so a blank one counts as none.
 
 Whenever an OpenFreeMap style renders, road lines start at zoom 8. In the dark
 theme, water and land are recoloured towards CARTO Dark Matter
@@ -29,9 +29,19 @@ New props:
 
 `basemap.ts` exports `OPENFREEMAP_STYLES`, `CARTO_STYLES`, `cartoStyleUrl`,
 `defaultBasemap`, `resolveBasemap`, `attachBasemapFallback`,
-`isOpenFreeMapStyle` and `openFreeMapEdits`. The overlay palette is
-`MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
+`isOpenFreeMapStyle` and `openFreeMapEdits`. `defaultBasemap` and
+`resolveBasemap` name the provider of each style in `primaryProvider` and
+`fallbackProvider` (`'carto'`, `'openfreemap'`, or `'custom'` for a style the
+host passed; `defaultBasemap` returns the narrower `DefaultBasemap`, never
+custom and never without a fallback), and the reasons given to `onBasemapFallback` and
+`onBasemapError` carry `from` and `to` in the same terms. The overlay palette
+is `MAP_PALETTE[theme]`. `TellegenProvider` and `TellegenViewer` take
 `cartoApiKey`, and the default shell passes it and `theme` to its map.
+
+The map now runs in a host's Vite dev server with no `optimizeDeps` settings.
+MapLibre's worker URL comes from a new internal `./maplibre-worker` export,
+whose `development` condition keeps the worker's `?worker&url` import out of
+the dev server's pre-bundle, which stopped the dev server at startup.
 
 The controller gains `openBalancedModule({ name, moduleJson | payload,
 geoLayer?, formulation?, activate?, frame? })` and

@@ -180,7 +180,8 @@ besides its click callbacks:
   style for `theme` with a key, else the OpenFreeMap style.
 - `fallbackMapStyle`: the style used when the primary fails; `null` disables
   the switch. Default: whichever of the two is not the primary.
-- `cartoApiKey`: the CARTO key; empty or absent means none.
+- `cartoApiKey`: the CARTO key. It is trimmed, and an empty, blank or
+  absent key means none.
 - `theme`: `'light'` (default) or `'dark'`. Picks the default styles and the
   overlay palette (`MAP_PALETTE`).
 - `projection`: `'mercator'` (default) or `'globe'`. Re-applied after every
@@ -194,8 +195,10 @@ besides its click callbacks:
   overlay once they exist. It may return a cleanup, and it fires again after
   a context-loss or basemap rebuild.
 - `onBasemapFallback(reason)`: the switch to the fallback happened.
+  `reason.from` and `reason.to` name the two providers.
 - `onBasemapError(reason)`: no basemap can be shown. The network layers
-  still draw.
+  still draw. `reason.from` names the provider that failed last, and
+  `reason.to` is `null`.
 
 `TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
 together with `theme`, to the default shell's map. A SvelteKit 3 host can
@@ -233,9 +236,27 @@ The helpers behind the defaults are exported too:
 - `attachBasemapFallback(map, spec, handlers)`;
 - `isOpenFreeMapStyle(style)` and `openFreeMapEdits(style, theme)`.
 
+`defaultBasemap` and `resolveBasemap` also say who serves each style, so a
+host can word its credits and fallback notice without reading URLs. Their
+`primaryProvider` and `fallbackProvider` are `'carto'`, `'openfreemap'`, or
+`'custom'` for a style the host passed, and `fallbackProvider` is `null` when
+the fallback is off. `defaultBasemap` is typed `DefaultBasemap`: two style
+URLs, one CARTO and one OpenFreeMap, so its providers are never `'custom'` and
+its fallback is never `null`. The fallback reasons use the same names in
+`from` and `to`.
+
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
 tiles, fonts and sprites are all fetched.
+
+The map needs no Vite settings, in a build or in the dev server. MapLibre's
+worker comes from a `?worker&url` import, which a production build bundles
+with its shared chunk. Vite's dev server pre-bundles this package and cannot
+pre-bundle that import, so the package's `./maplibre-worker` export has a
+`development` condition that loads it at run time, outside the pre-bundle.
+That export is internal to `TellegenMap`. A host that excluded
+`@tellegen/svelte` from `optimizeDeps` to work around this can drop the
+exclusion.
 
 ## Dark theme
 

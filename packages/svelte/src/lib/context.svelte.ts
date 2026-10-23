@@ -1,4 +1,5 @@
 import { getContext, setContext } from 'svelte';
+import { normalizeCartoApiKey } from './basemap.js';
 import type { AppState } from './state.svelte.js';
 import type { Controller } from './controller.svelte.js';
 
@@ -17,8 +18,8 @@ export interface TellegenUiConfig {
 	/** `'dark'` sets `data-theme="dark"` on the document root while the
 	 * provider is mounted, which switches the `styles.css` tokens. */
 	theme: 'light' | 'dark';
-	/** CARTO basemap key for the default shell's map; empty for none. See
-	 * `TellegenMap`'s `cartoApiKey`. */
+	/** CARTO basemap key for the default shell's map, trimmed; empty for
+	 * none. See `TellegenMap`'s `cartoApiKey`. */
 	cartoApiKey: string;
 }
 
@@ -45,7 +46,8 @@ export function resolveTellegenUiConfig(options: TellegenUiOptions = {}): Telleg
 		orgLabel: options.orgLabel ?? DEFAULT_TELLEGEN_UI_CONFIG.orgLabel,
 		showFooter: options.showFooter ?? DEFAULT_TELLEGEN_UI_CONFIG.showFooter,
 		theme: options.theme ?? DEFAULT_TELLEGEN_UI_CONFIG.theme,
-		cartoApiKey: options.cartoApiKey ?? DEFAULT_TELLEGEN_UI_CONFIG.cartoApiKey
+		cartoApiKey:
+			normalizeCartoApiKey(options.cartoApiKey) ?? DEFAULT_TELLEGEN_UI_CONFIG.cartoApiKey
 	};
 }
 
