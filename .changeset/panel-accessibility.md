@@ -6,6 +6,7 @@ Accessibility fixes in the panels:
 
 - Text in the Network panel, the solver card, the size legend and the residual sparkline is at least 12 px; sizes from 10 to 11.5 px grow by 2 px, so the hierarchy holds.
 - The dark `--ink-faint` is `#95a6b6`, 7.14:1 against the panel composited over `#4a4a4a`.
+- The dark `--border-strong`, which marks a panel's edge over the map, is `#859cb4`. It measures 6.30:1 against the panel and 3.13:1 against bare `#4a4a4a`; the old `#6f8aa6` measured only 2.47:1 against the grey.
 - The panel close button has a 44 px target under coarse pointers.
 - When a panel closes, focus moves to its toolbar button. Without one, it returns to the control that opened the panel, else to the panel's dock (a region named "Left panels" or "Right panels"), or to the drawer on narrow screens.
 - Panel content that overflows becomes a focusable, labelled region.

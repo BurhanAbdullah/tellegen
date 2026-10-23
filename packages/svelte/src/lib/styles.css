@@ -116,14 +116,15 @@
 /* Dark theme: `TellegenProvider theme="dark"` sets the attribute (a host may
    also put it in its template). Contrast ratios are measured against the panel
    composited over #4a4a4a, the darkest grey a dark basemap paints under it:
-   every text token clears 7:1 and --border-strong clears the 3:1 non-text
-   minimum, so the same markup passes WCAG AA on either ground. */
+   every text token clears 7:1. --border-strong marks a panel's edge over the
+   map, so it clears the 3:1 non-text minimum against that panel and against
+   bare #4a4a4a. The same markup passes WCAG AA on either ground. */
 :root[data-theme='dark'] {
 	--bg: #0b1420;
 	--paper: #0f1a27;
 	--panel: rgba(10, 20, 31, 0.92);
 	--line: #34465a; /* decorative separators only */
-	--border-strong: #6f8aa6; /* 3.4:1, component boundaries */
+	--border-strong: #859cb4; /* 6.30:1 against the panel, 3.13:1 against bare #4a4a4a */
 	--ink: #e8eef4; /* 15.3:1 */
 	--ink-dim: #b4c1cd; /* 9.7:1 */
 	--ink-faint: #95a6b6; /* 7.14:1, and 7.02:1 on the opaque --paper of a panel card */
