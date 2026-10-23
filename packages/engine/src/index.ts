@@ -170,6 +170,10 @@ export interface DistGraphBus {
   /** Declared voltage magnitude bounds in volts, present only when the model declares them.
    * Phase–neutral bounds list one value per phase terminal; phase–phase bounds one per pair. */
   voltage_limits?: DistVoltageLimits;
+  /** Declared rated voltage in volts where a transformer winding or a source connects: a
+   * polyphase winding's line-to-line rating, a single-phase winding's own, a polyphase source's
+   * line-to-line magnitude. For telling voltage levels apart, not a base for calculation. */
+  nominal_voltage?: number;
 }
 
 export interface DistVoltageLimits {

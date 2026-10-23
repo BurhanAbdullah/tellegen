@@ -153,6 +153,7 @@ fn ingest_dist_value(
     let graph = net.to_graph();
     let mut graph_value = graph_with_neutral_metadata(net, &graph)?;
     add_limits_and_ratings(net, &mut graph_value);
+    add_nominal_voltages(net, &mut graph_value);
 
     let mut n_line = 0usize;
     let mut n_switch = 0usize;
@@ -356,6 +357,56 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
         };
         if let Some(rating) = rating {
             edge["rating"] = rating;
+        }
+    }
+}
+
+/// Add the declared rated voltage at each bus a transformer winding or a source connects to, so
+/// the frontend can tell voltage levels apart before any solve. A polyphase winding states its
+/// line-to-line rating, a single-phase winding its own; a source with two or more energised
+/// terminals counts as line-to-line from its phase magnitudes (times the square root of three).
+/// A level for display and grouping, not a base for calculation; the largest value at a bus wins.
+fn add_nominal_voltages(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
+    use serde_json::{json, Value};
+    let mut nominal: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    let mut note = |bus: &str, volts: f64| {
+        if volts.is_finite() && volts > 0.0 {
+            let entry = nominal.entry(bus.to_ascii_lowercase()).or_insert(0.0);
+            *entry = entry.max(volts);
+        }
+    };
+    for t in net.transformers() {
+        for w in &t.windings {
+            note(&w.bus, w.v_ref);
+        }
+    }
+    for vs in net.sources() {
+        let energised: Vec<f64> = vs
+            .v_magnitude
+            .iter()
+            .copied()
+            .filter(|&v| v > 0.0)
+            .collect();
+        let largest = energised.iter().copied().fold(0.0, f64::max);
+        note(
+            &vs.bus,
+            if energised.len() >= 2 {
+                largest * 3f64.sqrt()
+            } else {
+                largest
+            },
+        );
+    }
+    let Some(buses) = graph.get_mut("buses").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for bus in buses {
+        let volts = bus
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| nominal.get(&id.to_ascii_lowercase()).copied());
+        if let Some(volts) = volts {
+            bus["nominal_voltage"] = json!(volts);
         }
     }
 }
@@ -729,6 +780,26 @@ mod tests {
                 serde_json::json!({ "s_rating_by_bus": { "hv": 25000.0, "lv": 25000.0 } })
             );
         }
+    }
+
+    #[test]
+    fn graph_carries_declared_nominal_voltages_at_windings_and_sources() {
+        let raw =
+            include_str!("../../tellegen/tests/data/mc_pf/oracle_inputs/pf_center_tap_loaded.json");
+        let value = parse(&ingest_dist(raw, "bmopf").expect("centre tap"));
+        let nominal = |id: &str| {
+            value["graph"]["buses"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|b| b["id"].as_str().unwrap().eq_ignore_ascii_case(id))
+                .unwrap()["nominal_voltage"]
+                .clone()
+        };
+        // Single-phase windings state their own rating; the source has one energised terminal.
+        assert_eq!(nominal("hv"), serde_json::json!(7200.0));
+        assert_eq!(nominal("lv"), serde_json::json!(120.0));
+        assert!(nominal("src").as_f64().unwrap() > 0.0);
     }
 
     #[test]
