@@ -1,7 +1,7 @@
 {
   "schema": "tellegen.synth-sweep/2",
   "outline": "Natural Earth 1:50m admin-0 (regions.py --outline 50m)",
-  "tellegen_sha256": "sha256:87d99efe0fc580ce34e5faa3c99d2522ad14494104b59b8d00e65e06681feff7",
+  "tellegen_sha256": "sha256:96c4c913912a75bfa11512a717b69e9b403e9d156c23220da1db814bcc783da1",
   "peak_references_sha256": "sha256:8aec1e501fbb3e25ee8973b8a4eaae259e9dfdae5bb4ea3c1191c25abd1fd2b2",
   "seeds": [
     1,
@@ -78,17 +78,17 @@
         1.0311379627925992
       ],
       "valid": true,
-      "engine_ms": 15.290750999999998,
-      "generation_ms": 7.999584,
+      "engine_ms": 11.088585000000007,
+      "generation_ms": 5.432543000000001,
       "stage_ms": {
-        "context": 2.6458749999999998,
-        "site_buses": 0.6550839999999996,
-        "topology": 0.9369999999999998,
-        "electrify": 3.7616250000000004,
-        "dc_opf": 5.429458,
-        "calibrate": 0.12187499999999929,
-        "ac_pf": 1.7240839999999995,
-        "finalize": 0.015750000000000597
+        "context": 1.8405,
+        "site_buses": 0.31508400000000036,
+        "topology": 0.5568749999999998,
+        "electrify": 2.7200840000000004,
+        "dc_opf": 4.0683750000000005,
+        "calibrate": 0.05437500000000206,
+        "ac_pf": 1.5165420000000012,
+        "finalize": 0.01675000000000182
       },
       "warnings": [
         "small_islands_skipped",
@@ -144,17 +144,17 @@
         1.0275687019906563
       ],
       "valid": true,
-      "engine_ms": 9.861999999999998,
-      "generation_ms": 4.743041,
+      "engine_ms": 9.039959999999999,
+      "generation_ms": 4.363417,
       "stage_ms": {
-        "context": 1.3425,
-        "site_buses": 0.33950000000000014,
-        "topology": 0.6102910000000001,
-        "electrify": 2.4507499999999998,
-        "dc_opf": 3.799417,
-        "calibrate": 0.05741699999999916,
-        "ac_pf": 1.257458999999999,
-        "finalize": 0.004666000000000281
+        "context": 1.262583,
+        "site_buses": 0.24229199999999995,
+        "topology": 0.4519589999999998,
+        "electrify": 2.4065830000000004,
+        "dc_opf": 3.486749999999999,
+        "calibrate": 0.03654200000000074,
+        "ac_pf": 1.1458339999999998,
+        "finalize": 0.007416999999998453
       },
       "warnings": [
         "small_islands_skipped",
@@ -210,17 +210,17 @@
         1.024330982963962
       ],
       "valid": true,
-      "engine_ms": 7.9359160000000015,
-      "generation_ms": 3.950958,
+      "engine_ms": 7.477876,
+      "generation_ms": 3.555001,
       "stage_ms": {
-        "context": 1.1958330000000001,
-        "site_buses": 0.25950000000000006,
-        "topology": 0.4893749999999999,
-        "electrify": 2.0062499999999996,
-        "dc_opf": 2.901959,
-        "calibrate": 0.034291000000000516,
-        "ac_pf": 1.0444580000000006,
-        "finalize": 0.004250000000000753
+        "context": 1.116542,
+        "site_buses": 0.23124999999999996,
+        "topology": 0.42154199999999986,
+        "electrify": 1.7856670000000001,
+        "dc_opf": 2.7789590000000004,
+        "calibrate": 0.03708299999999998,
+        "ac_pf": 1.1032079999999995,
+        "finalize": 0.0036250000000004334
       },
       "warnings": [
         "small_islands_skipped",
@@ -275,17 +275,17 @@
         1.0219002361175278
       ],
       "valid": true,
-      "engine_ms": 26.457331999999994,
-      "generation_ms": 14.756539999999998,
+      "engine_ms": 26.754417000000007,
+      "generation_ms": 15.029958,
       "stage_ms": {
-        "context": 1.6875829999999998,
-        "site_buses": 0.7245829999999998,
-        "topology": 1.7942909999999999,
-        "electrify": 10.550082999999997,
-        "dc_opf": 7.374124999999999,
-        "calibrate": 0.11866699999999852,
-        "ac_pf": 4.2017919999999975,
-        "finalize": 0.0062080000000008795
+        "context": 1.679167,
+        "site_buses": 0.7162919999999999,
+        "topology": 1.790416,
+        "electrify": 10.844083000000001,
+        "dc_opf": 7.826875000000001,
+        "calibrate": 0.09754200000000068,
+        "ac_pf": 3.793125,
+        "finalize": 0.006917000000004947
       },
       "warnings": [
         "small_islands_skipped",
@@ -341,17 +341,17 @@
         1.0241175274314862
       ],
       "valid": true,
-      "engine_ms": 23.139834000000004,
-      "generation_ms": 12.344708999999998,
+      "engine_ms": 21.731958000000002,
+      "generation_ms": 11.839291,
       "stage_ms": {
-        "context": 1.563292,
-        "site_buses": 0.674167,
-        "topology": 1.684208,
-        "electrify": 8.423041999999999,
-        "dc_opf": 7.517125000000002,
-        "calibrate": 0.1299170000000025,
-        "ac_pf": 3.1432080000000013,
-        "finalize": 0.004874999999998408
+        "context": 1.453875,
+        "site_buses": 0.609416,
+        "topology": 1.562042,
+        "electrify": 8.213958,
+        "dc_opf": 7.045167000000003,
+        "calibrate": 0.07049999999999912,
+        "ac_pf": 2.7734999999999985,
+        "finalize": 0.003500000000002501
       },
       "warnings": [
         "small_islands_skipped",
@@ -407,17 +407,17 @@
         1.0224013500400853
       ],
       "valid": true,
-      "engine_ms": 23.399541,
-      "generation_ms": 13.046748999999998,
+      "engine_ms": 21.688293000000005,
+      "generation_ms": 12.203376,
       "stage_ms": {
-        "context": 1.540833,
-        "site_buses": 0.6607079999999999,
-        "topology": 1.6455000000000002,
-        "electrify": 9.199708,
-        "dc_opf": 7.321500000000002,
-        "calibrate": 0.08712500000000034,
-        "ac_pf": 2.939499999999999,
-        "finalize": 0.004667000000001309
+        "context": 1.4140419999999998,
+        "site_buses": 0.621167,
+        "topology": 1.5627919999999995,
+        "electrify": 8.605375,
+        "dc_opf": 6.681625000000002,
+        "calibrate": 0.07458399999999799,
+        "ac_pf": 2.724833000000004,
+        "finalize": 0.003875000000000739
       },
       "warnings": [
         "small_islands_skipped",
@@ -472,17 +472,17 @@
         1.025310797061388
       ],
       "valid": true,
-      "engine_ms": 56.29820699999999,
-      "generation_ms": 34.456583,
+      "engine_ms": 52.632709999999996,
+      "generation_ms": 32.092917,
       "stage_ms": {
-        "context": 1.7501669999999998,
-        "site_buses": 1.619083,
-        "topology": 3.8417080000000006,
-        "electrify": 27.245625000000004,
-        "dc_opf": 15.941165999999996,
-        "calibrate": 0.24224999999999852,
-        "ac_pf": 5.649957999999998,
-        "finalize": 0.00824999999999676
+        "context": 1.609667,
+        "site_buses": 1.504,
+        "topology": 3.6417079999999995,
+        "electrify": 25.337542,
+        "dc_opf": 14.938333999999998,
+        "calibrate": 0.16066700000000367,
+        "ac_pf": 5.4361669999999975,
+        "finalize": 0.004624999999997215
       },
       "warnings": [
         "small_islands_skipped",
@@ -537,17 +537,17 @@
         1.024531464242627
       ],
       "valid": true,
-      "engine_ms": 50.40875,
-      "generation_ms": 29.771334000000003,
+      "engine_ms": 47.626293,
+      "generation_ms": 28.103166999999996,
       "stage_ms": {
-        "context": 1.726917,
-        "site_buses": 1.4847500000000002,
-        "topology": 3.856125,
-        "electrify": 22.703542000000002,
-        "dc_opf": 14.838208000000002,
-        "calibrate": 0.17304199999999526,
-        "ac_pf": 5.620125000000002,
-        "finalize": 0.006040999999996188
+        "context": 1.6082919999999998,
+        "site_buses": 1.400958,
+        "topology": 3.627,
+        "electrify": 21.466916999999995,
+        "dc_opf": 13.957792000000001,
+        "calibrate": 0.16695899999999853,
+        "ac_pf": 5.390999999999998,
+        "finalize": 0.00737500000000324
       },
       "warnings": [
         "small_islands_skipped",
@@ -602,17 +602,17 @@
         1.0232020122866547
       ],
       "valid": true,
-      "engine_ms": 50.53287500000001,
-      "generation_ms": 31.041625999999997,
+      "engine_ms": 47.623666000000014,
+      "generation_ms": 28.95429,
       "stage_ms": {
-        "context": 1.741334,
-        "site_buses": 1.5782080000000003,
-        "topology": 3.866167,
-        "electrify": 23.855916999999998,
-        "dc_opf": 13.754124999999998,
-        "calibrate": 0.1616250000000008,
-        "ac_pf": 5.569916000000006,
-        "finalize": 0.005583000000008553
+        "context": 1.593458,
+        "site_buses": 1.4814159999999998,
+        "topology": 3.629541,
+        "electrify": 22.249875,
+        "dc_opf": 13.013792000000006,
+        "calibrate": 0.14499999999999602,
+        "ac_pf": 5.505500000000005,
+        "finalize": 0.005084000000003641
       },
       "warnings": [
         "small_islands_skipped",
@@ -666,17 +666,17 @@
         1.0220866824716606
       ],
       "valid": true,
-      "engine_ms": 52.16849899999999,
-      "generation_ms": 33.586040999999994,
+      "engine_ms": 50.26204100000001,
+      "generation_ms": 32.34770799999999,
       "stage_ms": {
-        "context": 2.274833,
-        "site_buses": 3.097958,
-        "topology": 3.6384169999999996,
-        "electrify": 24.574832999999995,
-        "dc_opf": 13.223207999999993,
-        "calibrate": 0.20162499999999994,
-        "ac_pf": 5.152208000000002,
-        "finalize": 0.005417000000001337
+        "context": 2.149625,
+        "site_buses": 2.9229169999999995,
+        "topology": 3.44325,
+        "electrify": 23.831915999999993,
+        "dc_opf": 12.662542000000009,
+        "calibrate": 0.1942500000000038,
+        "ac_pf": 5.052708000000003,
+        "finalize": 0.004833000000004972
       },
       "warnings": [
         "small_islands_skipped",
@@ -732,17 +732,17 @@
         1.0230230753044383
       ],
       "valid": true,
-      "engine_ms": 53.670957000000016,
-      "generation_ms": 34.716291,
+      "engine_ms": 51.122751,
+      "generation_ms": 33.27329200000001,
       "stage_ms": {
-        "context": 2.251,
-        "site_buses": 2.988,
-        "topology": 3.660125,
-        "electrify": 25.817166,
-        "dc_opf": 13.519874999999999,
-        "calibrate": 0.18608300000000355,
-        "ac_pf": 5.243708000000005,
-        "finalize": 0.005000000000009663
+        "context": 2.1522500000000004,
+        "site_buses": 2.8948750000000003,
+        "topology": 3.498125000000001,
+        "electrify": 24.728042000000006,
+        "dc_opf": 12.795041999999995,
+        "calibrate": 0.13062499999999488,
+        "ac_pf": 4.918875,
+        "finalize": 0.00491699999999895
       },
       "warnings": [
         "small_islands_skipped",
@@ -797,17 +797,17 @@
         1.0246026892993187
       ],
       "valid": true,
-      "engine_ms": 55.633500000000005,
-      "generation_ms": 37.269458,
+      "engine_ms": 52.99746000000001,
+      "generation_ms": 35.068251,
       "stage_ms": {
-        "context": 2.2832909999999997,
-        "site_buses": 3.031875,
-        "topology": 3.705499999999999,
-        "electrify": 28.248791999999998,
-        "dc_opf": 12.659624999999998,
-        "calibrate": 0.15024999999999977,
-        "ac_pf": 5.546209000000005,
-        "finalize": 0.00795800000000213
+        "context": 2.129542,
+        "site_buses": 2.907083,
+        "topology": 3.4680839999999993,
+        "electrify": 26.563541999999998,
+        "dc_opf": 12.103917000000003,
+        "calibrate": 0.16820800000000702,
+        "ac_pf": 5.6513749999999945,
+        "finalize": 0.005709000000010178
       },
       "warnings": [
         "small_islands_skipped",
@@ -859,21 +859,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        0.9964981889618573,
-        1.0290784744274477
+        1.0160893092635954,
+        1.0299013442410327
       ],
       "valid": true,
-      "engine_ms": 33.453543,
-      "generation_ms": 20.750375000000002,
+      "engine_ms": 31.018665,
+      "generation_ms": 19.485124000000003,
       "stage_ms": {
-        "context": 2.2309579999999998,
-        "site_buses": 0.9742500000000001,
-        "topology": 2.2301250000000006,
-        "electrify": 15.315042000000002,
-        "dc_opf": 8.836417,
-        "calibrate": 0.11829199999999673,
-        "ac_pf": 3.743708999999999,
-        "finalize": 0.00475000000000847
+        "context": 2.088416,
+        "site_buses": 0.9072079999999998,
+        "topology": 2.072375,
+        "electrify": 14.417125000000002,
+        "dc_opf": 8.293415999999997,
+        "calibrate": 0.08870800000000045,
+        "ac_pf": 3.146874999999998,
+        "finalize": 0.004542000000000712
       },
       "warnings": [
         "small_islands_skipped",
@@ -929,17 +929,17 @@
         1.024393652020315
       ],
       "valid": true,
-      "engine_ms": 29.891542000000005,
-      "generation_ms": 17.921875,
+      "engine_ms": 28.145501999999997,
+      "generation_ms": 16.890000999999998,
       "stage_ms": {
-        "context": 2.2103749999999995,
-        "site_buses": 1.0000839999999998,
-        "topology": 2.185999999999999,
-        "electrify": 12.525416000000003,
-        "dc_opf": 8.727457999999999,
-        "calibrate": 0.07537500000000463,
-        "ac_pf": 3.1622920000000008,
-        "finalize": 0.004542000000000712
+        "context": 2.083375,
+        "site_buses": 0.9452919999999998,
+        "topology": 2.0504169999999995,
+        "electrify": 11.810916999999998,
+        "dc_opf": 8.081125,
+        "calibrate": 0.07379200000000097,
+        "ac_pf": 3.097166999999999,
+        "finalize": 0.003416999999998893
       },
       "warnings": [
         "small_islands_skipped",
@@ -993,17 +993,17 @@
         1.0260908303761616
       ],
       "valid": true,
-      "engine_ms": 30.747582999999995,
-      "generation_ms": 18.944917,
+      "engine_ms": 28.912414999999996,
+      "generation_ms": 17.886958,
       "stage_ms": {
-        "context": 2.213167,
-        "site_buses": 1.0410840000000006,
-        "topology": 2.2577079999999996,
-        "electrify": 13.432958,
-        "dc_opf": 8.481749999999998,
-        "calibrate": 0.10020799999999852,
-        "ac_pf": 3.2163749999999993,
-        "finalize": 0.004332999999999032
+        "context": 2.0908339999999996,
+        "site_buses": 1.001125,
+        "topology": 2.0759160000000003,
+        "electrify": 12.719082999999998,
+        "dc_opf": 7.890249999999998,
+        "calibrate": 0.08479099999999917,
+        "ac_pf": 3.0468329999999995,
+        "finalize": 0.0035829999999990036
       },
       "warnings": [
         "small_islands_skipped",
@@ -1055,21 +1055,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0130938511882561,
-        1.042305649782322
+        1.0130937918538623,
+        1.0272722286955593
       ],
       "valid": true,
-      "engine_ms": 63.22625000000001,
-      "generation_ms": 45.054208,
+      "engine_ms": 60.440791999999995,
+      "generation_ms": 42.777542,
       "stage_ms": {
-        "context": 1.155375,
-        "site_buses": 0.2657909999999999,
-        "topology": 0.512875,
-        "electrify": 43.120167,
-        "dc_opf": 12.724625000000003,
-        "calibrate": 0.1583749999999995,
-        "ac_pf": 5.283833999999992,
-        "finalize": 0.0052080000000103155
+        "context": 1.0394590000000001,
+        "site_buses": 0.280208,
+        "topology": 0.5119170000000002,
+        "electrify": 40.945958,
+        "dc_opf": 12.101290999999996,
+        "calibrate": 0.126458999999997,
+        "ac_pf": 5.430875,
+        "finalize": 0.00462500000000432
       },
       "warnings": [
         "branch_target_exceeded",
@@ -1125,17 +1125,17 @@
         1.0463239186964577
       ],
       "valid": true,
-      "engine_ms": 71.062543,
-      "generation_ms": 52.595167,
+      "engine_ms": 68.00116699999998,
+      "generation_ms": 49.988665999999995,
       "stage_ms": {
-        "context": 1.16025,
-        "site_buses": 0.2644169999999999,
-        "topology": 0.5247919999999999,
-        "electrify": 50.645708,
-        "dc_opf": 12.787625000000006,
-        "calibrate": 0.1327089999999913,
-        "ac_pf": 5.542125000000013,
-        "finalize": 0.004917000000006055
+        "context": 1.104833,
+        "site_buses": 0.24824999999999986,
+        "topology": 0.5318749999999999,
+        "electrify": 48.103708,
+        "dc_opf": 12.149375,
+        "calibrate": 0.13991699999999696,
+        "ac_pf": 5.714541999999987,
+        "finalize": 0.008667000000002645
       },
       "warnings": [
         "branch_target_exceeded",
@@ -1188,21 +1188,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        0.9975986447638625,
-        1.0252305044563628
+        1.0089332104553423,
+        1.0252305044563643
       ],
       "valid": true,
-      "engine_ms": 66.873209,
-      "generation_ms": 46.902333999999996,
+      "engine_ms": 63.291459,
+      "generation_ms": 44.446916,
       "stage_ms": {
-        "context": 1.121667,
-        "site_buses": 0.2756670000000001,
-        "topology": 0.5265,
-        "electrify": 44.9785,
-        "dc_opf": 13.444958,
-        "calibrate": 0.1715420000000023,
-        "ac_pf": 6.349207999999997,
-        "finalize": 0.005167000000000144
+        "context": 1.110333,
+        "site_buses": 0.24654200000000004,
+        "topology": 0.504041,
+        "electrify": 42.586,
+        "dc_opf": 12.882875000000006,
+        "calibrate": 0.14504199999999656,
+        "ac_pf": 5.811584000000003,
+        "finalize": 0.005041999999995994
       },
       "warnings": [
         "branch_target_exceeded",
@@ -1252,23 +1252,23 @@
       "dc_opf": "optimal",
       "dc_message": null,
       "ac_pf": "not_converged",
-      "ac_message": "AC power flow did not converge: best mismatch 2.340e-2 over 5 starts",
+      "ac_message": "AC power flow did not converge: best mismatch 2.519e-2 over 5 starts",
       "vm": [
         null,
         null
       ],
       "valid": false,
-      "engine_ms": 1974.8035419999999,
-      "generation_ms": 857.1605,
+      "engine_ms": 1700.5910820000004,
+      "generation_ms": 803.3854580000001,
       "stage_ms": {
-        "context": 17.575916,
-        "site_buses": 40.453417,
-        "topology": 82.191708,
-        "electrify": 716.9394589999999,
-        "dc_opf": 121.96579199999996,
-        "calibrate": 1.2265420000001086,
-        "ac_pf": 994.4350419999998,
-        "finalize": 0.015666000000010172
+        "context": 16.557958,
+        "site_buses": 38.570459,
+        "topology": 78.88612500000002,
+        "electrify": 669.3709160000001,
+        "dc_opf": 112.34787500000016,
+        "calibrate": 1.1499160000000757,
+        "ac_pf": 783.6936249999999,
+        "finalize": 0.014208000000053289
       },
       "warnings": [
         "bus_count_capped",
@@ -1324,23 +1324,23 @@
       "dc_opf": "optimal",
       "dc_message": null,
       "ac_pf": "not_converged",
-      "ac_message": "AC power flow did not converge: best mismatch 8.576e-3 over 5 starts",
+      "ac_message": "AC power flow did not converge: best mismatch 8.939e-3 over 5 starts",
       "vm": [
         null,
         null
       ],
       "valid": false,
-      "engine_ms": 1754.044,
-      "generation_ms": 854.623542,
+      "engine_ms": 1432.004332,
+      "generation_ms": 802.451665,
       "stage_ms": {
-        "context": 19.520542,
-        "site_buses": 41.131333,
-        "topology": 87.02241699999998,
-        "electrify": 706.94925,
-        "dc_opf": 134.82633299999998,
-        "calibrate": 1.1410829999999805,
-        "ac_pf": 763.43225,
-        "finalize": 0.020792000000028565
+        "context": 16.730708,
+        "site_buses": 36.115458000000004,
+        "topology": 78.293916,
+        "electrify": 671.311583,
+        "dc_opf": 119.00024999999994,
+        "calibrate": 1.0991249999999582,
+        "ac_pf": 509.4388329999998,
+        "finalize": 0.014459000000215383
       },
       "warnings": [
         "bus_count_capped",
@@ -1398,21 +1398,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        0.9920695366935387,
-        1.0509496832316194
+        0.992204619444965,
+        1.2984501721060786
       ],
-      "valid": true,
-      "engine_ms": 1112.810375,
-      "generation_ms": 910.905542,
+      "valid": false,
+      "engine_ms": 999.956541,
+      "generation_ms": 837.034917,
       "stage_ms": {
-        "context": 17.912625,
-        "site_buses": 38.807959000000004,
-        "topology": 86.95887499999998,
-        "electrify": 767.226083,
-        "dc_opf": 110.35570800000005,
-        "calibrate": 1.2224999999999682,
-        "ac_pf": 90.3107500000001,
-        "finalize": 0.01587500000005093
+        "context": 16.622333,
+        "site_buses": 36.650375,
+        "topology": 77.96049999999998,
+        "electrify": 705.801709,
+        "dc_opf": 102.8196660000001,
+        "calibrate": 1.1232499999999845,
+        "ac_pf": 58.96504200000004,
+        "finalize": 0.013665999999943779
       },
       "warnings": [
         "bus_count_capped",
@@ -1472,17 +1472,17 @@
         1.0233006718191742
       ],
       "valid": true,
-      "engine_ms": 606.6400440000002,
-      "generation_ms": 508.138584,
+      "engine_ms": 569.737709,
+      "generation_ms": 478.478,
       "stage_ms": {
-        "context": 7.495792,
-        "site_buses": 17.794042,
-        "topology": 34.742292,
-        "electrify": 448.106458,
-        "dc_opf": 68.97083400000002,
-        "calibrate": 0.8248340000001235,
-        "ac_pf": 28.693667000000005,
-        "finalize": 0.012125000000082764
+        "context": 7.04,
+        "site_buses": 16.784999999999997,
+        "topology": 32.94975,
+        "electrify": 421.70325,
+        "dc_opf": 64.03124999999994,
+        "calibrate": 0.7489590000000135,
+        "ac_pf": 26.469375000000014,
+        "finalize": 0.010125000000016371
       },
       "warnings": [
         "small_islands_skipped",
@@ -1537,21 +1537,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0090320191044886,
-        1.0313652467029355
+        1.0131777075647668,
+        1.0313652822276844
       ],
       "valid": true,
-      "engine_ms": 601.8493329999999,
-      "generation_ms": 495.752375,
+      "engine_ms": 547.4502919999999,
+      "generation_ms": 456.92479199999997,
       "stage_ms": {
-        "context": 7.382541999999999,
-        "site_buses": 18.054375,
-        "topology": 34.827208,
-        "electrify": 435.48825,
-        "dc_opf": 68.31812500000012,
-        "calibrate": 0.8365419999998949,
-        "ac_pf": 36.92983300000003,
-        "finalize": 0.01245799999992414
+        "context": 7.019291999999999,
+        "site_buses": 17.013292,
+        "topology": 32.550332999999995,
+        "electrify": 400.34187499999996,
+        "dc_opf": 60.823375,
+        "calibrate": 0.7962499999999864,
+        "ac_pf": 28.895125000000007,
+        "finalize": 0.010749999999916326
       },
       "warnings": [
         "small_islands_skipped",
@@ -1605,21 +1605,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.014147365752887,
-        1.0220576874572334
+        1.0141473657528877,
+        1.022057687437334
       ],
       "valid": true,
-      "engine_ms": 588.2508749999998,
-      "generation_ms": 480.080292,
+      "engine_ms": 551.5670410000001,
+      "generation_ms": 450.49233200000003,
       "stage_ms": {
-        "context": 7.429292,
-        "site_buses": 18.175541,
-        "topology": 34.742125,
-        "electrify": 419.733334,
-        "dc_opf": 72.67666699999995,
-        "calibrate": 0.7793329999999514,
-        "ac_pf": 34.702249999999935,
-        "finalize": 0.012333000000012362
+        "context": 7.047166000000001,
+        "site_buses": 17.124208,
+        "topology": 32.561375,
+        "electrify": 393.759583,
+        "dc_opf": 67.87862500000006,
+        "calibrate": 0.7686670000000504,
+        "ac_pf": 32.416833999999994,
+        "finalize": 0.0105829999999969
       },
       "warnings": [
         "small_islands_skipped",
@@ -1675,21 +1675,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0193697096841272,
-        1.020469932376524
+        1.0193697096841454,
+        1.0204699323791318
       ],
       "valid": true,
-      "engine_ms": 1111.904542,
-      "generation_ms": 917.492583,
+      "engine_ms": 1033.1674160000002,
+      "generation_ms": 849.461125,
       "stage_ms": {
-        "context": 13.471666,
-        "site_buses": 39.358166999999995,
-        "topology": 89.92824999999999,
-        "electrify": 774.7345,
-        "dc_opf": 134.6990420000002,
-        "calibrate": 1.2290000000000418,
-        "ac_pf": 58.469749999999976,
-        "finalize": 0.014166999999815744
+        "context": 12.579999999999998,
+        "site_buses": 37.1255,
+        "topology": 84.618875,
+        "electrify": 715.13675,
+        "dc_opf": 127.79804200000001,
+        "calibrate": 1.2062909999999647,
+        "ac_pf": 54.68858300000011,
+        "finalize": 0.013374999999996362
       },
       "warnings": [
         "bus_count_capped",
@@ -1749,17 +1749,17 @@
         null
       ],
       "valid": false,
-      "engine_ms": 1813.2549590000008,
-      "generation_ms": 1264.193751,
+      "engine_ms": 1660.3363730000005,
+      "generation_ms": 1155.690207,
       "stage_ms": {
-        "context": 13.469667000000001,
-        "site_buses": 38.76562499999999,
-        "topology": 89.724209,
-        "electrify": 1122.23425,
-        "dc_opf": 127.03654100000017,
-        "calibrate": 124.60904100000016,
-        "ac_pf": 297.39970900000003,
-        "finalize": 0.01591700000039964
+        "context": 12.545333000000001,
+        "site_buses": 36.296583,
+        "topology": 84.751541,
+        "electrify": 1022.0967500000002,
+        "dc_opf": 117.18870800000013,
+        "calibrate": 115.553042,
+        "ac_pf": 271.88895800000023,
+        "finalize": 0.015458000000080574
       },
       "warnings": [
         "bus_count_capped",
@@ -1821,17 +1821,17 @@
         1.0215612232453277
       ],
       "valid": true,
-      "engine_ms": 1300.190584,
-      "generation_ms": 857.5553749999999,
+      "engine_ms": 1203.9465010000004,
+      "generation_ms": 795.7200419999999,
       "stage_ms": {
-        "context": 13.726208,
-        "site_buses": 39.846709000000004,
-        "topology": 92.78616600000001,
-        "electrify": 711.196292,
-        "dc_opf": 133.79037500000004,
-        "calibrate": 249.43774999999994,
-        "ac_pf": 59.392292,
-        "finalize": 0.014791999999943073
+        "context": 12.5285,
+        "site_buses": 37.057750000000006,
+        "topology": 84.58600000000001,
+        "electrify": 661.547792,
+        "dc_opf": 123.56408299999998,
+        "calibrate": 230.83341700000028,
+        "ac_pf": 53.81583400000022,
+        "finalize": 0.01312499999994543
       },
       "warnings": [
         "bus_count_capped",
@@ -1883,32 +1883,31 @@
       "peak_verdict": "within",
       "dc_opf": "optimal",
       "dc_message": null,
-      "ac_pf": "not_converged",
-      "ac_message": "AC power flow did not converge: best mismatch 1.608e-2 over 5 starts",
+      "ac_pf": "converged",
+      "ac_message": null,
       "vm": [
-        null,
-        null
+        1.0096642976985197,
+        1.0264835247306392
       ],
-      "valid": false,
-      "engine_ms": 609.6214589999997,
-      "generation_ms": 329.67666599999995,
+      "valid": true,
+      "engine_ms": 359.4636649999998,
+      "generation_ms": 309.969792,
       "stage_ms": {
-        "context": 29.623416,
-        "site_buses": 16.959667000000003,
-        "topology": 62.071540999999996,
-        "electrify": 221.02204199999994,
-        "dc_opf": 36.09220899999997,
-        "calibrate": 0.46545899999989615,
-        "ac_pf": 243.37650000000008,
-        "finalize": 0.01062499999989086
+        "context": 26.913792,
+        "site_buses": 15.631541000000002,
+        "topology": 57.848834,
+        "electrify": 209.575625,
+        "dc_opf": 34.25083299999994,
+        "calibrate": 0.4366659999999456,
+        "ac_pf": 14.79895799999997,
+        "finalize": 0.007415999999977885
       },
       "warnings": [
         "small_islands_skipped",
         "islands_cut",
         "branch_target_exceeded",
         "planning_incomplete",
-        "voltage_level_added",
-        "ac_pf_not_converged"
+        "voltage_level_added"
       ],
       "seed": 1
     },
@@ -1952,32 +1951,31 @@
       "peak_verdict": "within",
       "dc_opf": "optimal",
       "dc_message": null,
-      "ac_pf": "not_converged",
-      "ac_message": "AC power flow did not converge: best mismatch 1.232e0 over 5 starts",
+      "ac_pf": "converged",
+      "ac_message": null,
       "vm": [
-        null,
-        null
+        1.0018368383744094,
+        1.0381094371137267
       ],
-      "valid": false,
-      "engine_ms": 563.4611660000002,
-      "generation_ms": 327.303583,
+      "valid": true,
+      "engine_ms": 365.06949799999995,
+      "generation_ms": 311.88054,
       "stage_ms": {
-        "context": 28.646625,
-        "site_buses": 16.314667,
-        "topology": 61.626166,
-        "electrify": 220.716125,
-        "dc_opf": 39.83833299999998,
-        "calibrate": 0.4826250000000414,
-        "ac_pf": 195.8245,
-        "finalize": 0.012125000000082764
+        "context": 27.232166,
+        "site_buses": 15.470040999999995,
+        "topology": 58.389166,
+        "electrify": 210.78916699999996,
+        "dc_opf": 38.32487499999996,
+        "calibrate": 0.43666600000000244,
+        "ac_pf": 14.41825,
+        "finalize": 0.009166999999990821
       },
       "warnings": [
         "small_islands_skipped",
         "islands_cut",
         "branch_target_exceeded",
         "planning_incomplete",
-        "voltage_level_added",
-        "ac_pf_not_converged"
+        "voltage_level_added"
       ],
       "seed": 7
     },
@@ -2021,24 +2019,24 @@
       "peak_verdict": "within",
       "dc_opf": "optimal",
       "dc_message": null,
-      "ac_pf": "not_converged",
-      "ac_message": "AC power flow did not converge: best mismatch 1.018e0 over 5 starts",
+      "ac_pf": "converged",
+      "ac_message": null,
       "vm": [
-        null,
-        null
+        1.0112656973896033,
+        1.0318286508018795
       ],
-      "valid": false,
-      "engine_ms": 545.302083,
-      "generation_ms": 338.41983400000004,
+      "valid": true,
+      "engine_ms": 367.81133399999993,
+      "generation_ms": 317.34074999999996,
       "stage_ms": {
-        "context": 28.766709,
-        "site_buses": 16.657375000000002,
-        "topology": 61.946417,
-        "electrify": 231.04933300000002,
-        "dc_opf": 38.04399999999998,
-        "calibrate": 0.45970800000003464,
-        "ac_pf": 168.36666599999995,
-        "finalize": 0.011875000000031832
+        "context": 27.057875000000003,
+        "site_buses": 15.475333,
+        "topology": 57.898833999999994,
+        "electrify": 216.908708,
+        "dc_opf": 35.57804200000004,
+        "calibrate": 0.4445419999999558,
+        "ac_pf": 14.439750000000004,
+        "finalize": 0.008249999999975444
       },
       "warnings": [
         "small_islands_skipped",
@@ -2046,8 +2044,7 @@
         "generation_spread",
         "branch_target_exceeded",
         "planning_incomplete",
-        "voltage_level_added",
-        "ac_pf_not_converged"
+        "voltage_level_added"
       ],
       "seed": 2026
     },
@@ -2094,21 +2091,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.017304560222889,
-        1.0497827808955538
+        1.0168687974059354,
+        1.0377313487572701
       ],
       "valid": true,
-      "engine_ms": 173.94045799999995,
-      "generation_ms": 139.12775,
+      "engine_ms": 157.737043,
+      "generation_ms": 126.49995900000002,
       "stage_ms": {
-        "context": 13.123792,
-        "site_buses": 4.218124999999999,
-        "topology": 15.936999999999998,
-        "electrify": 105.848833,
-        "dc_opf": 23.53179099999997,
-        "calibrate": 0.28437500000001137,
-        "ac_pf": 10.989958999999999,
-        "finalize": 0.006582999999977801
+        "context": 10.778542,
+        "site_buses": 3.8898340000000005,
+        "topology": 14.076458000000002,
+        "electrify": 97.755125,
+        "dc_opf": 21.999041000000005,
+        "calibrate": 0.278458999999998,
+        "ac_pf": 8.953041999999982,
+        "finalize": 0.006541999999996051
       },
       "warnings": [
         "small_islands_skipped",
@@ -2161,21 +2158,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0084433266974866,
-        1.043318406891405
+        1.0130219796987576,
+        1.0319020489820188
       ],
       "valid": true,
-      "engine_ms": 180.14708500000006,
-      "generation_ms": 146.73333399999999,
+      "engine_ms": 165.24878999999999,
+      "generation_ms": 135.45295700000003,
       "stage_ms": {
-        "context": 11.775125,
-        "site_buses": 4.110167000000002,
-        "topology": 15.546209000000003,
-        "electrify": 115.30183299999999,
-        "dc_opf": 23.83212500000002,
-        "calibrate": 0.29766700000001833,
-        "ac_pf": 9.277542000000011,
-        "finalize": 0.0064170000000274285
+        "context": 10.960416,
+        "site_buses": 3.9305410000000016,
+        "topology": 14.056792,
+        "electrify": 106.50520800000001,
+        "dc_opf": 21.036208999999985,
+        "calibrate": 0.2772910000000195,
+        "ac_pf": 8.476499999999987,
+        "finalize": 0.0058329999999671145
       },
       "warnings": [
         "small_islands_skipped",
@@ -2228,21 +2225,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0136055037095753,
-        1.086140447880216
+        1.0136055037095748,
+        1.036771190373824
       ],
       "valid": true,
-      "engine_ms": 170.44078999999996,
-      "generation_ms": 133.99154099999998,
+      "engine_ms": 156.872582,
+      "generation_ms": 123.782166,
       "stage_ms": {
-        "context": 11.556124999999998,
-        "site_buses": 4.447750000000001,
-        "topology": 15.046083,
-        "electrify": 102.941583,
-        "dc_opf": 26.02370799999997,
-        "calibrate": 0.3190409999999986,
-        "ac_pf": 10.100042000000002,
-        "finalize": 0.006458000000009179
+        "context": 10.939375,
+        "site_buses": 4.121083000000002,
+        "topology": 14.010500000000002,
+        "electrify": 94.711208,
+        "dc_opf": 24.343332999999987,
+        "calibrate": 0.2422499999999843,
+        "ac_pf": 8.498999999999995,
+        "finalize": 0.005833000000023958
       },
       "warnings": [
         "small_islands_skipped",
@@ -2294,21 +2291,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0173211067666215,
-        1.0312903157575937
+        1.0173211067666212,
+        1.0312903157570368
       ],
       "valid": true,
-      "engine_ms": 234.98841699999997,
-      "generation_ms": 118.763916,
+      "engine_ms": 216.59220700000006,
+      "generation_ms": 110.03408300000001,
       "stage_ms": {
-        "context": 2.3948329999999998,
-        "site_buses": 3.5917079999999997,
-        "topology": 6.489083,
-        "electrify": 106.288292,
-        "dc_opf": 33.138874999999985,
-        "calibrate": 68.96729199999999,
-        "ac_pf": 14.110834000000011,
-        "finalize": 0.007499999999993179
+        "context": 2.242292,
+        "site_buses": 3.3627079999999996,
+        "topology": 6.041667,
+        "electrify": 98.387416,
+        "dc_opf": 31.062083000000015,
+        "calibrate": 63.71154100000001,
+        "ac_pf": 11.777500000000003,
+        "finalize": 0.007000000000005002
       },
       "warnings": [
         "small_islands_skipped",
@@ -2361,21 +2358,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0116557343190107,
-        1.0308044575198063
+        1.011655734319014,
+        1.030804457519803
       ],
       "valid": true,
-      "engine_ms": 177.59766800000003,
-      "generation_ms": 101.247918,
+      "engine_ms": 167.57824900000003,
+      "generation_ms": 95.048124,
       "stage_ms": {
-        "context": 2.4351670000000003,
-        "site_buses": 3.5130840000000005,
-        "topology": 6.421167,
-        "electrify": 88.8785,
-        "dc_opf": 31.860874999999993,
-        "calibrate": 31.826333000000005,
-        "ac_pf": 12.655583000000036,
-        "finalize": 0.00695899999999483
+        "context": 2.2585830000000002,
+        "site_buses": 3.2645410000000004,
+        "topology": 5.9996670000000005,
+        "electrify": 83.525333,
+        "dc_opf": 29.845124999999996,
+        "calibrate": 30.43162500000001,
+        "ac_pf": 12.245749999999987,
+        "finalize": 0.007625000000018645
       },
       "warnings": [
         "small_islands_skipped",
@@ -2428,21 +2425,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0127487987611856,
-        1.0256944519414866
+        1.0127487987611867,
+        1.024356289529233
       ],
       "valid": true,
-      "engine_ms": 199.15991799999998,
-      "generation_ms": 113.079917,
+      "engine_ms": 186.79729099999997,
+      "generation_ms": 108.71216700000001,
       "stage_ms": {
-        "context": 2.3635409999999997,
-        "site_buses": 3.3632919999999995,
-        "topology": 6.298000000000001,
-        "electrify": 101.055084,
-        "dc_opf": 33.069417,
-        "calibrate": 33.50149999999999,
-        "ac_pf": 19.501374999999996,
-        "finalize": 0.007708999999977095
+        "context": 2.2530419999999998,
+        "site_buses": 3.210083,
+        "topology": 6.024792000000001,
+        "electrify": 97.22425000000001,
+        "dc_opf": 30.987166000000016,
+        "calibrate": 30.275999999999982,
+        "ac_pf": 16.813999999999993,
+        "finalize": 0.007957999999973708
       },
       "warnings": [
         "small_islands_skipped",
@@ -2498,21 +2495,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0166753075089825,
-        1.0606299026713693
+        1.0166753075087243,
+        1.02362752445294
       ],
       "valid": true,
-      "engine_ms": 53.39858399999999,
-      "generation_ms": 41.202124999999995,
+      "engine_ms": 50.11500099999999,
+      "generation_ms": 38.901251,
       "stage_ms": {
-        "context": 5.2474169999999996,
-        "site_buses": 0.863416,
-        "topology": 4.393166999999999,
-        "electrify": 30.698124999999997,
-        "dc_opf": 8.442750000000004,
-        "calibrate": 0.09454199999999702,
-        "ac_pf": 3.653500000000008,
-        "finalize": 0.00566699999998832
+        "context": 4.9174999999999995,
+        "site_buses": 0.8083339999999994,
+        "topology": 4.219624999999999,
+        "electrify": 28.955792000000002,
+        "dc_opf": 8.012667,
+        "calibrate": 0.08766599999999158,
+        "ac_pf": 3.107042,
+        "finalize": 0.006374999999998465
       },
       "warnings": [
         "small_islands_skipped",
@@ -2567,21 +2564,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0068828390396287,
-        1.020793651137303
+        1.0069823509367826,
+        1.0268038439325111
       ],
       "valid": true,
-      "engine_ms": 46.091041000000004,
-      "generation_ms": 34.10633300000001,
+      "engine_ms": 43.85921000000001,
+      "generation_ms": 32.340001,
       "stage_ms": {
-        "context": 5.8387910000000005,
-        "site_buses": 0.966208,
-        "topology": 4.3985,
-        "electrify": 22.902834000000006,
-        "dc_opf": 7.772749999999995,
-        "calibrate": 0.08949999999999392,
-        "ac_pf": 4.117333000000002,
-        "finalize": 0.0051250000000067075
+        "context": 4.893542000000001,
+        "site_buses": 0.9201670000000002,
+        "topology": 4.079375000000001,
+        "electrify": 22.446917,
+        "dc_opf": 7.723417000000005,
+        "calibrate": 0.08791699999999736,
+        "ac_pf": 3.7038750000000036,
+        "finalize": 0.0040000000000048885
       },
       "warnings": [
         "small_islands_skipped",
@@ -2636,21 +2633,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0041846975999542,
-        1.5413469626616898
+        1.0088067332672448,
+        1.025091139457661
       ],
-      "valid": false,
-      "engine_ms": 46.22345700000001,
-      "generation_ms": 32.781249,
+      "valid": true,
+      "engine_ms": 42.85070599999999,
+      "generation_ms": 31.305498999999994,
       "stage_ms": {
-        "context": 5.209541000000001,
-        "site_buses": 0.9322909999999993,
-        "topology": 4.3808750000000005,
-        "electrify": 22.258542,
-        "dc_opf": 8.926334000000004,
-        "calibrate": 0.10350000000000392,
-        "ac_pf": 4.406583000000005,
-        "finalize": 0.005790999999994995
+        "context": 4.802667,
+        "site_buses": 0.8759580000000007,
+        "topology": 4.0753330000000005,
+        "electrify": 21.551540999999993,
+        "dc_opf": 8.386832999999992,
+        "calibrate": 0.0784580000000048,
+        "ac_pf": 3.076082999999997,
+        "finalize": 0.0038330000000001974
       },
       "warnings": [
         "small_islands_skipped",
@@ -2703,21 +2700,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.008980048382217,
-        1.0252163072849991
+        1.0089800483822167,
+        1.0252163075447813
       ],
       "valid": true,
-      "engine_ms": 36.527791999999984,
-      "generation_ms": 24.327208,
+      "engine_ms": 33.792958999999996,
+      "generation_ms": 22.309168,
       "stage_ms": {
-        "context": 1.8097499999999997,
-        "site_buses": 0.7520830000000001,
-        "topology": 1.888875,
-        "electrify": 19.8765,
-        "dc_opf": 8.840083999999997,
-        "calibrate": 0.09983299999998962,
-        "ac_pf": 3.255499999999998,
-        "finalize": 0.005167000000000144
+        "context": 1.6871669999999999,
+        "site_buses": 0.6924170000000001,
+        "topology": 1.7612919999999996,
+        "electrify": 18.168292,
+        "dc_opf": 8.322499999999998,
+        "calibrate": 0.08512500000000145,
+        "ac_pf": 3.0723330000000004,
+        "finalize": 0.0038330000000001974
       },
       "warnings": [
         "small_islands_skipped",
@@ -2769,21 +2766,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0145999040189522,
-        1.0395898307075802
+        1.0145999465122504,
+        1.039589830718156
       ],
       "valid": true,
-      "engine_ms": 40.26433300000001,
-      "generation_ms": 27.392876,
+      "engine_ms": 37.059708,
+      "generation_ms": 25.304083999999996,
       "stage_ms": {
-        "context": 1.7866250000000001,
-        "site_buses": 0.7189589999999999,
-        "topology": 1.8820420000000002,
-        "electrify": 23.00525,
-        "dc_opf": 9.095208000000003,
-        "calibrate": 0.11550000000000438,
-        "ac_pf": 3.654666000000006,
-        "finalize": 0.00608299999999673
+        "context": 1.6532499999999999,
+        "site_buses": 0.6619169999999999,
+        "topology": 1.7541670000000003,
+        "electrify": 21.23475,
+        "dc_opf": 8.441082999999999,
+        "calibrate": 0.08233299999999844,
+        "ac_pf": 3.2281250000000057,
+        "finalize": 0.004083000000001391
       },
       "warnings": [
         "small_islands_skipped",
@@ -2835,21 +2832,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0064626986511862,
-        1.0257535976258627
+        1.013892971631608,
+        1.025753597625863
       ],
       "valid": true,
-      "engine_ms": 37.577000999999996,
-      "generation_ms": 24.820375,
+      "engine_ms": 34.47558600000001,
+      "generation_ms": 22.919959000000002,
       "stage_ms": {
-        "context": 1.779042,
-        "site_buses": 0.736041,
-        "topology": 1.8955420000000003,
-        "electrify": 20.40975,
-        "dc_opf": 9.104832999999996,
-        "calibrate": 0.13829199999999986,
-        "ac_pf": 3.508041999999996,
-        "finalize": 0.005459000000001879
+        "context": 1.6884579999999998,
+        "site_buses": 0.6819169999999999,
+        "topology": 1.7428750000000002,
+        "electrify": 18.806709,
+        "dc_opf": 8.417292,
+        "calibrate": 0.08708400000000083,
+        "ac_pf": 3.047209000000006,
+        "finalize": 0.004041999999998325
       },
       "warnings": [
         "small_islands_skipped",
@@ -2900,21 +2897,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        0.9808694966107352,
-        1.024766721263489
+        1.0022042236093704,
+        1.0247673803629214
       ],
       "valid": true,
-      "engine_ms": 13.571458000000002,
-      "generation_ms": 7.093124,
+      "engine_ms": 12.795376,
+      "generation_ms": 6.6485009999999996,
       "stage_ms": {
-        "context": 1.576125,
-        "site_buses": 0.35262499999999997,
-        "topology": 1.035208,
-        "electrify": 4.129166000000001,
-        "dc_opf": 4.8085,
-        "calibrate": 0.05566699999999969,
-        "ac_pf": 1.6095829999999989,
-        "finalize": 0.004584000000001254
+        "context": 1.4705829999999998,
+        "site_buses": 0.320959,
+        "topology": 0.9697920000000002,
+        "electrify": 3.887167,
+        "dc_opf": 4.530583000000001,
+        "calibrate": 0.05375000000000085,
+        "ac_pf": 1.5594169999999998,
+        "finalize": 0.003124999999998934
       },
       "warnings": [
         "small_islands_skipped",
@@ -2964,21 +2961,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        0.9492039792653277,
-        1.0595618054692535
+        0.949203899535133,
+        1.0312754603417176
       ],
       "valid": true,
-      "engine_ms": 15.282958000000002,
-      "generation_ms": 8.82225,
+      "engine_ms": 14.034248999999999,
+      "generation_ms": 8.222375,
       "stage_ms": {
-        "context": 1.580542,
-        "site_buses": 0.3189580000000001,
-        "topology": 1.0375,
-        "electrify": 5.885250000000001,
-        "dc_opf": 4.513459000000001,
-        "calibrate": 0.06112500000000054,
-        "ac_pf": 1.881958000000001,
-        "finalize": 0.00416599999999967
+        "context": 1.468708,
+        "site_buses": 0.29374999999999996,
+        "topology": 0.9656250000000002,
+        "electrify": 5.494292,
+        "dc_opf": 4.216458999999999,
+        "calibrate": 0.047082999999998876,
+        "ac_pf": 1.545166,
+        "finalize": 0.0031660000000020005
       },
       "warnings": [
         "small_islands_skipped",
@@ -3030,20 +3027,20 @@
       "ac_message": null,
       "vm": [
         1.0140002620004722,
-        1.0543792004728196
+        1.0543791240247147
       ],
       "valid": true,
-      "engine_ms": 14.916167000000002,
-      "generation_ms": 8.516166,
+      "engine_ms": 13.959707000000002,
+      "generation_ms": 8.085498999999999,
       "stage_ms": {
-        "context": 1.5636249999999998,
-        "site_buses": 0.3435830000000002,
-        "topology": 1.0381250000000002,
-        "electrify": 5.570833,
-        "dc_opf": 4.266,
-        "calibrate": 0.05258399999999952,
-        "ac_pf": 2.0768340000000016,
-        "finalize": 0.004583000000000226
+        "context": 1.5012079999999999,
+        "site_buses": 0.32283300000000015,
+        "topology": 0.948,
+        "electrify": 5.313458,
+        "dc_opf": 3.9545000000000012,
+        "calibrate": 0.04812500000000064,
+        "ac_pf": 1.8682499999999997,
+        "finalize": 0.0033330000000013627
       },
       "warnings": [
         "small_islands_skipped",
@@ -3097,17 +3094,17 @@
         1.020103435823129
       ],
       "valid": true,
-      "engine_ms": 33.82991500000001,
-      "generation_ms": 20.759790999999996,
+      "engine_ms": 31.917083000000005,
+      "generation_ms": 19.527959000000003,
       "stage_ms": {
-        "context": 1.0565419999999999,
-        "site_buses": 0.5438749999999999,
-        "topology": 1.4654579999999997,
-        "electrify": 17.693915999999998,
-        "dc_opf": 9.151500000000002,
-        "calibrate": 0.1130000000000031,
-        "ac_pf": 3.800666000000003,
-        "finalize": 0.004958000000002016
+        "context": 0.991958,
+        "site_buses": 0.507417,
+        "topology": 1.358834,
+        "electrify": 16.66975,
+        "dc_opf": 8.692042,
+        "calibrate": 0.09587499999999594,
+        "ac_pf": 3.597041000000001,
+        "finalize": 0.004166000000004999
       },
       "warnings": [
         "branch_target_exceeded"
@@ -3156,21 +3153,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0152557035963559,
-        1.0204486396923715
+        1.0152556332311196,
+        1.0204486395703791
       ],
       "valid": true,
-      "engine_ms": 31.164458,
-      "generation_ms": 18.887082,
+      "engine_ms": 29.060041000000002,
+      "generation_ms": 17.650499999999997,
       "stage_ms": {
-        "context": 1.0380829999999999,
-        "site_buses": 0.529458,
-        "topology": 1.4587500000000002,
-        "electrify": 15.860790999999999,
-        "dc_opf": 8.938583999999999,
-        "calibrate": 0.09804200000000307,
-        "ac_pf": 3.2360000000000007,
-        "finalize": 0.0047499999999978115
+        "context": 0.973917,
+        "site_buses": 0.4847500000000001,
+        "topology": 1.364958,
+        "electrify": 14.826874999999998,
+        "dc_opf": 8.36825,
+        "calibrate": 0.08620800000000273,
+        "ac_pf": 2.9507080000000023,
+        "finalize": 0.004374999999999574
       },
       "warnings": [
         "branch_target_exceeded",
@@ -3220,21 +3217,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0056966366396447,
-        1.020054552964401
+        1.0056966366500553,
+        1.0200545529644036
       ],
       "valid": true,
-      "engine_ms": 35.466001,
-      "generation_ms": 20.537041999999996,
+      "engine_ms": 31.707543,
+      "generation_ms": 19.295416,
       "stage_ms": {
-        "context": 1.0285,
-        "site_buses": 0.5005,
-        "topology": 1.449125,
-        "electrify": 17.558916999999997,
-        "dc_opf": 11.082499999999996,
-        "calibrate": 0.1353340000000003,
-        "ac_pf": 3.7054590000000047,
-        "finalize": 0.0056659999999979505
+        "context": 1.0082909999999998,
+        "site_buses": 0.4982500000000001,
+        "topology": 1.399,
+        "electrify": 16.389875,
+        "dc_opf": 9.083792000000003,
+        "calibrate": 0.09070900000000393,
+        "ac_pf": 3.2334589999999963,
+        "finalize": 0.004166999999998922
       },
       "warnings": [
         "branch_target_exceeded"
@@ -3283,21 +3280,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.016286848175907,
-        1.0716809339625097
+        1.0163098160550792,
+        1.0286190445376067
       ],
       "valid": true,
-      "engine_ms": 35.2635,
-      "generation_ms": 24.692791,
+      "engine_ms": 33.214040999999995,
+      "generation_ms": 23.251374999999996,
       "stage_ms": {
-        "context": 6.875500000000001,
-        "site_buses": 1.9874580000000002,
-        "topology": 3.6134579999999996,
-        "electrify": 12.216375,
-        "dc_opf": 7.719917000000002,
-        "calibrate": 0.08104200000000361,
-        "ac_pf": 2.764958,
-        "finalize": 0.0047919999999948
+        "context": 6.511124999999999,
+        "site_buses": 1.841375000000001,
+        "topology": 3.375,
+        "electrify": 11.523874999999999,
+        "dc_opf": 7.3133749999999935,
+        "calibrate": 0.07375000000000043,
+        "ac_pf": 2.569790999999995,
+        "finalize": 0.005750000000006139
       },
       "warnings": [
         "small_islands_skipped",
@@ -3348,21 +3345,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.019963695979076,
-        1.0788770502103409
+        1.0199636959790772,
+        1.0401083689004893
       ],
       "valid": true,
-      "engine_ms": 33.412707,
-      "generation_ms": 22.479374999999997,
+      "engine_ms": 30.413083999999987,
+      "generation_ms": 20.881583999999997,
       "stage_ms": {
-        "context": 6.925792,
-        "site_buses": 1.9482499999999998,
-        "topology": 3.6182499999999997,
-        "electrify": 9.987083,
-        "dc_opf": 7.441665999999998,
-        "calibrate": 0.08858300000000341,
-        "ac_pf": 3.3980829999999997,
-        "finalize": 0.0049999999999954525
+        "context": 6.406458000000001,
+        "site_buses": 1.8287499999999994,
+        "topology": 3.314041999999999,
+        "electrify": 9.332333999999998,
+        "dc_opf": 7.0045,
+        "calibrate": 0.06520799999999483,
+        "ac_pf": 2.4578329999999973,
+        "finalize": 0.0039589999999982695
       },
       "warnings": [
         "small_islands_skipped",
@@ -3413,21 +3410,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0194949390972312,
-        1.232123937187947
+        1.0194949155361588,
+        1.0434320138851598
       ],
-      "valid": false,
-      "engine_ms": 37.03458300000002,
-      "generation_ms": 24.550542000000007,
+      "valid": true,
+      "engine_ms": 32.375541999999996,
+      "generation_ms": 22.972083999999995,
       "stage_ms": {
-        "context": 6.891,
-        "site_buses": 2.1435000000000004,
-        "topology": 3.7031670000000005,
-        "electrify": 11.812875000000004,
-        "dc_opf": 7.450584000000003,
-        "calibrate": 0.08541600000000216,
-        "ac_pf": 4.943166000000005,
-        "finalize": 0.004874999999998408
+        "context": 6.44125,
+        "site_buses": 1.978625,
+        "topology": 3.391499999999999,
+        "electrify": 11.160708999999997,
+        "dc_opf": 6.893708000000004,
+        "calibrate": 0.07362499999999983,
+        "ac_pf": 2.4295420000000014,
+        "finalize": 0.006582999999992012
       },
       "warnings": [
         "small_islands_skipped",
@@ -3477,21 +3474,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.018270086661133,
-        1.02135344275072
+        1.0182700798497846,
+        1.0204089453602256
       ],
       "valid": true,
-      "engine_ms": 40.940542,
-      "generation_ms": 24.120418,
+      "engine_ms": 38.713875,
+      "generation_ms": 22.954208,
       "stage_ms": {
-        "context": 4.105084,
-        "site_buses": 0.9968750000000002,
-        "topology": 2.3044589999999996,
-        "electrify": 16.714000000000002,
-        "dc_opf": 10.935458,
-        "calibrate": 0.12462500000000176,
-        "ac_pf": 5.7550409999999985,
-        "finalize": 0.005000000000002558
+        "context": 3.9317919999999997,
+        "site_buses": 0.9654579999999999,
+        "topology": 2.17375,
+        "electrify": 15.883208,
+        "dc_opf": 10.250291999999998,
+        "calibrate": 0.09991700000000492,
+        "ac_pf": 5.405374999999999,
+        "finalize": 0.004083000000001391
       },
       "warnings": [
         "small_islands_skipped",
@@ -3544,21 +3541,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0191570757734272,
-        1.097477516976631
+        1.019146681261871,
+        1.0203406728814584
       ],
       "valid": true,
-      "engine_ms": 42.30350099999999,
-      "generation_ms": 25.113376999999996,
+      "engine_ms": 39.241375000000005,
+      "generation_ms": 23.711123999999998,
       "stage_ms": {
-        "context": 4.116792,
-        "site_buses": 0.925459,
-        "topology": 2.343291999999999,
-        "electrify": 17.727833999999998,
-        "dc_opf": 11.292082999999998,
-        "calibrate": 0.11895799999999923,
-        "ac_pf": 5.773083,
-        "finalize": 0.006000000000000227
+        "context": 3.8850000000000002,
+        "site_buses": 0.8981659999999998,
+        "topology": 2.2068329999999996,
+        "electrify": 16.721125,
+        "dc_opf": 10.592833999999996,
+        "calibrate": 0.13341700000000145,
+        "ac_pf": 4.799500000000002,
+        "finalize": 0.004500000000007276
       },
       "warnings": [
         "small_islands_skipped",
@@ -3611,21 +3608,21 @@
       "ac_pf": "converged",
       "ac_message": null,
       "vm": [
-        1.0179025062479545,
-        1.2658855560228506
+        1.017902506247955,
+        1.199966172048836
       ],
       "valid": false,
-      "engine_ms": 66.700915,
-      "generation_ms": 26.238791,
+      "engine_ms": 63.66004200000001,
+      "generation_ms": 24.662166,
       "stage_ms": {
-        "context": 4.169874999999999,
-        "site_buses": 1.0341250000000004,
-        "topology": 2.3574160000000006,
-        "electrify": 18.677374999999998,
-        "dc_opf": 12.213125000000005,
-        "calibrate": 21.54054099999999,
-        "ac_pf": 6.702874999999999,
-        "finalize": 0.005583000000001448
+        "context": 3.9100840000000003,
+        "site_buses": 0.9564579999999996,
+        "topology": 2.202915999999999,
+        "electrify": 17.592708000000002,
+        "dc_opf": 11.758417000000001,
+        "calibrate": 21.369292,
+        "ac_pf": 5.864167000000002,
+        "finalize": 0.006000000000007333
       },
       "warnings": [
         "small_islands_skipped",
@@ -3681,8 +3678,8 @@
         1.0311379627925992
       ],
       "plans_incomplete": 0,
-      "engine_ms_median": 9.861999999999998,
-      "engine_ms_max": 15.290750999999998,
+      "engine_ms_median": 9.039959999999999,
+      "engine_ms_max": 11.088585000000007,
       "failures": []
     },
     {
@@ -3727,8 +3724,8 @@
         1.0241175274314862
       ],
       "plans_incomplete": 2,
-      "engine_ms_median": 23.399541,
-      "engine_ms_max": 26.457331999999994,
+      "engine_ms_median": 21.731958000000002,
+      "engine_ms_max": 26.754417000000007,
       "failures": []
     },
     {
@@ -3773,8 +3770,8 @@
         1.025310797061388
       ],
       "plans_incomplete": 2,
-      "engine_ms_median": 50.53287500000001,
-      "engine_ms_max": 56.29820699999999,
+      "engine_ms_median": 47.626293,
+      "engine_ms_max": 52.632709999999996,
       "failures": []
     },
     {
@@ -3819,8 +3816,8 @@
         1.0246026892993187
       ],
       "plans_incomplete": 2,
-      "engine_ms_median": 53.670957000000016,
-      "engine_ms_max": 55.633500000000005,
+      "engine_ms_median": 51.122751,
+      "engine_ms_max": 52.99746000000001,
       "failures": []
     },
     {
@@ -3861,12 +3858,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        0.9964981889618573,
-        1.0290784744274477
+        1.0076951062928037,
+        1.0299013442410327
       ],
       "plans_incomplete": 1,
-      "engine_ms_median": 30.747582999999995,
-      "engine_ms_max": 33.453543,
+      "engine_ms_median": 28.912414999999996,
+      "engine_ms_max": 31.018665,
       "failures": []
     },
     {
@@ -3909,12 +3906,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        0.9975986447638625,
+        1.0013810365896936,
         1.0463239186964577
       ],
       "plans_incomplete": 1,
-      "engine_ms_median": 66.873209,
-      "engine_ms_max": 71.062543,
+      "engine_ms_median": 63.291459,
+      "engine_ms_max": 68.00116699999998,
       "failures": []
     },
     {
@@ -3955,14 +3952,14 @@
       "max_parallel_circuits": 4,
       "dc_pass": 3,
       "ac_converged": 1,
-      "ac_pass": 1,
+      "ac_pass": 0,
       "vm": [
-        0.9920695366935387,
-        1.0509496832316194
+        0.992204619444965,
+        1.2984501721060786
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 1754.044,
-      "engine_ms_max": 1974.8035419999999,
+      "engine_ms_median": 1432.004332,
+      "engine_ms_max": 1700.5910820000004,
       "failures": [
         {
           "seed": 1,
@@ -3972,7 +3969,7 @@
             null,
             null
           ],
-          "message": "AC power flow did not converge: best mismatch 2.340e-2 over 5 starts"
+          "message": "AC power flow did not converge: best mismatch 2.519e-2 over 5 starts"
         },
         {
           "seed": 7,
@@ -3982,7 +3979,17 @@
             null,
             null
           ],
-          "message": "AC power flow did not converge: best mismatch 8.576e-3 over 5 starts"
+          "message": "AC power flow did not converge: best mismatch 8.939e-3 over 5 starts"
+        },
+        {
+          "seed": 2026,
+          "dc_opf": "optimal",
+          "ac_pf": "converged",
+          "vm": [
+            0.992204619444965,
+            1.2984501721060786
+          ],
+          "message": null
         }
       ]
     },
@@ -4025,12 +4032,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        1.0090320191044886,
-        1.0313652467029355
+        1.011534802092791,
+        1.0313652822276844
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 601.8493329999999,
-      "engine_ms_max": 606.6400440000002,
+      "engine_ms_median": 551.5670410000001,
+      "engine_ms_max": 569.737709,
       "failures": []
     },
     {
@@ -4077,8 +4084,8 @@
         1.0215612232453277
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 1300.190584,
-      "engine_ms_max": 1813.2549590000008,
+      "engine_ms_median": 1203.9465010000004,
+      "engine_ms_max": 1660.3363730000005,
       "failures": [
         {
           "seed": 7,
@@ -4128,47 +4135,16 @@
       ],
       "max_parallel_circuits": 4,
       "dc_pass": 3,
-      "ac_converged": 0,
-      "ac_pass": 0,
+      "ac_converged": 3,
+      "ac_pass": 3,
       "vm": [
-        null,
-        null
+        1.0018368383744094,
+        1.0381094371137267
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 563.4611660000002,
-      "engine_ms_max": 609.6214589999997,
-      "failures": [
-        {
-          "seed": 1,
-          "dc_opf": "optimal",
-          "ac_pf": "not_converged",
-          "vm": [
-            null,
-            null
-          ],
-          "message": "AC power flow did not converge: best mismatch 1.608e-2 over 5 starts"
-        },
-        {
-          "seed": 7,
-          "dc_opf": "optimal",
-          "ac_pf": "not_converged",
-          "vm": [
-            null,
-            null
-          ],
-          "message": "AC power flow did not converge: best mismatch 1.232e0 over 5 starts"
-        },
-        {
-          "seed": 2026,
-          "dc_opf": "optimal",
-          "ac_pf": "not_converged",
-          "vm": [
-            null,
-            null
-          ],
-          "message": "AC power flow did not converge: best mismatch 1.018e0 over 5 starts"
-        }
-      ]
+      "engine_ms_median": 365.06949799999995,
+      "engine_ms_max": 367.81133399999993,
+      "failures": []
     },
     {
       "region": "bra",
@@ -4209,12 +4185,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        1.0084433266974866,
-        1.086140447880216
+        1.0130219796987576,
+        1.0377313487572701
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 173.94045799999995,
-      "engine_ms_max": 180.14708500000006,
+      "engine_ms_median": 157.737043,
+      "engine_ms_max": 165.24878999999999,
       "failures": []
     },
     {
@@ -4255,12 +4231,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        1.0116557343190107,
-        1.0312903157575937
+        1.011655734319014,
+        1.0312903157570368
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 199.15991799999998,
-      "engine_ms_max": 234.98841699999997,
+      "engine_ms_median": 186.79729099999997,
+      "engine_ms_max": 216.59220700000006,
       "failures": []
     },
     {
@@ -4302,26 +4278,15 @@
       "max_parallel_circuits": 4,
       "dc_pass": 3,
       "ac_converged": 3,
-      "ac_pass": 2,
+      "ac_pass": 3,
       "vm": [
-        1.0041846975999542,
-        1.5413469626616898
+        1.0069823509367826,
+        1.0268038439325111
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 46.22345700000001,
-      "engine_ms_max": 53.39858399999999,
-      "failures": [
-        {
-          "seed": 2026,
-          "dc_opf": "optimal",
-          "ac_pf": "converged",
-          "vm": [
-            1.0041846975999542,
-            1.5413469626616898
-          ],
-          "message": null
-        }
-      ]
+      "engine_ms_median": 43.85921000000001,
+      "engine_ms_max": 50.11500099999999,
+      "failures": []
     },
     {
       "region": "zaf",
@@ -4362,12 +4327,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        1.0064626986511862,
-        1.0395898307075802
+        1.0089800483822167,
+        1.039589830718156
       ],
       "plans_incomplete": 0,
-      "engine_ms_median": 37.577000999999996,
-      "engine_ms_max": 40.26433300000001,
+      "engine_ms_median": 34.47558600000001,
+      "engine_ms_max": 37.059708,
       "failures": []
     },
     {
@@ -4408,12 +4373,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        0.9492039792653277,
-        1.0595618054692535
+        0.949203899535133,
+        1.0543791240247147
       ],
       "plans_incomplete": 1,
-      "engine_ms_median": 14.916167000000002,
-      "engine_ms_max": 15.282958000000002,
+      "engine_ms_median": 13.959707000000002,
+      "engine_ms_max": 14.034248999999999,
       "failures": []
     },
     {
@@ -4454,12 +4419,12 @@
       "ac_converged": 3,
       "ac_pass": 3,
       "vm": [
-        1.0056966366396447,
-        1.0204486396923715
+        1.0056966366500553,
+        1.0204486395703791
       ],
       "plans_incomplete": 1,
-      "engine_ms_median": 33.82991500000001,
-      "engine_ms_max": 35.466001,
+      "engine_ms_median": 31.707543,
+      "engine_ms_max": 31.917083000000005,
       "failures": []
     },
     {
@@ -4498,26 +4463,15 @@
       "max_parallel_circuits": 4,
       "dc_pass": 3,
       "ac_converged": 3,
-      "ac_pass": 2,
+      "ac_pass": 3,
       "vm": [
-        1.016286848175907,
-        1.232123937187947
+        1.0163098160550792,
+        1.0434320138851598
       ],
       "plans_incomplete": 2,
-      "engine_ms_median": 35.2635,
-      "engine_ms_max": 37.03458300000002,
-      "failures": [
-        {
-          "seed": 2026,
-          "dc_opf": "optimal",
-          "ac_pf": "converged",
-          "vm": [
-            1.0194949390972312,
-            1.232123937187947
-          ],
-          "message": null
-        }
-      ]
+      "engine_ms_median": 32.375541999999996,
+      "engine_ms_max": 33.214040999999995,
+      "failures": []
     },
     {
       "region": "idn",
@@ -4557,20 +4511,20 @@
       "ac_converged": 3,
       "ac_pass": 2,
       "vm": [
-        1.0179025062479545,
-        1.2658855560228506
+        1.017902506247955,
+        1.199966172048836
       ],
       "plans_incomplete": 3,
-      "engine_ms_median": 42.30350099999999,
-      "engine_ms_max": 66.700915,
+      "engine_ms_median": 39.241375000000005,
+      "engine_ms_max": 63.66004200000001,
       "failures": [
         {
           "seed": 2026,
           "dc_opf": "optimal",
           "ac_pf": "converged",
           "vm": [
-            1.0179025062479545,
-            1.2658855560228506
+            1.017902506247955,
+            1.199966172048836
           ],
           "message": null
         }
@@ -4581,9 +4535,9 @@
     "regions": 18,
     "runs": 54,
     "dc_pass": 54,
-    "ac_converged": 48,
-    "ac_pass": 45,
-    "regions_all_valid": 12,
+    "ac_converged": 51,
+    "ac_pass": 49,
+    "regions_all_valid": 15,
     "peak_within": 14,
     "peak_scored": 14
   }

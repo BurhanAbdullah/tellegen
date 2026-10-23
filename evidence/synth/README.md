@@ -148,110 +148,110 @@ Egypt, Chile and Indonesia have no higher AC level, and the plan adds none.
 
 **Result.** These are rates over all seeds, not one seed:
 
-| Outline | Runs | DC OPF optimal | AC converged in band | Regions valid at every seed | Peaks within ±25% |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Natural Earth 1:50m | 54 | 54 | 45 | 12 of 18 | 14 of 14 |
-| App 1:110m, app request | 51 | 51 | 41 | 12 of 17 | 13 of 13 |
+| Outline | Runs | DC OPF optimal | AC converged | AC in band | Regions valid at every seed | Peaks within ±25% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Natural Earth 1:50m | 54 | 54 | 51 | 49 | 15 of 18 | 14 of 14 |
+| App 1:110m, app request | 51 | 51 | 47 | 47 | 15 of 17 | 13 of 13 |
 
-Demand, the bus count and the levels do not depend on the seed. The two
-outlines differ by a percent or two in peak demand, except where the
-outline changes which islands are generated.
+Each region's DC, AC converged, AC in band, voltage range, incomplete plans
+and median time are in the two `country-sweep-*.md` tables. Demand, the bus
+count and the levels do not depend on the seed. The two outlines differ by a
+percent or two in peak demand, except where the outline changes which
+islands are generated.
 
-**Failures by region, as the engine reported them** (AC passes out of 3):
+**What changed the rates: voltage support in remote pockets.** Before it, the
+same sweeps passed AC in band in 45 of 54 and 41 of 51 runs, and Russia
+failed at every seed. Most failures shared one structure: a pocket of 7–34
+load buses with no generator at all, fed over long 220/230 kV lines that
+were well inside their transfer limits. Examples were the Yenisei north,
+Yakutia and Magadan in Russia, and Nevada, Utah, West Texas and New Mexico
+in the United States. The AC power flow stalled there at 1–2 MW even from a
+DC start, because nothing in the pocket held its voltage. Making the
+pocket's largest load voltage-regulating removed the stall in all six
+pockets tried.
+
+The generator now gives every loaded bus farther than 480 km of corridor
+from a generator (the St. Clair curve's 1.0 SIL knot) a synchronous
+condenser, farthest first, with a reactive range of 0.5 MVAr per MW of the
+load nearest it. It places about 70 in Russia, 32–37 in Australia and
+Brazil, 3–6 in the United States and none in western Europe. Russia,
+Brazil, Chile and Egypt now pass at every seed on both outlines.
+
+**What still fails** (AC in band, out of 3):
 
 | Region | 1:50m | App 1:110m | What fails |
 | --- | ---: | ---: | --- |
-| Russia | 0 | 0 | See below |
-| United States | 1 | 0 | Not converged; from its own DC angles Newton stalls at about 2 MW in a remote 230 kV pocket (Nevada at seed 1) |
+| United States | 0 | 0 | Not converged, or once at up to 1.298 pu. The same kind of pocket (Nevada, Utah, West Texas, New Mexico), with no machine but within 480 km of one, so the condenser rule does not reach it |
 | China | 2 | 3 | 1:50m seed 7 not converged |
-| Brazil | 3 | 1 | 1:110m seed 1 not converged; seed 7 converged at 0.949–1.108 pu |
-| Australia | 2 | 2 | 1:50m seed 2026 converged at up to 1.541 pu; 1:110m seed 1 not converged |
-| Chile | 2 | 3 | 1:50m seed 2026 converged at up to 1.232 pu |
-| Indonesia | 2 | 3 | 1:50m seed 2026 converged at up to 1.266 pu |
-| Egypt | 3 | 2 | 1:110m seed 2026 not converged |
+| Australia | 3 | 2 | 1:110m seed 1 not converged |
+| Indonesia | 2 | 3 | 1:50m seed 2026 converged at up to 1.200 pu |
 
-Every DC OPF is optimal on both outlines. `planning_incomplete` is raised
-wherever a country's ladder stops before the angle spread can be met:
-Spain, Germany, Great Britain, France, Japan (two corridors short of
-capacity at four 500 kV circuits), Chile and Indonesia, and the
-continental regions.
+`planning_incomplete` is raised wherever a country's ladder stops before the
+angle spread can be met, and in the continental regions; each region's count
+is in the tables.
 
-**Russia.** Its AC power flow fails at every seed on both outlines, and
-for two structural reasons:
+Before the condensers, Russia also showed a 750 kV network far larger than
+any real one. Capacity promotion raises both ends of a heavy corridor, and
+every corridor touching a raised bus then runs at 750 kV: at 1:50m seed 1,
+317 of 1,181 buses and 73,500 circuit-km. Ukraine's network, among the
+largest real ones, is about 4,400 route-km (Ukrenergo, 2020). That build-out
+remains, met by fixed reactors, but with the pockets held Russia's
+voltages now stay inside 1.002–1.058 pu.
 
-- *Remote pockets at the end of long 220 kV chains.* Russia is one AC island
-  of 17 million km² in the model, where the real UES leaves Magadan,
-  Chukotka, Kamchatka and Norilsk as isolated systems. At three of the six
-  runs (1:50m seeds 1 and 2026, 1:110m seed 1) Newton stalls at 1–2 MW in a
-  220 kV pocket on the Yenisei north of Krasnoyarsk or at Magadan, 95°
-  from the reference, from a flat and a DC start alike: no AC solution lies
-  near the plan. The planning spread is 67–129° against the 44° target.
-- *A 750 kV network far larger than Russia's.* Capacity promotion raises
-  both ends of a heavy corridor, and every corridor touching a raised bus
-  then runs at 750 kV. At seed 1, 317 of 1,181 buses sit at 750 kV, with
-  73,500 circuit-km of 750 kV line. That is far more than any real 750 kV
-  network: Ukraine's, among the largest, is about 4,400 route-km
-  (Ukrenergo, 2020), and Russia's serves its north-west and west (SO UES).
-  Their 269 GVAr of charging is
-  met by 280–460 GVAr of fixed reactors for a 176 GW load, so voltages
-  swing with the dispatch. Where a solution exists, a DC start finds it,
-  but at 0.874–1.154 pu (1:50m seed 7) and 0.954–1.145 pu (1:110m seed
-  2026), outside the band; only 1:110m seed 7 (0.921–1.062 pu) would pass.
-  The engine's flat start at 1:110m seed 2026 converges to a false
-  0.26–1.96 pu root.
+Three other changes were tried against the failures and not kept, because
+none improved the AC passes over both outlines:
 
-  A warm start from the DC angles therefore lifts Russia from 0 to 1 of 6
-  valid runs, and from 1 to 3 converged. It does not repair the plan.
+- adequacy areas bounded by extent as well as load: 84 of 105 against 85;
+- lines between buses at different voltages run at the lower voltage: 77 of
+  105;
+- no stiffening onto the higher level: no change.
 
-Three model changes were tried against this and not kept, because none
-improved the AC passes over both outlines:
+A warm start from the DC angles, measured before the condensers, would have
+lifted Russia only from 0 to 1 valid run of 6.
 
-- Adequacy areas bounded by extent as well as load (about 120,000 km² each,
-  the Lower 48's balancing authorities): 84 of 105 against 85.
-- Lines between buses at different voltages run at the lower voltage, with
-  the transformer at the higher end: fewer 750 kV lines, but 77 of 105.
-- No stiffening onto the higher level: no change, since promotion, not
-  stiffening, builds the 750 kV network.
-
-Splitting continental islands into synchronous areas joined by HVDC, with
-switched reactive compensation, is the remaining structural step.
-
-**Indonesia on the app's outline.** At 1:110m the archipelago fell apart
-into several island groups, and the context kept the largest by area,
-Borneo's: the grid had 33 of 99 places and 8.5 GW of 54 GW, without Java.
-The context now keeps the group whose places hold the most people
-(bdaaa90): Indonesia keeps Java and Sumatra (44.8 GW), and its AC power flow
-converges at all three seeds. This was the only difference between the
-outlines with a cause in the model. The other differences (places snapped,
-peaks) are a few percent, and the AC outcomes that differ between outlines
-come from bus sites drawn on different polygons, the same kind of variation
-as between seeds.
+**Indonesia on the app's outline.** At 1:110m the archipelago fell apart into
+island groups, and the context kept the largest by area, Borneo's: 33 of 99
+places and 8.5 GW of 54 GW, without Java. The context now keeps the group
+whose places hold the most people (bdaaa90): Java and Sumatra, 44.8 GW. This
+was the only difference between the outlines with a cause in the model. The
+AC outcomes that differ between outlines come from bus sites drawn on
+different polygons, the same kind of variation as between seeds.
 
 **Time**, end to end with both validations (Apple M5 Pro):
 
 | Region | Buses | Native CLI, median of 3 seeds (1:50m / 1:110m) | wasm in Node 26, app outline, seed 2026 |
 | --- | ---: | ---: | ---: |
-| United States | 3000 | 1.75 / 1.64 s | 2.10 s |
-| China | 3000 | 1.30 / 1.03 s | 1.47 s |
-| India | 2013 | 0.60 / 0.49 s | 0.56 s |
-| Russia | 1181 | 0.56 / 0.46 s | 0.36 s |
+| United States | 3000 | 1.43 / 1.45 s | 2.00 s |
+| China | 3000 | 1.20 / 1.00 s | 1.48 s |
+| India | 2013 | 0.55 / 0.49 s | 0.56 s |
+| Russia | 1181 | 0.37 / 0.28 s | 0.35 s |
 | Germany | 517 | 0.05 / 0.05 s | 0.06 s |
 
-The United States is over the 2 s aim in wasm because its AC power flow
-does not converge over five starts (about 1.0 s of the run).
+The United States spends about 0.9 s of its wasm run on an AC power flow
+that does not converge. The engine tries a flat start and four perturbed
+restarts. Over all 105 runs of both sweeps, every AC power flow that
+converged did so from the flat start; the restarts never converged, and in
+the 14 failing solves before the condensers they cost 4.7 s in total, about
+0.34 s each. A test that stops a start once its mismatch has fallen by less
+than 1% over 8 iterations changed no verdict and saved at most 6%, so it
+was not kept. The restart policy is the engine's, shared with every case
+it solves; dropping restarts belongs with the AC warm start in tellegen
+#204.
 
 ### Limits of these results
 
-- **Seed robustness.** One seed overstates robustness. Russia converged at
-  one seed and outline before national ladders, and nowhere since; of the
-  regions that fail at all, Australia, Brazil, Chile, China, Egypt and
-  Indonesia each fail at one or two of six runs, so a single-seed table
-  reports them as valid or as failed by chance. The rates above, over three
-  seeds and two outlines, are the measure to quote, and three seeds are
-  still few.
-- **Voltage band.** Several converged runs leave the 0.9–1.1 pu band
-  (Australia at up to 1.54 pu, Chile 1.23, Indonesia 1.27, Brazil 0.95–1.11),
-  because the reactive plan sizes fixed shunts at the planning dispatch
-  while validation runs at the DC OPF's.
+- **Seed robustness.** One seed overstates robustness: Russia once
+  converged at exactly one seed and outline and nowhere else. The rates
+  above, over three seeds and two outlines, are the measure to quote, and
+  three seeds are still few.
+- **The United States.** It fails at every seed on both outlines. Its weak
+  pockets lie within the condenser rule's 480 km, and its 3000-bus planning
+  spread stays near 150–260°.
 - **One AC island per region.** Continental regions and archipelagos are
-  solved as one synchronous system; the generator has no HVDC of its own.
+  solved as one synchronous system, and the generator has no HVDC of its
+  own. Partitioning into synchronous areas joined by HVDC, and an AC warm
+  start from the planned operating point, are tracked in tellegen #204.
+- **Voltage band.** A few converged runs still leave the 0.9–1.1 pu band
+  (the United States at up to 1.298 pu, Indonesia at up to 1.200). The
+  reactive plan sizes fixed shunts at the planning dispatch, while
+  validation runs at the DC OPF's.

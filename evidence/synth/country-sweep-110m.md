@@ -1,30 +1,52 @@
 Outline: the MapToGrid app's 1:110m layer (regions.py --outline app-110m), the app's default request. Seeds 1, 7, 2026: 51 runs over 17 regions.
 
-- DC OPF optimal in 51 of 51 runs; AC power flow converged inside 0.9–1.1 pu in 41 of 51 (43 converged at all).
-- 12 of 17 regions are valid at every seed.
+- DC OPF optimal in 51 of 51 runs; AC power flow converged inside 0.9–1.1 pu in 47 of 51 (47 converged at all).
+- 15 of 17 regions are valid at every seed.
 - Peak within ±25% of the reference for 13 of the 13 regions whose reference scope matches (demand does not depend on the seed).
 
-Levels are the national ladder of the region's dominant country, highest first; a `+` marks a higher level in service there that the corridor plan raised buses to at some seed. DC and AC are passes out of the seeds run (AC: converged inside the band); Vm is the range over the runs that converged; engine ms is the median.
+Levels are the national ladder of the region's dominant country, highest first; a `+` marks a higher level in service there that the corridor plan raised buses to at some seed. Counts are out of the seeds run; AC in band means converged inside 0.9–1.1 pu; Vm is the range over the runs that converged; engine ms is the median.
 
-| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC | AC | Vm pu | Engine ms |
-| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: |
-| PRT | 400/220/150 | 95 | 8,162 | 9,395 (2025) | 0.87 | within | 1.49–1.52 | 2 | 3/3 | 3/3 | 0.992–1.033 | 8 |
-| ESP | 400/220 | 254 | 37,988 | 39,957 (2025) | 0.95 | within | 1.60–1.67 | 4 | 3/3 | 3/3 | 1.015–1.028 | 20 |
-| DEU | 380/220 | 524 | 78,508 | 75,635 (2025) | 1.04 | within | 1.53–1.60 | 4 | 3/3 | 3/3 | 0.980–1.024 | 47 |
-| GBR | 400/275 | 315 | 47,219 | 48,141 (2025) | 0.98 | within | 1.50–1.59 | 4 | 3/3 | 3/3 | 1.011–1.054 | 26 |
-| TEXAS-BOX | +765/500/345/230 | 462 | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.60 | 4 | 3/3 | 3/3 | 0.998–1.046 | 65 |
-| USA | +765/500/345/230 | 3000 | 649,906 | 759,180 (2025) | 0.86 | within | 1.60–1.61 | 4 | 3/3 | 0/3 |  | 1,645 |
-| IND | +765/400/220 | 2014 | 302,004 | 249,854 (2024) | 1.21 | within | 1.60 | 4 | 3/3 | 3/3 | 1.008–1.024 | 492 |
-| CHN | +1000/500/220 | 3000 | 1,501,472 | 1,508,000 (2025) | 1.00 | within | 1.64–1.67 | 4 | 3/3 | 3/3 | 1.018–1.022 | 1,032 |
-| RUS | +750/500/220 | 1181 | 175,954 | 166,155 (2025) | 1.06 | within | 1.60 | 4 | 3/3 | 0/3 | 0.261–1.955 | 460 |
-| BRA | +765/500/230 | 750 | 112,433 | 106,532 (2025) | 1.06 | within | 1.60 | 4 | 3/3 | 1/3 | 0.949–1.108 | 147 |
-| JPN | 500/275 | 996 | 149,312 | 162,600 (2025) | 0.92 | within | 1.60–1.61 | 4 | 3/3 | 3/3 | 1.016–1.037 | 156 |
-| AUS | +500/330/275/220 | 312 | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 4 | 3/3 | 2/3 | 0.998–1.032 | 39 |
-| ZAF | +765/400/275 | 312 | 36,390 | 33,485 (2024) | 1.09 | within | 1.60 | 4 | 3/3 | 3/3 | 1.012–1.039 | 30 |
-| NGA | 330/132 | 174 | 5,236 | 5,802 (2025) | 0.90 | not comparable | 1.60 | 4 | 3/3 | 3/3 | 0.956–1.034 | 12 |
-| EGY | 500/220 | 312 | 34,828 | 39,800 (2025) | 0.88 | within | 1.60–1.63 | 4 | 3/3 | 2/3 | 1.015–1.021 | 28 |
-| CHL | 500/220 | 282 | 13,156 | 13,093 (2025) | 1.00 | within | 1.60 | 4 | 3/3 | 3/3 | 1.019–1.052 | 24 |
-| IDN | 500/150 | 356 | 44,810 | 61,288 (2024) | 0.73 | flagged | 1.57–1.60 | 4 | 3/3 | 3/3 | 1.015–1.025 | 38 |
+| Region | Levels (kV) | Buses | DC optimal | AC converged | AC in band | Vm pu | Planning incomplete | Engine ms |
+| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| PRT | 400/220/150 | 95 | 3/3 | 3/3 | 3/3 | 0.992–1.033 | 0/3 | 7 |
+| ESP | 400/220 | 254 | 3/3 | 3/3 | 3/3 | 1.015–1.028 | 3/3 | 20 |
+| DEU | 380/220 | 524 | 3/3 | 3/3 | 3/3 | 0.980–1.024 | 1/3 | 45 |
+| GBR | 400/275 | 315 | 3/3 | 3/3 | 3/3 | 1.011–1.054 | 0/3 | 25 |
+| TEXAS-BOX | +765/500/345/230 | 462 | 3/3 | 3/3 | 3/3 | 1.001–1.046 | 1/3 | 63 |
+| USA | +765/500/345/230 | 3000 | 3/3 | 0/3 | 0/3 |  | 3/3 | 1,454 |
+| IND | +765/400/220 | 2014 | 3/3 | 3/3 | 3/3 | 1.008–1.024 | 3/3 | 486 |
+| CHN | +1000/500/220 | 3000 | 3/3 | 3/3 | 3/3 | 1.018–1.079 | 3/3 | 1,000 |
+| RUS | +750/500/220 | 1181 | 3/3 | 3/3 | 3/3 | 1.008–1.058 | 3/3 | 276 |
+| BRA | +765/500/230 | 750 | 3/3 | 3/3 | 3/3 | 1.013–1.037 | 3/3 | 146 |
+| JPN | 500/275 | 996 | 3/3 | 3/3 | 3/3 | 1.016–1.037 | 3/3 | 154 |
+| AUS | +500/330/275/220 | 312 | 3/3 | 2/3 | 2/3 | 1.008–1.027 | 3/3 | 40 |
+| ZAF | +765/400/275 | 312 | 3/3 | 3/3 | 3/3 | 1.012–1.039 | 0/3 | 30 |
+| NGA | 330/132 | 174 | 3/3 | 3/3 | 3/3 | 0.956–1.034 | 2/3 | 12 |
+| EGY | 500/220 | 312 | 3/3 | 3/3 | 3/3 | 1.015–1.021 | 2/3 | 28 |
+| CHL | 500/220 | 282 | 3/3 | 3/3 | 3/3 | 1.019–1.037 | 2/3 | 25 |
+| IDN | 500/150 | 356 | 3/3 | 3/3 | 3/3 | 1.015–1.025 | 2/3 | 38 |
+
+Peak demand and structure (demand, the bus count and the levels do not depend on the seed; branch/bus is the range over the seeds):
+
+| Region | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits |
+| --- | ---: | --- | ---: | --- | ---: | ---: |
+| PRT | 8,162 | 9,395 (2025) | 0.87 | within | 1.49–1.52 | 2 |
+| ESP | 37,988 | 39,957 (2025) | 0.95 | within | 1.60–1.67 | 4 |
+| DEU | 78,508 | 75,635 (2025) | 1.04 | within | 1.53–1.60 | 4 |
+| GBR | 47,219 | 48,141 (2025) | 0.98 | within | 1.50–1.59 | 4 |
+| TEXAS-BOX | 69,266 | 83,679 (2025) | 0.83 | not comparable | 1.60 | 4 |
+| USA | 649,906 | 759,180 (2025) | 0.86 | within | 1.60–1.61 | 4 |
+| IND | 302,004 | 249,854 (2024) | 1.21 | within | 1.60 | 4 |
+| CHN | 1,501,472 | 1,508,000 (2025) | 1.00 | within | 1.64–1.67 | 4 |
+| RUS | 175,954 | 166,155 (2025) | 1.06 | within | 1.60 | 4 |
+| BRA | 112,433 | 106,532 (2025) | 1.06 | within | 1.60 | 4 |
+| JPN | 149,312 | 162,600 (2025) | 0.92 | within | 1.60–1.61 | 4 |
+| AUS | 41,796 | 37,949 (2024) | 1.10 | flagged | 1.60 | 4 |
+| ZAF | 36,390 | 33,485 (2024) | 1.09 | within | 1.60 | 4 |
+| NGA | 5,236 | 5,802 (2025) | 0.90 | not comparable | 1.60 | 4 |
+| EGY | 34,828 | 39,800 (2025) | 0.88 | within | 1.60–1.63 | 4 |
+| CHL | 13,156 | 13,093 (2025) | 1.00 | within | 1.60 | 4 |
+| IDN | 44,810 | 61,288 (2024) | 0.73 | flagged | 1.57–1.60 | 4 |
 
 Not in this outline layer, so not run: FRA.
 

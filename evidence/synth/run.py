@@ -285,21 +285,33 @@ def sweep_markdown(packet):
         f"{summary['peak_scored']} regions whose reference scope matches (demand does not depend on the seed).",
         '',
         'Levels are the national ladder of the region\'s dominant country, highest first; a `+` marks a '
-        'higher level in service there that the corridor plan raised buses to at some seed. DC and AC are '
-        'passes out of the seeds run (AC: converged inside the band); Vm is the range over the runs that '
+        'higher level in service there that the corridor plan raised buses to at some seed. Counts are out '
+        'of the seeds run; AC in band means converged inside 0.9–1.1 pu; Vm is the range over the runs that '
         'converged; engine ms is the median.',
         '',
-        '| Region | Levels (kV) | Buses | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits | DC | AC | Vm pu | Engine ms |',
-        '| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: |',
+        '| Region | Levels (kV) | Buses | DC optimal | AC converged | AC in band | Vm pu | Planning incomplete | Engine ms |',
+        '| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |',
+    ]
+    for r in packet['regions']:
+        n = r['runs']
+        lines.append(
+            f"| {r['region'].upper()} | {levels(r)} | {r['buses']} | {r['dc_pass']}/{n} | {r['ac_converged']}/{n} | "
+            f"{r['ac_pass']}/{n} | {vm(r)} | {r['plans_incomplete']}/{n} | {r['engine_ms_median']:,.0f} |")
+    lines += [
+        '',
+        'Peak demand and structure (demand, the bus count and the levels do not depend on the seed; branch/bus '
+        'is the range over the seeds):',
+        '',
+        '| Region | Peak MW | Reference MW (year) | Ratio | Peak verdict | Branch/bus | Max circuits |',
+        '| --- | ---: | --- | ---: | --- | ---: | ---: |',
     ]
     for r in packet['regions']:
         ref = r['reference']
         shown = f"{ref['reference_mw']:,.0f} ({ref['year']})" if ref else ''
         ratio = f"{r['peak_ratio']:.2f}" if r['peak_ratio'] is not None else ''
         lines.append(
-            f"| {r['region'].upper()} | {levels(r)} | {r['buses']} | {r['peak_mw']:,.0f} | {shown} | {ratio} | "
-            f"{r['peak_verdict']} | {span(r['branch_bus_ratio'], '{:.2f}')} | {r['max_parallel_circuits']} | "
-            f"{r['dc_pass']}/{r['runs']} | {r['ac_pass']}/{r['runs']} | {vm(r)} | {r['engine_ms_median']:,.0f} |")
+            f"| {r['region'].upper()} | {r['peak_mw']:,.0f} | {shown} | {ratio} | {r['peak_verdict']} | "
+            f"{span(r['branch_bus_ratio'], '{:.2f}')} | {r['max_parallel_circuits']} |")
     missing = packet.get('missing') or []
     if missing:
         lines += ['', f"Not in this outline layer, so not run: {', '.join(m.upper() for m in missing)}."]
