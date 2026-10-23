@@ -19,6 +19,12 @@ if (hash.digest("hex") !== schema["x-rust-source-sha256"]) {
   );
 }
 
+// A field's Rust doc comment as JSDoc, so editors show it on hover.
+function doc(node) {
+  const text = typeof node === "object" ? node.description?.replace(/\s+/g, " ").trim().replaceAll("*/", "*\\/") : undefined;
+  return text ? `/** ${text} */ ` : "";
+}
+
 function type(node) {
   if (node === true) return "unknown";
   if (node === false) return "never";
@@ -47,7 +53,7 @@ function type(node) {
     }
     case "object": {
       const fields = Object.entries(node.properties ?? {}).map(
-        ([key, value]) => `${JSON.stringify(key)}${node.required?.includes(key) ? "" : "?"}: ${type(value)};`,
+        ([key, value]) => `${doc(value)}${JSON.stringify(key)}${node.required?.includes(key) ? "" : "?"}: ${type(value)};`,
       );
       if (node.additionalProperties && node.additionalProperties !== false) fields.push(`[key: string]: ${type(node.additionalProperties)};`);
       return `{ ${fields.join(" ")} }`;
