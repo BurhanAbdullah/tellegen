@@ -19,6 +19,7 @@
 //! The library has no clock, no filesystem access and no platform randomness,
 //! so the same request reproduces the same grid natively and in WebAssembly.
 
+pub mod build;
 pub mod context;
 pub mod electrical;
 pub mod error;
@@ -28,6 +29,7 @@ pub mod report;
 pub mod request;
 pub mod rng;
 pub mod site;
+pub mod stats;
 pub mod topology;
 
 pub use error::{ErrorPayload, SynthError};
