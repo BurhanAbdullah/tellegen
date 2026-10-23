@@ -21,7 +21,7 @@ per iteration.
 
 | Stage | Work |
 | --- | --- |
-| `context` | parse and measure the region (spherical area, landmasses, island groups); resolve peak demand from the national demand table, the bus count and the fuel mix |
+| `context` | parse and measure the region (spherical area, landmasses, island groups, keeping the most populous group when far islands are cut); resolve peak demand from the national demand table, the voltage ladder, the bus count and the fuel mix |
 | `site_buses` | anchor buses on the most populous places, fill the rest with blue noise; allocate demand-weighted loads, holding every bus at or below the top level's load cap |
 | `topology` | per island, a minimum spanning tree, a tree over the highest-voltage buses, a Gabriel mesh up to the branch factor, and high-voltage loops, all from one Delaunay triangulation |
 | `electrify` | site generation; design every corridor; run the corridor plan and the reactive plan; build the PowerIO network |
@@ -310,11 +310,16 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
 ## Limits
 
 - Requests are capped at 3000 buses, which the automatic count reaches for
-  the largest countries. China at 3000 buses takes about 1.0–1.1 s natively
-  and 1.3 s in wasm (Node, Apple M5 Pro), end to end with both validations;
-  the United States takes 1.6–1.9 s and 2.2 s, about half of it an AC power
+  the largest countries. China at 3000 buses takes about 1.0–1.3 s natively
+  and 1.5 s in wasm (Node, Apple M5 Pro), end to end with both validations;
+  the United States takes 1.6–1.8 s and 2.1 s, about half of it an AC power
   flow that does not converge over five starts. A 500-bus country takes
   under 0.1 s. `evidence/synth` records the measurements.
+- Whether the AC power flow converges inside the band depends on the seed
+  for several countries. `evidence/synth` sweeps three seeds on two
+  outlines (Natural Earth 1:50m and the MapToGrid app's 1:110m layer):
+  83% and 80% of the runs pass AC, every run passes DC, and Russia fails at
+  every seed.
 - Clustering in generated grids runs higher than in the ACTIVSg200 and
   GOC500 references, because the Gabriel mesh is rich in triangles. Their
   highest nodal degree is also lower, since the mesh caps it at 8.
