@@ -168,13 +168,24 @@ pub fn resolve_context(
     let groups = landmass_groups(&shape, &kept, req.islands.max_interconnect_km);
     let mut polygon_group = vec![None; areas.len()];
     let mut polygon_weights = vec![0.0; areas.len()];
+    // The connected system is the group where the region's people live, not
+    // the largest by area: on a coarse outline an archipelago falls apart
+    // into groups, and the largest of them need not be the populated one
+    // (Borneo against Java). Area decides between groups without places.
+    let mut polygon_population = vec![0.0; areas.len()];
+    for city in places.in_region(&shape) {
+        if let Some(i) = shape.polygon_index(city.lon, city.lat) {
+            polygon_population[i] += city.place.population;
+        }
+    }
     let main_group = groups
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| {
-            let sa: f64 = a.iter().map(|&i| areas[i]).sum();
-            let sb: f64 = b.iter().map(|&i| areas[i]).sum();
-            sa.partial_cmp(&sb).unwrap()
+            let sum = |g: &[usize], v: &[f64]| g.iter().map(|&i| v[i]).sum::<f64>();
+            sum(a, &polygon_population)
+                .total_cmp(&sum(b, &polygon_population))
+                .then(sum(a, &areas).total_cmp(&sum(b, &areas)))
         })
         .map(|(k, _)| k)
         .unwrap_or(0);
@@ -780,6 +791,28 @@ mod tests {
         let (ctx, message) = fallback("ZZZ");
         assert_eq!(ctx.voltage_levels_kv, vec![400.0, 220.0]);
         assert!(message.contains("IEC 60038"), "{message}");
+    }
+
+    #[test]
+    fn far_islands_are_cut_from_the_populated_system_not_the_largest() {
+        // A large empty landmass and a small populated one 1,000 km east,
+        // too far apart to join: the populated one is the system kept.
+        let geom = serde_json::json!({"type":"MultiPolygon","coordinates":[
+            [[[0.0,0.0],[6.0,0.0],[6.0,6.0],[0.0,6.0],[0.0,0.0]]],
+            [[[15.0,2.0],[16.0,2.0],[16.0,3.0],[15.0,3.0],[15.0,2.0]]]]});
+        let req = SynthRequest::new(Region {
+            geometry: geom,
+            label: "two".into(),
+        });
+        let places =
+            Places::parse(br#"[{"n":"Port","lo":15.5,"la":2.5,"p":3000000,"c":"PRT"}]"#).unwrap();
+        let mut warnings = Vec::new();
+        let (ctx, data) = resolve_context(&req, &places, &mut warnings).unwrap();
+        assert_eq!(data.polygon_weights[0], 0.0);
+        assert!(data.polygon_weights[1] > 0.0);
+        assert_eq!(data.cities.len(), 1);
+        assert!(ctx.peak_demand_mw > 0.0);
+        assert!(warnings.iter().any(|w| w.code == "islands_cut"));
     }
 
     #[test]

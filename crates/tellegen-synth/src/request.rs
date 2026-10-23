@@ -166,8 +166,9 @@ impl Default for DemandSpec {
 #[serde(rename_all = "snake_case")]
 pub enum FarIslandPolicy {
     /// Drop the buses of a landmass farther than `max_interconnect_km` from
-    /// the connected system and say so in a warning. The default: the result
-    /// is one electrical island the engine can solve as a whole.
+    /// the connected system (the group of landmasses whose places hold the
+    /// most people) and say so in a warning. The default: the result is one
+    /// electrical island the engine can solve as a whole.
     #[default]
     Cut,
     /// Keep the landmass as its own electrical island with its own reference
