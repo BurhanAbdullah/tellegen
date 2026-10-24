@@ -71,7 +71,7 @@
     "@deck.gl/layers": "^9.4.0",
     "@deck.gl/maplibre": "^9.4.0",
     "@tellegen/engine": "^0.3.0",
-    "maplibre-gl": "^6.11.2"
+    "maplibre-gl": "^6.15.0"
   },
   "peerDependencies": {
     "svelte": ">=5.30 <6"
