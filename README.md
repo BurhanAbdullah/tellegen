@@ -169,19 +169,33 @@ server surface, hosting, and where the project is going.
 
 ## Citing
 
-tellegen is described in a paper at the 1st ACM Conference on Digital
-Transformation (DXConf '26, Ann Arbor, October 2026). Please cite it, and the
+tellegen is described in *Interactive Power Flow in the Browser*, presented at
+the Inaugural ACM Conference on Digital Transformation (ACM DXConf 2026, Ann
+Arbor, October 2026; [doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038),
+[arXiv:2610.01922](https://arxiv.org/abs/2610.01922)). Please cite it, and the
 software release you used; GitHub's "Cite this repository" button reads
 [`CITATION.cff`](CITATION.cff).
 
+> Samuel Talkington, Frederik Geth, Qian Zhang, Le Xie, and Skyler Liu. 2026.
+> Interactive Power Flow in the Browser. In *The Inaugural ACM Conference on
+> Digital Transformation (ACM DXConf 2026), October 29–30, 2026, Ann Arbor, MI,
+> USA.* ACM, New York, NY, USA, 9 pages. https://doi.org/10.1145/3847238.3849038
+
 ```bibtex
 @inproceedings{talkington2026tellegen,
-  title     = {Interactive Optimal Power Flow Compiled to the Browser},
+  title     = {Interactive Power Flow in the Browser},
   author    = {Talkington, Samuel and Geth, Frederik and Zhang, Qian and Xie, Le and Liu, Skyler},
-  booktitle = {DXConf '26: Proceedings of the 1st ACM Conference on Digital Transformation},
+  booktitle = {The Inaugural ACM Conference on Digital Transformation (ACM DXConf 2026)},
   year      = {2026},
-  address   = {Ann Arbor, MI, USA},
-  publisher = {Association for Computing Machinery}
+  month     = oct,
+  location  = {Ann Arbor, MI, USA},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  numpages  = {9},
+  isbn      = {979-8-4007-3028-3},
+  doi       = {10.1145/3847238.3849038},
+  eprint    = {2610.01922},
+  archivePrefix = {arXiv}
 }
 
 @software{tellegen2026software,

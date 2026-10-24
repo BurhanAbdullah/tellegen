@@ -95,3 +95,13 @@ npm run pack:engine
 Svelte package. It releases through Changesets with the other npm packages. The
 hosted demo under `apps/web` is private and consumes `@tellegen/svelte` through
 the same workspace file dependency used by the local examples.
+
+## Citing
+
+If you use this package in published work, please cite the tellegen paper:
+Samuel Talkington, Frederik Geth, Qian Zhang, Le Xie, and Skyler Liu. 2026.
+*Interactive Power Flow in the Browser*. The Inaugural ACM Conference on Digital
+Transformation (ACM DXConf 2026), Ann Arbor, MI, USA.
+[doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038). The
+[repository README](https://github.com/eigenergy/tellegen#citing) has the BibTeX
+entry.

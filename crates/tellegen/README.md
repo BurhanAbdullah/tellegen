@@ -83,6 +83,16 @@ cargo test                          # native, with sensitivities (default featur
 cargo build --no-default-features   # solve only, no faer (smaller wasm core)
 ```
 
+## Citing
+
+If you use this crate in published work, please cite the tellegen paper:
+Samuel Talkington, Frederik Geth, Qian Zhang, Le Xie, and Skyler Liu. 2026.
+*Interactive Power Flow in the Browser*. The Inaugural ACM Conference on Digital
+Transformation (ACM DXConf 2026), Ann Arbor, MI, USA.
+[doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038). The
+[repository README](https://github.com/eigenergy/tellegen#citing) has the BibTeX
+entry.
+
 ## License
 
 Dual-licensed under either Apache-2.0 or MIT, at your option. See LICENSE-APACHE,
