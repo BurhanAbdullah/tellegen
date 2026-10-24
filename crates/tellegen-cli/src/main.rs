@@ -8,6 +8,8 @@
 //! tellegen '{"formulation":"socwr"}' < case.pio.json
 //! tellegen solve-module < case.pio.json       # stored module in, solution module out
 //! tellegen plan < plan-request.json          # capacity planning proposal
+//! tellegen generate --request req.json --out DIR   # a synthetic grid and its report
+//! tellegen stats < case.pio.json              # structural statistics of a case
 //! ```
 //!
 //! `solve-module` and `plan` accept a stored
@@ -32,6 +34,8 @@ use tellegen::ir::{balanced_module, deserialize_module, serialize_module};
 
 use tellegen::plan::CapacityPlanSpec;
 
+mod synth;
+
 const USAGE: &str =
     "usage: tellegen [REQUEST_JSON | capabilities | --help]   (PowerIO module on stdin)\n\
      \n\
@@ -53,7 +57,14 @@ const USAGE: &str =
                    create, inspect, continue or move a durable Study.\n\
      plan\n\
                    read {\"module\": POWERIO_MODULE, \"spec\": CAPACITY_PLAN_SPEC}\n\
-                   from stdin and print the proposal and exact proposed solution.";
+                   from stdin and print the proposal and exact proposed solution.\n\
+     generate --request PATH --out DIR [--places PATH] [--osm PATH]\n\
+              [--export FORMAT[,FORMAT...]] [--gridfm]\n\
+                   generate a synthetic grid for a region; write the module,\n\
+                   its report, a GeoJSON layer and the requested exports.\n\
+     stats [--case PATH] [--targets PATH]\n\
+                   print the structural statistics of a case file, or of the\n\
+                   module on stdin.";
 
 fn main() -> ExitCode {
     let arg = std::env::args().nth(1).unwrap_or_default();
@@ -109,6 +120,29 @@ fn main() -> ExitCode {
                     tellegen::solve_bmopf_json(&input, &options)
                 } else {
                     tellegen::solve_mc_module_json(&input, &options)
+                }
+            });
+        }
+        "generate" => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            return run(|| {
+                let parsed = synth::parse_generate_args(&args)?;
+                synth::generate_command(&parsed, Some(&synth::ctrlc_cancel))
+            });
+        }
+        "stats" => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            return run(|| {
+                let (case, targets) = synth::parse_stats_args(&args)?;
+                let targets = targets
+                    .map(|path| {
+                        std::fs::read_to_string(&path)
+                            .map_err(|e| format!("cannot read {}: {e}", path.display()))
+                    })
+                    .transpose()?;
+                match case {
+                    Some(path) => synth::stats_case(&path, targets.as_deref()),
+                    None => synth::stats_text(&read_stdin()?, targets.as_deref()),
                 }
             });
         }

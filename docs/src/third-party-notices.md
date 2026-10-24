@@ -28,6 +28,30 @@ The repository does not modify or vendor those dependency sources. License and
 notice files from dependencies are distributed through their normal package
 archives.
 
+## Populated Places
+
+The synthetic grid generator ships `crates/tellegen-synth/data/populated_places.json`
+(copied into `@tellegen/engine` as `data/populated_places.json`): name,
+longitude, latitude, `pop_max` and country of the Natural Earth 1:10m
+populated places. Natural Earth data is in the public domain
+([naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/)).
+
+It also ships `crates/tellegen-synth/data/national_demand.json`, compiled
+into the engine: each country's annual electricity demand and population,
+derived by `scripts/derive-national-demand.py` from Our World in Data's
+energy dataset ([github.com/owid/energy-data](https://github.com/owid/energy-data)),
+whose `electricity_demand` column comes from Ember's Yearly Electricity Data.
+Both are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
+Ember, *Yearly Electricity Data*; Our World in Data, *Energy dataset*. The
+table records the SHA-256 of the CSV it was derived from.
+
+`crates/tellegen-synth/data/country_areas.json`, also compiled into the
+engine, gives each country's area, measured by
+`scripts/derive-country-areas.py` from Natural Earth's 1:50m admin-0
+countries (public domain). `crates/tellegen-synth/data/voltage_ladders.json`
+lists national transmission voltage levels with the operator, regulator and
+standards documents each entry was taken from; it copies no dataset.
+
 ## Demo Case Data
 
 The demo data is staged by the operator and is not vendored in this repository.
