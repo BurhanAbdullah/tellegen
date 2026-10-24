@@ -19,6 +19,7 @@ packages/webmcp/dist/
 # Rust
 /target/
 packages/engine/src/wasm-pkg/
+packages/engine/src/data/
 
 # Operator-staged TAMU case data (scripts/stage-data.sh); never vendored
 data/
@@ -53,3 +54,7 @@ python/tellegen/*.pyd
 __pycache__/
 .venv/
 .pytest_cache/
+
+# The synthetic generator ships its Natural Earth places table (public domain).
+!crates/tellegen-synth/data/
+!crates/tellegen-synth/data/**
