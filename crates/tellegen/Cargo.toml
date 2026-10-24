@@ -1,6 +1,6 @@
 [package]
 name = "tellegen"
-version = "0.3.0"
+version = "0.4.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -55,7 +55,7 @@ conic = ["sensitivity"]
 # not forwarded by wasm, CLI, server, or Python adapters. The first increment
 # exposes only the native HS071 API probe; it does not claim AC OPF support.
 acopf = ["dep:pounce-nl", "dep:pounce-rs", "dep:num-complex"]
-# JSON Schema derives used by the headless CLI contract. Kept out of the
+# JSON Schema derives for the CLI's `describe` output. Kept out of the
 # browser and numerical builds.
 schema = ["dep:schemars", "powerio/schema"]
 
@@ -63,7 +63,7 @@ schema = ["dep:schemars", "powerio/schema"]
 workspace = true
 
 [[example]]
-name = "study_contract"
+name = "study_schema"
 required-features = ["schema"]
 
 [[example]]

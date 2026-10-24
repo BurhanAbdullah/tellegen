@@ -14,6 +14,19 @@ tables below, so a generated grid resembles a transmission system without
 describing any real one. OpenStreetMap mode maps real substations, lines and
 plants, but its electrical parameters and loads stay modelled.
 
+A region is GeoJSON `Polygon` or `MultiPolygon` geometry in longitude and
+latitude, or a bounding box. A region that crosses ±180 must arrive split at
+the seam, as RFC 7946 asks, or as a bounding box whose east edge is above
+180; a ring edge that jumps more than 180° of longitude is refused, except
+along a pole. Request values are bounded well outside any real system:
+voltage levels 1–1500 kV, `demand.mw` up to 10⁷, `demand.per_capita_kw` up
+to 100 and `demand.peak_factor` from 1 to 10.
+
+Each generated bus, branch, load, generator, shunt and HVDC row keeps its
+annotations (kind, place, population weight, tier, island, source, corridor
+and circuit) under `extras.tellegen_synth`, and the module is named
+`tellegen_synth_` followed by the first 16 hex digits of the request hash.
+
 ## Stages
 
 A session runs one bounded stage per call. The calibration stage runs once
@@ -33,7 +46,11 @@ per iteration.
 Every stage up to `electrify` is O(n log n). The library reads no clock, no
 filesystem and no platform randomness. Each stage draws from its own ChaCha8
 stream seeded from the request seed, so the same request and places table
-give the same module, byte for byte, natively and in wasm.
+give the same module, byte for byte, on the same build and platform. Native
+and wasm runs agree in structure in the cases tested, but floating-point
+values differ in the last bits because the platform math libraries round
+`ln`, `exp`, `sin` and `cos` differently; compare them with a tolerance, not
+by module hash.
 
 ## Demand and bus count
 
@@ -271,10 +288,17 @@ antimeridian-crossing region), the grid is built as follows:
 6. The island policy applies: `connect` (default), `cut` or `keep`.
 
 Mapped circuits are real, so the corridor plan only measures them; the
-reactive plan still applies. A network too thin to use is the typed
+reactive plan still applies. A way's circuit count, and a corridor's, is
+capped at 12: a larger `circuits` or `cables` tag is a tagging error, and each
+circuit becomes a branch row. A network too thin to use is the typed
 `osm_insufficient` refusal. The caller decides whether to rerun
 synthetically; the generator never switches on its own. The Overpass QL
 comes from the engine (`syntheticOverpassQueries`), so its text exists once.
+
+An OpenStreetMap-mode grid contains data derived from OpenStreetMap, ©
+OpenStreetMap contributors, available under the Open Database License
+(ODbL) 1.0. Check the ODbL's attribution and share-alike terms before
+redistributing such a module or its exports.
 
 ## Using it
 
@@ -292,9 +316,8 @@ const ingest = await session.ingest();         // the drop payload of that modul
 session.free();
 ```
 
-- **Host.** Sessions run on a dedicated worker (`synthEngineHost()`).
-  Cancelling one terminates only that worker, so interactive studies are
-  untouched.
+- **Host.** Sessions run on a dedicated worker. Cancelling one terminates
+  only that worker, so interactive studies are untouched.
 - **Places table.** The Natural Earth table (public domain) ships in the
   package and loads once per worker. The national demand table is compiled
   into the module.
@@ -323,16 +346,16 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
   and 1.5 s in wasm (Node, Apple M5 Pro), end to end with both validations;
   the United States takes 1.4–1.5 s and 2.0 s, about 0.9 s of it an AC power
   flow that does not converge over five starts. A 500-bus country takes
-  under 0.1 s. `evidence/synth` records the measurements.
+  under 0.1 s. `docs/evidence/synth` records the measurements.
 - Whether the AC power flow converges inside the band depends on the seed
-  for several countries. `evidence/synth` sweeps three seeds on two
+  for several countries. `docs/evidence/synth` sweeps three seeds on two
   outlines (Natural Earth 1:50m and the MapToGrid app's 1:110m layer):
   91% and 92% of the runs pass AC, every run passes DC, and the United
   States fails at every seed.
 - Clustering in generated grids runs higher than in the ACTIVSg200 and
   GOC500 references, because the Gabriel mesh is rich in triangles. Their
   highest nodal degree is also lower, since the mesh caps it at 8.
-  `evidence/synth` measures both against the references.
+  `docs/evidence/synth` measures both against the references.
 - Continental regions span several thousand kilometres as one AC island.
   Their planning-case angle spread stays well above 44° within the branch
   budget, so the plan reports `planning_incomplete`. Real systems of that

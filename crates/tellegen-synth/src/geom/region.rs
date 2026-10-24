@@ -159,7 +159,8 @@ fn parse_rings(raw: &serde_json::Value) -> Result<Vec<Ring>, String> {
             let pts = ring
                 .as_array()
                 .ok_or_else(|| "a ring must be an array of positions".to_owned())?;
-            pts.iter()
+            let ring: Ring = pts
+                .iter()
                 .map(|p| {
                     let p = p
                         .as_array()
@@ -175,9 +176,32 @@ fn parse_rings(raw: &serde_json::Value) -> Result<Vec<Ring>, String> {
                     }
                     Ok((lon, lat))
                 })
-                .collect()
+                .collect::<Result<_, String>>()?;
+            check_antimeridian(&ring)?;
+            Ok(ring)
         })
         .collect()
+}
+
+/// Refuse a ring edge that jumps more than 180 degrees of longitude. Such a
+/// ring was written across the antimeridian the short way, and read as
+/// GeoJSON it spans the planet the long way round. Edges along a pole are
+/// exempt, since a ring around a pole (Antarctica) runs from 180 to -180
+/// there.
+fn check_antimeridian(ring: &Ring) -> Result<(), String> {
+    let closing = ring.last().zip(ring.first());
+    for (a, b) in ring.windows(2).map(|w| (&w[0], &w[1])).chain(closing) {
+        let polar = a.1.abs() >= 89.99 && b.1.abs() >= 89.99;
+        if (a.0 - b.0).abs() > 180.0 && !polar {
+            return Err(format!(
+                "ring crosses the antimeridian between lon {} and {}: split it at \
+                 +/-180 as RFC 7946 asks, or give the region as a bounding box with \
+                 east > 180",
+                a.0, b.0
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Reject geometry no stage could use.

@@ -1,8 +1,10 @@
 //! Deterministic randomness. One ChaCha8 stream per stage, each seeded from
 //! the request seed and a stage tag, so adding a draw to one stage never
-//! perturbs another and the same request reproduces the same grid on every
-//! platform (ChaCha has no platform dependent state; `rand`'s float and range
-//! conversions are specified bit for bit).
+//! perturbs another. The streams themselves are portable (ChaCha has no
+//! platform dependent state; `rand`'s float and range conversions are
+//! specified bit for bit), but the `ln`, `sin`, `cos` and `exp` applied to the
+//! draws round differently on different platforms, so native and WebAssembly
+//! values can differ in the last bits.
 
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;

@@ -18,7 +18,7 @@ use crate::electrical::params::{
 use crate::error::SynthError;
 use crate::geom::delaunay::UnionFind;
 use crate::geom::{haversine_km, lift_lon};
-use crate::osm::parse::{OsmLine, OsmPlant, ParsedDocument};
+use crate::osm::parse::{OsmLine, OsmPlant, ParsedDocument, MAX_OSM_CIRCUITS};
 use crate::report::{BusKind, ElementSource, RegionContext, Warning};
 use crate::request::{Fuel, OsmIslands, OsmOptions, SynthRequest};
 use crate::rng::Stream;
@@ -518,7 +518,10 @@ impl OsmBuild {
             }
             let key = (from.min(to), from.max(to), (kv * 1000.0).round() as i64);
             if let Some(&k) = aggregate.get(&key) {
-                corridors[k].circuits += line.circuits;
+                corridors[k].circuits = corridors[k]
+                    .circuits
+                    .saturating_add(line.circuits)
+                    .min(MAX_OSM_CIRCUITS);
                 ids[k].extend(line.ids.iter().copied());
                 continue;
             }
@@ -570,7 +573,10 @@ impl OsmBuild {
                     osm_ids: Vec::new(),
                 });
             link.rating_mw += HVDC_MW_PER_CIRCUIT * line.circuits as f64;
-            link.circuits += line.circuits;
+            link.circuits = link
+                .circuits
+                .saturating_add(line.circuits)
+                .min(MAX_OSM_CIRCUITS);
             link.osm_ids.extend(line.ids.iter().copied());
         }
         self.hvdc = dc.into_values().collect();
