@@ -10,8 +10,8 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--web-build', type=Path, default=Path('apps/web/build'))
-    parser.add_argument('--input', type=Path, default=Path('evidence/studies/native-webmcp/input.pio.json'))
-    parser.add_argument('--solution', type=Path, default=Path('evidence/studies/native-webmcp/initial-solution.json'))
+    parser.add_argument('--input', type=Path, default=Path('docs/evidence/studies/native-webmcp/input.pio.json'))
+    parser.add_argument('--solution', type=Path, default=Path('docs/evidence/studies/native-webmcp/initial-solution.json'))
     parser.add_argument('--port', type=int, default=4186)
     args = parser.parse_args()
     module = json.loads(args.input.read_text())

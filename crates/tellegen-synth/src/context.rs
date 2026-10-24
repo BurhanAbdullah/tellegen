@@ -412,6 +412,10 @@ struct DemandSizing {
 /// place. Modelling choice: a share to a few percent is all the demand split
 /// needs, and the cost stays a few milliseconds for a continent.
 const AREA_SAMPLES: f64 = 1024.0;
+/// Most grid points the area sampler visits in one polygon's bounding box.
+/// Real outlines need a few thousand; a sliver or self-cancelling ring would
+/// otherwise ask for billions.
+const MAX_AREA_GRID_CELLS: f64 = 1.0e6;
 
 /// The region's area by country of its nearest place (table codes), km².
 /// Every polygon of the selection counts, islands the network leaves out
@@ -444,11 +448,21 @@ fn area_by_country(
         table.canonical(&cities[j].place.iso_a3)
     };
     for poly in &shape.polygons {
+        // A zero-area polygon adds no area to any country.
+        if poly.area_km2 <= 0.0 {
+            continue;
+        }
         let target = (AREA_SAMPLES * poly.area_km2 / total).max(1.0);
-        let dlat = (poly.area_km2 / target).sqrt().max(1e-3) / 111.0;
+        let mut dlat = (poly.area_km2 / target).sqrt().max(1e-3) / 111.0;
         let bb = *poly.bbox();
         let mid = 0.5 * (bb.south + bb.north);
-        let dlon = dlat / mid.to_radians().cos().abs().max(0.05);
+        let mut dlon = dlat / mid.to_radians().cos().abs().max(0.05);
+        let cells = ((bb.north - bb.south) / dlat) * ((bb.east - bb.west) / dlon);
+        if cells > MAX_AREA_GRID_CELLS {
+            let scale = (cells / MAX_AREA_GRID_CELLS).sqrt();
+            dlat *= scale;
+            dlon *= scale;
+        }
         let mut points = Vec::new();
         let mut lat = bb.south + 0.5 * dlat;
         while lat < bb.north {

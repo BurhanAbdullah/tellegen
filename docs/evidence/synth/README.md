@@ -8,9 +8,9 @@ writes every verdict as the engine returned it.
 ```sh
 cargo build --release -p tellegen-cli
 # Measure the reference cases staged in the repository.
-python3 evidence/synth/run.py references --tellegen target/release/tellegen
+python3 docs/evidence/synth/run.py references --tellegen target/release/tellegen
 # Generate every spec and seed, then compare.
-python3 evidence/synth/run.py run evidence/synth/specs/*.json \
+python3 docs/evidence/synth/run.py run docs/evidence/synth/specs/*.json \
   --tellegen target/release/tellegen --output /path/to/new-evidence-directory
 ```
 
@@ -37,7 +37,7 @@ carries no coordinates, so the length based statistics are zero for these
 cases and are not compared. Larger cases (ACTIVSg2000, Texas7k, CATS) can be
 measured once staged with `scripts/stage-data.sh`: pass each with `--case`.
 Third-party datasets are not vendored here, the same policy as
-`evidence/studies`.
+`docs/evidence/studies`.
 
 The published ranges are the generator's default calibration targets
 (Birchfield et al., IEEE TPWRS 32(4), 2017, Table II): mean degree 2.2–3.0
@@ -93,26 +93,28 @@ measured against each country's official peak:
   `04be4d555283ceb888758d01e2a359e17db86918794357e72b16bb50fc4686bd`), with
   the request the app sends for an untouched Generation panel
   (`src/lib/engine/request.ts`: synthetic, density and fidelity high,
-  population demand, no voltage levels). France is not in that layer
-  (Natural Earth codes it `-99`), so the app cannot select it and this
-  sweep has 17 regions.
+  population demand, no voltage levels). That hash is the layer as of
+  MapToGrid commit a92a461, which has no France (Natural Earth codes it
+  `-99`), so this sweep has 17 regions. Later app versions add France,
+  Norway and three areas without a code (177 features); the geometry of the
+  17 swept countries is unchanged.
 
 ```sh
 # Natural Earth v5.1.2, 1:50m admin-0 countries (public domain); regions.py
 # checks the file's SHA-256 (SOURCE_SHA256) before writing the specs.
 curl -LO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson
-python3 -I evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs50
-python3 -I evidence/synth/regions.py /path/to/maptogrid/static/data/countries-110m.geojson \
+python3 -I docs/evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs50
+python3 -I docs/evidence/synth/regions.py /path/to/maptogrid/static/data/countries-110m.geojson \
   --outline app-110m --out /path/to/specs110
 TELLEGEN_ALLOW_FALLBACK=1 cargo build --release -p tellegen-cli --features conic
-python3 evidence/synth/run.py sweep /path/to/specs50/*.json --seeds 1,7,2026 \
+python3 docs/evidence/synth/run.py sweep /path/to/specs50/*.json --seeds 1,7,2026 \
   --tellegen target/release/tellegen --output /path/to/new-sweep-directory
-python3 evidence/synth/run.py sweep /path/to/specs110/*.json --seeds 1,7,2026 --missing fra \
+python3 docs/evidence/synth/run.py sweep /path/to/specs110/*.json --seeds 1,7,2026 --missing fra \
   --outline "the MapToGrid app's 1:110m layer" \
   --tellegen target/release/tellegen --output /path/to/another-new-directory
 # The same sessions through the wasm build, timed in Node (SEED defaults to 2026):
 npm run wasm
-node evidence/synth/wasm_time.mjs packages/engine/src/wasm-pkg \
+node docs/evidence/synth/wasm_time.mjs packages/engine/src/wasm-pkg \
   crates/tellegen-synth/data/populated_places.json /path/to/specs110/usa.json
 ```
 
@@ -173,8 +175,9 @@ pockets tried.
 The generator now gives every loaded bus farther than 480 km of corridor
 from a generator (the St. Clair curve's 1.0 SIL knot) a synchronous
 condenser, farthest first, with a reactive range of 0.5 MVAr per MW of the
-load nearest it. It places about 70 in Russia, 32–37 in Australia and
-Brazil, 3–6 in the United States and none in western Europe. Russia,
+load nearest it. Across both outlines and the three seeds it places 66–74
+in Russia, 29–35 in Australia, 33–40 in Brazil, 3–8 in the United States and
+none in western Europe. Russia,
 Brazil, Chile and Egypt now pass at every seed on both outlines.
 
 **What still fails** (AC in band, out of 3):

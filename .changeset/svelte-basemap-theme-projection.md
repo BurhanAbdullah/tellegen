@@ -42,6 +42,7 @@ The map now runs in a host's Vite dev server with no `optimizeDeps` settings.
 MapLibre's worker URL comes from a new internal `./maplibre-worker` export,
 whose `development` condition keeps the worker's `?worker&url` import out of
 the dev server's pre-bundle, which stopped the dev server at startup.
+`maplibre-gl` is now `^6.15.0`.
 
 The controller gains `openBalancedModule({ name, moduleJson | payload,
 geoLayer?, formulation?, activate?, frame? })` and

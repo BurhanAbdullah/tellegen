@@ -109,7 +109,7 @@ test("invocation requires every capacity and solve bound", () => {
   );
 });
 
-test("invocation rejects request fields the Rust contract does not state", () => {
+test("invocation rejects request fields the Rust request type does not state", () => {
   assert.throws(
     () =>
       validateSpec({
@@ -252,7 +252,7 @@ test("proposal reconstructs exactly from accepted trials", () => {
   );
 });
 
-test("the JSON Schemas parse and name the checked in contracts", async () => {
+test("the JSON Schemas parse and name the checked in formats", async () => {
   const specSchema = JSON.parse(
     await readFile(new URL("./spec.schema.json", import.meta.url), "utf8"),
   );
@@ -313,6 +313,7 @@ const powerioNames = [
   "powerio-dist",
   "powerio-matrix",
   "powerio-prob",
+  "powerio-tnd",
   "powerio-tx",
 ];
 
@@ -363,7 +364,7 @@ test("native browser evidence matches its checked in media", async () => {
   const videoRun = JSON.parse(
     await readFile(new URL("./native/video-run.json", import.meta.url), "utf8"),
   );
-  const repoRoot = new URL("../../", import.meta.url);
+  const repoRoot = new URL("../../../", import.meta.url);
 
   assert.equal(native.schema, "tellegen.native-webmcp-evidence/1");
   assert.equal(native.software.powerio_version, "1.0.0");

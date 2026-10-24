@@ -6,8 +6,8 @@ when all three surfaces moved together, are in the
 
 ## [0.3.0](https://github.com/eigenergy/tellegen/compare/v0.2.0...v0.3.0) - 2026-09-23
 
-The release that accompanies the DXConf '26 paper *Interactive Optimal Power
-Flow Compiled to the Browser*.
+The release that accompanies the ACM DXConf 2026 paper *Interactive Power Flow
+in the Browser* ([doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038)).
 
 ### Added
 

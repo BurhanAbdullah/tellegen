@@ -12,25 +12,25 @@ this compact record.
 Run from the repository root at a clean commit:
 
 ```sh
-node evidence/webmcp/run.mjs evidence/webmcp/specs/cats.json evidence/webmcp/results/cats.json
-node evidence/webmcp/run.mjs evidence/webmcp/specs/texas7k.json evidence/webmcp/results/texas7k.json
+node docs/evidence/webmcp/run.mjs docs/evidence/webmcp/specs/cats.json docs/evidence/webmcp/results/cats.json
+node docs/evidence/webmcp/run.mjs docs/evidence/webmcp/specs/texas7k.json docs/evidence/webmcp/results/texas7k.json
 ```
 
 The runner refuses tracked or untracked changes other than earlier generated
 JSON files in `results/`. It records the Tellegen commit and tree, the PowerIO
 commit, the lockfile digest, the invocation spec digest, and the source digest.
-PowerIO v0.11.5 is published: every component crate must resolve to that one
+For a published PowerIO release, every component crate must resolve to that one
 registry version with a Cargo.lock checksum, and `powerio-releases.json` maps
-the release tag to its commit (`v0.11.5` is `341d72767f8ff3d535a9bb0aca5cb9d32e886694`). A candidate run
+the release tag to its commit. A candidate run
 against an unpublished PowerIO revision instead pins one Git revision for all
-six crates in `Cargo.toml` and `Cargo.lock`. The runner
+seven crates in `Cargo.toml` and `Cargo.lock`. The runner
 creates outputs with exclusive writes, so a second run cannot replace evidence
 silently.
 
 The checked-in CATS, Texas7k, and native-browser result files use the historical
-generation-1 contract and identify their old PowerIO revision in `software`.
+generation-1 result format and identify their old PowerIO revision in `software`.
 They remain audit records, not evidence for the v0.11 pin. A clean rerun writes
-the generation-2 result contract and must replace them before they are cited as
+the generation-2 result format and must replace them before they are cited as
 current.
 
 `--allow-dirty` exists for local harness debugging and always marks the

@@ -1,5 +1,5 @@
 //! Generate the synthetic generation schema from the Rust records, for the
-//! `@tellegen/engine/synth` TypeScript contracts.
+//! `@tellegen/engine/synth` TypeScript types.
 
 use schemars::JsonSchema;
 use sha2::{Digest, Sha256};
@@ -7,7 +7,7 @@ use std::fmt::Write;
 
 #[derive(JsonSchema)]
 #[allow(dead_code)]
-struct SynthContract {
+struct SynthSchema {
     request: tellegen_synth::SynthRequest,
     report: tellegen_synth::GenerationReport,
     step: tellegen_synth::StepOutcome,
@@ -26,7 +26,7 @@ fn main() {
         hash.update(source.as_bytes());
     }
     let mut schema =
-        serde_json::to_value(schemars::schema_for!(SynthContract)).expect("synth schema");
+        serde_json::to_value(schemars::schema_for!(SynthSchema)).expect("synth schema");
     let digest = hash.finalize();
     let mut hex = String::with_capacity(64);
     for byte in digest {

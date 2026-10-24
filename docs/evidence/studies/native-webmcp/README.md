@@ -17,7 +17,7 @@ Build the application with `npm run wasm`, `npm run build:engine`,
 `npm run build:webmcp` and `npm run build:web`, then run:
 
 ```sh
-python evidence/studies/serve_native_demo.py
+python docs/evidence/studies/serve_native_demo.py
 ```
 
 Open `http://127.0.0.1:4186` in a WebMCP-enabled browser. Use the inputs in
@@ -28,7 +28,7 @@ recorded IDs are evidence, not commands to replay blindly.
 The initial native response can be reproduced with:
 
 ```sh
-tellegen '{}' < evidence/studies/native-webmcp/input.pio.json
+tellegen '{}' < docs/evidence/studies/native-webmcp/input.pio.json
 ```
 
 ## Observations

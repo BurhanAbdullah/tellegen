@@ -4,16 +4,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-const output = join(root, "packages/engine/src/generated/study-contracts.ts");
+const output = join(root, "packages/engine/src/generated/study-types.ts");
 const schema = JSON.parse(readFileSync(join(root, "packages/engine/src/generated/study.schema.json"), "utf8"));
-const sources = ["document.rs", "preparation.rs", "objective.rs", "exploration.rs", "study_ops.rs", "api.rs", "sens/contract.rs", "solve.rs"];
+const sources = ["document.rs", "preparation.rs", "objective.rs", "exploration.rs", "study_ops.rs", "api.rs", "sens/interface.rs", "solve.rs"];
 const hash = createHash("sha256");
 for (const source of sources) hash.update(readFileSync(join(root, "crates/tellegen/src", source)));
 if (hash.digest("hex") !== schema["x-rust-source-sha256"]) {
-  throw new Error("Study schema is stale. Run cargo run -p tellegen --example study_contract --features schema,conic > packages/engine/src/generated/study.schema.json");
+  throw new Error("Study schema is stale. Run cargo run -p tellegen --example study_schema --features schema,conic > packages/engine/src/generated/study.schema.json");
 }
 if (!schema.$defs.CreateStudy.properties.formulation.enum.includes("socwr")) {
-  throw new Error("Browser Study contracts require the conic build. Regenerate study_contract with --features schema,conic.");
+  throw new Error("Browser Study types require the conic build. Regenerate study_schema with --features schema,conic.");
 }
 
 function type(node) {
@@ -50,13 +50,13 @@ function type(node) {
 }
 
 const definitions = Object.entries(schema.$defs).map(([name, definition]) => `export type ${name} = ${type(definition)};`);
-const generated = `// Generated from Rust by study_contract and generate-study-contracts.mjs.\n// Source SHA256: ${schema["x-rust-source-sha256"]}\n\n${definitions.join("\n\n")}\n`;
+const generated = `// Generated from Rust by study_schema and generate-study-types.mjs.\n// Source SHA256: ${schema["x-rust-source-sha256"]}\n\n${definitions.join("\n\n")}\n`;
 if (process.argv.includes("--check")) {
-  if (readFileSync(output, "utf8") !== generated) throw new Error("Study TypeScript contracts are stale; run npm run contracts");
+  if (readFileSync(output, "utf8") !== generated) throw new Error("Study TypeScript types are stale; run npm run types");
 } else writeFileSync(output, generated);
 
 const schemaOutput = new URL('../src/generated/study-schema.ts', import.meta.url);
-const schemaSource = `// Generated from the Rust Study contract.\nexport const studySchema: Record<string, unknown> = ${JSON.stringify(schema)};\n`;
+const schemaSource = `// Generated from the Rust Study types.\nexport const studySchema: Record<string, unknown> = ${JSON.stringify(schema)};\n`;
 if (process.argv.includes('--check')) {
-  if (readFileSync(schemaOutput, 'utf8') !== schemaSource) throw new Error('Study runtime schema is stale; run npm run contracts');
+  if (readFileSync(schemaOutput, 'utf8') !== schemaSource) throw new Error('Study runtime schema is stale; run npm run types');
 } else writeFileSync(schemaOutput, schemaSource);

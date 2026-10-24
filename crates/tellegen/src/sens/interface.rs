@@ -1,4 +1,4 @@
-//! The unified, object-safe sensitivity contract: one physical vocabulary, one
+//! The unified, object-safe sensitivity interface: one physical vocabulary, one
 //! trait, one driver, shared by the DC OPF KKT, the AC power flow Newton system, and
 //! the conic SOCWR KKT.
 //!
