@@ -4,7 +4,6 @@
 //! Solver status mapping and portable solution emission belong to the next
 //! layer, while all electrical semantics and stable source/index maps live here.
 
-use std::borrow::Cow;
 use std::sync::Arc;
 
 use pounce_nl::nl_reader::{BinOp, Expr, NlProblem, NlProblemParts, NlTnlp, UnaryOp};
@@ -239,41 +238,6 @@ fn validate_supported(instance: &AcOpfInstance) -> Result<(), String> {
     reject_unsupported_active_elements(network)
 }
 
-/// PowerIO 0.11.3's indexed view sums loads/shunts regardless of service status.
-/// Mask only their injections in a private copy: removing rows or normalizing
-/// the whole instance would change source identities, units, and initial-point
-/// axes. `with_network` retains the objective, selections and initial point.
-fn preparation_instance(instance: &AcOpfInstance) -> Result<Cow<'_, AcOpfInstance>, String> {
-    let source = instance.network();
-    if source.loads().iter().all(|load| load.in_service)
-        && source.shunts().iter().all(|shunt| shunt.in_service)
-    {
-        return Ok(Cow::Borrowed(instance));
-    }
-    let mut network = source.clone();
-    for load in network
-        .loads_mut()
-        .iter_mut()
-        .filter(|load| !load.in_service)
-    {
-        load.p = 0.0;
-        load.q = 0.0;
-    }
-    for shunt in network
-        .shunts_mut()
-        .iter_mut()
-        .filter(|shunt| !shunt.in_service)
-    {
-        shunt.g = 0.0;
-        shunt.b = 0.0;
-    }
-    instance
-        .clone()
-        .with_network(network)
-        .map(Cow::Owned)
-        .map_err(|error| error.to_string())
-}
-
 fn validate_bounds(name: &str, lower: f64, upper: f64) -> Result<(), String> {
     if !lower.is_finite() || !upper.is_finite() || lower > upper {
         return Err(format!(
@@ -346,15 +310,8 @@ pub(super) fn compile_ac_opf_model(
 ) -> Result<CanonicalAcOpfModel, String> {
     validate_supported(instance)?;
     let policy = AcOpfAssemblyPolicy::CANONICAL;
-    let prepared_instance = preparation_instance(instance)?;
-    let prep = build_ac_opf_preparation(&prepared_instance, &policy.options())
+    let prep = build_ac_opf_preparation(instance, &policy.options())
         .map_err(|error| format!("{}: {error}", error.code().code))?;
-    if let Some(identity) = prep.storage.identities.first() {
-        return Err(format!(
-            "storage \"{identity}\" reached AC OPF preparation; storage behavior is unsupported"
-        ));
-    }
-
     let n = prep.n_buses;
     let k = prep.n_generators();
     let m = prep.n_branches();
@@ -389,7 +346,11 @@ pub(super) fn compile_ac_opf_model(
     let mut x_u = vec![INF; next_column];
     let mut x0 = vec![0.0; next_column];
     let mut var_names = vec![String::new(); next_column];
-    let vm_start = prep.calc_vm_setpoints();
+    let vm_start = if instance.initial_point().is_some() {
+        prep.buses.initial_vm.clone()
+    } else {
+        prep.calc_vm_setpoints()
+    };
     for bus in 0..n {
         var_names[columns.va[bus]] = format!("va[{}]", prep.bus_ids[bus].0);
         x0[columns.va[bus]] = finite_or(prep.buses.initial_va[bus], 0.0);
@@ -512,6 +473,44 @@ pub(super) fn compile_ac_opf_model(
             )
         })
         .collect::<Vec<_>>();
+    for branch in 0..m {
+        let identity = &prep.branches.identities[branch];
+        // Preparation repairs reversed angles and treats nonpositive ratings as
+        // unlimited. Reject malformed selected source limits before accepting
+        // those canonicalized values.
+        if let powerio_matrix::AnalysisBranchSource::Branch { row } =
+            prep.branches.analysis_sources[branch]
+        {
+            let source = &instance.network().branches()[row];
+            if prep.branches.angle_bound_active[branch] {
+                validate_bounds(
+                    &format!("angle_difference[{identity}]"),
+                    source.angmin,
+                    source.angmax,
+                )?;
+            }
+            if instance.constraints().thermal_limits.selects(identity) {
+                validate_bounds(&format!("thermal_limit[{identity}]"), 0.0, source.rate_a)?;
+            }
+        }
+        if prep.branches.angle_bound_active[branch] {
+            validate_bounds(
+                &format!("angle_difference[{identity}]"),
+                prep.branches.angle_min[branch],
+                prep.branches.angle_max[branch],
+            )?;
+        }
+        if prep.branches.thermal_limit_active[branch] {
+            validate_bounds(
+                &format!("thermal_limit[{identity}]"),
+                0.0,
+                prep.branches.s_max[branch],
+            )?;
+            if !prep.branches.s_max[branch].powi(2).is_finite() {
+                return Err(format!("thermal_limit[{identity}] overflows when squared"));
+            }
+        }
+    }
     let angle_difference = (0..m)
         .map(|branch| {
             prep.branches.angle_bound_active[branch].then(|| {
@@ -683,30 +682,18 @@ mpc.gencost = [
         let n = prep.n_buses;
         let f = prep.branches.from_bus[branch];
         let t = prep.branches.to_bus[branch];
-        let vf = x[n + f];
-        let vt = x[n + t];
-        let delta = x[f] - x[t];
-        let wr = vf * vt * delta.cos();
-        let wi = vf * vt * delta.sin();
-        let g = prep.branches.g[branch];
-        let b = prep.branches.b[branch];
-        let tap = prep.branches.tap[branch];
-        let tr = tap * prep.branches.shift[branch].cos();
-        let ti = tap * prep.branches.shift[branch].sin();
-        let tm2 = tap * tap;
-        let pf = (g + prep.branches.g_fr[branch]) / tm2 * vf * vf
-            + (-g * tr + b * ti) / tm2 * wr
-            + (-b * tr - g * ti) / tm2 * wi;
-        let qf = -(b + prep.branches.b_fr[branch]) / tm2 * vf * vf
-            + (b * tr + g * ti) / tm2 * wr
-            + (-g * tr + b * ti) / tm2 * wi;
-        let pt = (g + prep.branches.g_to[branch]) * vt * vt
-            + (-g * tr - b * ti) / tm2 * wr
-            + (b * tr - g * ti) / tm2 * wi;
-        let qt = -(b + prep.branches.b_to[branch]) * vt * vt
-            + (b * tr - g * ti) / tm2 * wr
-            + (g * tr + b * ti) / tm2 * wi;
-        [pf, qf, pt, qt]
+        use num_complex::Complex64;
+        let vf = Complex64::from_polar(x[n + f], x[f]);
+        let vt = Complex64::from_polar(x[n + t], x[t]);
+        let y = Complex64::new(prep.branches.g[branch], prep.branches.b[branch]);
+        let yf = Complex64::new(prep.branches.g_fr[branch], prep.branches.b_fr[branch]);
+        let yt = Complex64::new(prep.branches.g_to[branch], prep.branches.b_to[branch]);
+        let tap = Complex64::from_polar(prep.branches.tap[branch], prep.branches.shift[branch]);
+        let i_from = (y + yf) / tap.norm_sqr() * vf - y / tap.conj() * vt;
+        let i_to = (y + yt) * vt - y / tap * vf;
+        let sf = vf * i_from.conj();
+        let st = vt * i_to.conj();
+        [sf.re, sf.im, st.re, st.im]
     }
 
     fn evaluate_constraints(model: &CanonicalAcOpfModel, x: &[f64]) -> Vec<f64> {
@@ -993,6 +980,15 @@ mpc.gencost = [
     }
 
     #[test]
+    fn full_pi_directional_derivatives_match_finite_differences() {
+        let model = full_pi_model();
+        let mut tnlp = model.tnlp().unwrap();
+        let (jacobian, hessian) = directional_derivative_errors(&model, &mut tnlp);
+        assert!(jacobian < 2e-5, "Jacobian error {jacobian}");
+        assert!(hessian < 2e-4, "Hessian error {hessian}");
+    }
+
+    #[test]
     fn exact_sparse_derivatives_match_finite_differences() {
         let model = full_pi_model();
         let mut tnlp = model.tnlp().expect("build TNLP");
@@ -1036,8 +1032,10 @@ mpc.gencost = [
             let mut minus = x.clone();
             plus[column] += step;
             minus[column] -= step;
-            let plus_values = evaluate_constraints(&model, &plus);
-            let minus_values = evaluate_constraints(&model, &minus);
+            let mut plus_values = vec![0.0; m];
+            let mut minus_values = vec![0.0; m];
+            assert!(tnlp.eval_g(&plus, true, &mut plus_values));
+            assert!(tnlp.eval_g(&minus, true, &mut minus_values));
             let finite = (plus_values[row] - minus_values[row]) / (2.0 * step);
             assert!(
                 (analytic_value - finite).abs() < 2.0e-5,
@@ -1282,6 +1280,7 @@ mpc.gencost = [
         network.shunts_mut().push(shunt);
         let point = powerio_prob::BalancedOperatingPointBuilder::for_point(network.clone())
             .generator_active_powers(vec![37.0, 40.0])
+            .bus_voltage_magnitudes(vec![1.02, 0.98, 1.01])
             .build_point()
             .unwrap();
         let mut constraints = ActiveConstraints::default();
@@ -1323,6 +1322,9 @@ mpc.gencost = [
         );
         assert!(model.rows.angle_difference.iter().all(Option::is_none));
         assert!((model.problem.x0[model.columns.pg[0]] - 0.37).abs() < 1e-12);
+        for (bus, expected) in [1.02, 0.98, 1.01].into_iter().enumerate() {
+            assert!((model.problem.x0[model.columns.vm[bus]] - expected).abs() < 1e-12);
+        }
         assert_eq!(prep.objective, PreparedObjective::Feasibility);
         assert_eq!(prep.bus_source_rows, vec![Some(0), Some(1), Some(2)]);
         assert_eq!(prep.generators.source_rows, vec![Some(0), Some(1)]);
@@ -1362,6 +1364,30 @@ mpc.gencost = [
                 );
             }
         }
+    }
+
+    #[test]
+    fn invalid_branch_bounds_are_rejected_and_zero_rating_is_unlimited() {
+        for rating in [-1.0, f64::NAN, f64::INFINITY] {
+            let mut network = parse_matpower(CASE3).unwrap();
+            network.branches_mut()[0].rate_a = rating;
+            let instance = AcOpfInstance::from_network(network).unwrap();
+            let error = compile_ac_opf_model(&instance).unwrap_err();
+            assert!(error.contains("thermal_limit"), "{error}");
+        }
+        for (lower, upper) in [(20.0, -20.0), (f64::NAN, 30.0)] {
+            let mut network = parse_matpower(CASE3).unwrap();
+            network.branches_mut()[0].angmin = lower;
+            network.branches_mut()[0].angmax = upper;
+            let instance = AcOpfInstance::from_network(network).unwrap();
+            let error = compile_ac_opf_model(&instance).unwrap_err();
+            assert!(error.contains("angle_difference"), "{error}");
+        }
+        let mut network = parse_matpower(CASE3).unwrap();
+        network.branches_mut()[0].rate_a = 0.0;
+        let model = compile_ac_opf_model(&AcOpfInstance::from_network(network).unwrap()).unwrap();
+        assert!(model.rows.thermal_from[0].is_none());
+        assert!(model.rows.thermal_to[0].is_none());
     }
 
     #[test]
