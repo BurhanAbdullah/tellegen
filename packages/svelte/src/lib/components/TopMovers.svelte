@@ -46,7 +46,7 @@
 
 	caption {
 		text-align: left;
-		font-size: 10.5px;
+		font-size: 12.5px;
 		margin-bottom: 4px;
 	}
 

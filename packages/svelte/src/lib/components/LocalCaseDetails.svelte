@@ -11,6 +11,7 @@
 	const EXPORT_FORMATS = [
 		{ token: 'matpower', label: 'MATPOWER (.m)' },
 		{ token: 'psse', label: 'PSS/E (.raw)' },
+		{ token: 'psse35', label: 'PSS/E v35 (.raw)' },
 		{ token: 'powerworld', label: 'PowerWorld (.aux)' },
 		{ token: 'pslf', label: 'PSLF (.epc)' },
 		{ token: 'powermodels-json', label: 'PowerModels (.json)' },
@@ -117,6 +118,8 @@
 			<p class="footnote mono">
 				no coordinates in this file: click the map or drop a geographic file
 			</p>
+		{:else if lc.coordsKind === 'synthetic' && lc.summary.coords_method === 'generated'}
+			<p class="footnote mono">coordinates: synthetic grid sited on real geography</p>
 		{:else if lc.coordsKind === 'synthetic' || lc.coordsKind === 'manual'}
 			<p class="footnote mono">
 				coordinates: {lc.coordsKind} topology layout centered where it was placed
@@ -222,7 +225,7 @@
 
 	.footnote {
 		margin: 8px 0 0;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-tertiary);
 		letter-spacing: 0;
 	}
@@ -231,7 +234,7 @@
 		margin: 8px 0 0;
 		padding: 0;
 		list-style: none;
-		font-size: 10.5px;
+		font-size: 12.5px;
 		line-height: 1.5;
 		color: var(--text-accent);
 	}
@@ -254,7 +257,7 @@
 		padding: 4px;
 		list-style: none;
 		min-width: 100%;
-		background: var(--surface, #fff);
+		background: var(--surface, var(--surface-menu));
 		border: 1px solid var(--border, rgba(0, 0, 0, 0.15));
 		border-radius: 6px;
 		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);

@@ -350,7 +350,7 @@
 							cy={bus.lat}
 							r={Math.max(5, busRadius(Math.max(bus.demand_mw, bus.gen_mw))) / scale}
 							fill={color(bus)}
-							stroke={selectedBus === bus.id ? '#2f6fbb' : '#756a5b'}
+							style:stroke={selectedBus === bus.id ? '#2f6fbb' : 'var(--diagram-bus-stroke)'}
 							stroke-width={selectedBus === bus.id ? 3 : 1}
 							vector-effect="non-scaling-stroke"
 						/>
