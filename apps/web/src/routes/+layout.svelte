@@ -14,6 +14,9 @@
 </script>
 
 <Analytics />
-<TellegenProvider acOpfWasmUrl={PUBLIC_TELLEGEN_ACOPF_WASM_URL} cartoApiKey={PUBLIC_CARTO_BASEMAP_KEY}>
+<TellegenProvider
+	acOpfWasmUrl={PUBLIC_TELLEGEN_ACOPF_WASM_URL}
+	cartoApiKey={PUBLIC_CARTO_BASEMAP_KEY}
+>
 	{@render children()}
 </TellegenProvider>

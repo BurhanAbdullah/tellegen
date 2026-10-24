@@ -5,7 +5,6 @@ export const variables = defineEnvVars({
 		public: true,
 		static: true,
 		schema: (value) => value || undefined
-
 	},
 	PUBLIC_CARTO_BASEMAP_KEY: {
 		public: true,
