@@ -112,6 +112,8 @@ export interface MapPalette {
 	greyLine: RGBA;
 	substation: RGBA;
 	substationLine: RGBA;
+	/** Fill of a neutral (non-phase) terminal in the multiconductor detail. */
+	neutral: RGBA;
 }
 
 export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
@@ -124,7 +126,8 @@ export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
 		grey: [110, 115, 120, 200],
 		greyLine: [138, 131, 117, 150],
 		substation: [70, 92, 124, 190],
-		substationLine: [38, 52, 78, 220]
+		substationLine: [38, 52, 78, 220],
+		neutral: [120, 114, 102, 255]
 	},
 	dark: {
 		outline: [232, 238, 244, 120],
@@ -135,7 +138,8 @@ export const MAP_PALETTE: Record<'light' | 'dark', MapPalette> = {
 		grey: [150, 160, 170, 200],
 		greyLine: [150, 160, 170, 150],
 		substation: [120, 150, 200, 190],
-		substationLine: [180, 205, 235, 220]
+		substationLine: [180, 205, 235, 220],
+		neutral: [150, 160, 170, 255]
 	}
 };
 

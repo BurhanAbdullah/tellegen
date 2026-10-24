@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getController } from '../context.svelte.js';
 	import { fmt, signed } from '../format.js';
+	import { sliderKeyValue } from '../slider.js';
 
 	const ctrl = getController();
 
@@ -64,7 +65,15 @@
 				bind:value={ctrl.ratingSliderCurrent, ctrl.setRatingPreview}
 				aria-label="rating delta at selected line"
 				onpointerdown={() => ctrl.setRatingPreview(ctrl.ratingSliderValue)}
-				onkeydown={() => ctrl.setRatingPreview(ctrl.ratingSliderValue)}
+				onkeydown={(e) => {
+					const next = sliderKeyValue(e.key, ctrl.ratingSliderValue, bounds.min, bounds.max);
+					if (next === null) {
+						ctrl.setRatingPreview(ctrl.ratingSliderValue);
+						return;
+					}
+					e.preventDefault();
+					ctrl.setRatingPreview(next);
+				}}
 				onpointerup={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}
 				onkeyup={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}
 				onchange={(e) => ctrl.finishRatingInput(Number(e.currentTarget.value))}
@@ -105,7 +114,7 @@
 	.slider-head {
 		display: flex;
 		justify-content: space-between;
-		font-size: 11.5px;
+		font-size: 13.5px;
 		color: var(--text-secondary);
 		margin-bottom: 4px;
 	}
@@ -120,7 +129,7 @@
 		justify-content: space-between;
 		gap: 8px;
 		margin: 6px 0 7px;
-		font-size: 10.5px;
+		font-size: 12.5px;
 	}
 
 	.slider-track {
@@ -236,13 +245,13 @@
 
 	.pred {
 		margin: 2px 0 0;
-		font-size: 11px;
+		font-size: 13px;
 		min-height: 16px;
 	}
 
 	.score {
 		margin: 8px 0 0;
-		font-size: 11px;
+		font-size: 13px;
 		color: var(--ink);
 		min-height: 16px;
 	}

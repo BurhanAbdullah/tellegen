@@ -129,6 +129,16 @@ viewport state in step, as the default shell does. `PanelHost` reads
 from an ancestor for its dock insets (defaults 20px, 20px and 100px), so a
 shell with its own rail or status bar moves the docks without restyling them.
 
+When a panel closes, focus moves to its toolbar button. Without the toolbar,
+focus goes back to the control that had focus when the panel opened. If there
+is none, it goes to the panel's dock, a region named "Left panels" or "Right
+panels". On narrow screens that region is the drawer, named "Panels".
+
+A shell that shows `app.error` itself can also read `app.errorDetail`. When
+it is set, `app.error` is a message written for people, and the detail holds
+the technical text behind it. `NotificationCenter` shows that text in a
+collapsed disclosure.
+
 ## Basemap
 
 CARTO's vector styles suit a network overlay best: quiet roads, flat land and
