@@ -247,7 +247,12 @@ fn validate_bounds(name: &str, lower: f64, upper: f64) -> Result<(), String> {
     Ok(())
 }
 
-fn branch_flow(prep: &AcOpfPreparation, columns: &AcOpfColumns, branch: usize) -> BranchFlow {
+fn branch_flow(
+    prep: &AcOpfPreparation,
+    columns: &AcOpfColumns,
+    vm_squared: &[Expr],
+    branch: usize,
+) -> BranchFlow {
     let f = prep.branches.from_bus[branch];
     let t = prep.branches.to_bus[branch];
     let g = prep.branches.g[branch];
@@ -260,10 +265,10 @@ fn branch_flow(prep: &AcOpfPreparation, columns: &AcOpfColumns, branch: usize) -
 
     let vf = variable(columns.vm[f]);
     let vt = variable(columns.vm[t]);
-    let vf_squared = cse(square(vf.clone()));
-    let vt_squared = cse(square(vt.clone()));
-    let angle = subtract(variable(columns.va[f]), variable(columns.va[t]));
-    let voltage_product = multiply(vf, vt);
+    let vf_squared = vm_squared[f].clone();
+    let vt_squared = vm_squared[t].clone();
+    let angle = cse(subtract(variable(columns.va[f]), variable(columns.va[t])));
+    let voltage_product = cse(multiply(vf, vt));
     let wr = cse(multiply(
         voltage_product.clone(),
         unary(UnaryOp::Cos, angle.clone()),
@@ -407,11 +412,16 @@ pub(super) fn compile_ac_opf_model(
         }
     }
 
+    let vm_squared: Vec<_> = columns
+        .vm
+        .iter()
+        .map(|&column| cse(square(variable(column))))
+        .collect();
     let mut p_terms = (0..n)
         .map(|bus| {
             vec![
                 constant(-prep.buses.p_d[bus]),
-                scaled(-prep.buses.g_s[bus], square(variable(columns.vm[bus]))),
+                scaled(-prep.buses.g_s[bus], vm_squared[bus].clone()),
             ]
         })
         .collect::<Vec<_>>();
@@ -419,7 +429,7 @@ pub(super) fn compile_ac_opf_model(
         .map(|bus| {
             vec![
                 constant(-prep.buses.q_d[bus]),
-                scaled(prep.buses.b_s[bus], square(variable(columns.vm[bus]))),
+                scaled(prep.buses.b_s[bus], vm_squared[bus].clone()),
             ]
         })
         .collect::<Vec<_>>();
@@ -429,7 +439,7 @@ pub(super) fn compile_ac_opf_model(
         q_terms[bus].push(variable(columns.qg[generator]));
     }
     let flows = (0..m)
-        .map(|branch| branch_flow(&prep, &columns, branch))
+        .map(|branch| branch_flow(&prep, &columns, &vm_squared, branch))
         .collect::<Vec<_>>();
     for (branch, flow) in flows.iter().enumerate() {
         let f = prep.branches.from_bus[branch];
