@@ -1,5 +1,63 @@
 {
   "$defs": {
+    "AcOpfResiduals": {
+      "description": "Independent AC OPF checks, with units stated per family. Objective agreement\nis separate from primal feasibility. Bounds are evaluated only when selected.",
+      "properties": {
+        "active_balance_mw": {
+          "format": "double",
+          "type": "number"
+        },
+        "active_generation_bounds_mw": {
+          "format": "double",
+          "type": "number"
+        },
+        "angle_limits_rad": {
+          "format": "double",
+          "type": "number"
+        },
+        "objective_relative_error": {
+          "format": "double",
+          "type": "number"
+        },
+        "piecewise_epigraph_cost": {
+          "format": "double",
+          "type": "number"
+        },
+        "reactive_balance_mvar": {
+          "format": "double",
+          "type": "number"
+        },
+        "reactive_generation_bounds_mvar": {
+          "format": "double",
+          "type": "number"
+        },
+        "reference_angles_rad": {
+          "format": "double",
+          "type": "number"
+        },
+        "thermal_limits_mva": {
+          "format": "double",
+          "type": "number"
+        },
+        "voltage_bounds_pu": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "active_balance_mw",
+        "reactive_balance_mvar",
+        "voltage_bounds_pu",
+        "active_generation_bounds_mw",
+        "reactive_generation_bounds_mvar",
+        "reference_angles_rad",
+        "angle_limits_rad",
+        "thermal_limits_mva",
+        "piecewise_epigraph_cost",
+        "objective_relative_error"
+      ],
+      "type": "object"
+    },
     "ArtifactKind": {
       "enum": [
         "powerio_ir",
@@ -1104,8 +1162,17 @@
           "type": "object"
         },
         {
-          "description": "Nonlinear-program diagnostics. The primal residual is Tellegen's\nindependent source-model check; the other residuals are POUNCE reports.",
+          "description": "Nonlinear-program diagnostics. The primal residual is Tellegen's\nindependent maximum P/Q balance mismatch in MW/MVAr; other residuals\nare separated by family below or reported by POUNCE.",
           "properties": {
+            "base_restoration_calls": {
+              "description": "Restoration entries in the original solve, even when a retry wins.",
+              "format": "uint",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "base_solver_status": {
               "description": "Status before recovery; absent in older responses.",
               "type": [
@@ -1136,6 +1203,16 @@
                 "type": "string"
               },
               "type": "array"
+            },
+            "residuals": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AcOpfResiduals"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "restoration_calls": {
               "description": "Restoration entries in the selected solve (not the whole ladder).",
@@ -1730,7 +1807,7 @@
         },
         {
           "const": "feasible",
-          "description": "A power flow converged to a feasible point.",
+          "description": "A power flow or local AC OPF solve reached a validated feasible point.",
           "type": "string"
         }
       ]
@@ -2549,5 +2626,5 @@
   ],
   "title": "StudyContract",
   "type": "object",
-  "x-rust-source-sha256": "0e875733932aa0f32c93a52ed3317d0da98997d22cff0cfef6d865ff9af5377f"
+  "x-rust-source-sha256": "2445ee86c5fe959b091a3460e78d1c7260627f8f062bd38391530091b8458891"
 }

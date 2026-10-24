@@ -203,7 +203,12 @@ for (const name of (
 		const iterations = response.iterations;
 		if (!iterations || Array.isArray(iterations) || !('nlp_iterations' in iterations))
 			throw new Error('missing nonlinear solve diagnostics');
-		expect(iterations.primal_residual).toBeLessThan(1e-6);
+		// Physical mismatch is now MW/MVAr; the oracle cases use a 100 MVA base.
+		expect(iterations.primal_residual).toBeLessThan(1e-4);
+		expect(iterations.residuals?.active_balance_mw).toBeLessThan(1e-4);
+		expect(iterations.residuals?.reactive_balance_mvar).toBeLessThan(1e-4);
+		expect(iterations.residuals?.objective_relative_error).toBeLessThan(1e-6);
+		expect(iterations.base_restoration_calls).toBeGreaterThanOrEqual(0);
 		expect(iterations.base_solver_status).toBeTruthy();
 		expect(iterations.total_nlp_iterations).toBeGreaterThanOrEqual(iterations.nlp_iterations);
 		expect(iterations.restoration_calls).toBeGreaterThanOrEqual(0);

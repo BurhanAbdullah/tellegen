@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit("POUNCE release verification requires Python 3.11+; set PYTHON to a supported interpreter for build-acopf-wasi.sh")
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]

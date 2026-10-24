@@ -31,7 +31,7 @@
 		padding: 8px 20px;
 		font-size: 10.5px;
 		color: var(--text-secondary);
-		background: linear-gradient(rgba(236, 233, 226, 0), rgba(236, 233, 226, 0.9));
+		background: linear-gradient(rgb(var(--bg-rgb) / 0), rgb(var(--bg-rgb) / 0.9));
 		animation: rise 0.5s 0.24s ease-out both;
 		pointer-events: none;
 	}
@@ -53,10 +53,12 @@
 		color: var(--text-accent);
 	}
 
+	/* Inside the Network panel on narrow screens, panel text size applies. */
 	footer.inline {
 		position: static;
 		margin-top: 14px;
 		padding: 0;
+		font-size: 12px;
 		background: none;
 		animation: none;
 		pointer-events: auto;
@@ -71,7 +73,6 @@
 
 		footer.inline {
 			margin-top: 4px;
-			font-size: 11px;
 		}
 	}
 

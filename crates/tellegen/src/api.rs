@@ -300,7 +300,7 @@ pub fn validate_canonical_identity(net: &BalancedNetwork) -> Result<(), String> 
 pub enum SolveStatus {
     /// An OPF reached optimality.
     Optimal,
-    /// A power flow converged to a feasible point.
+    /// A power flow or local AC OPF solve reached a validated feasible point.
     Feasible,
 }
 
@@ -317,10 +317,13 @@ pub enum Iterations {
     /// Newton iteration count and final infinity-norm mismatch (acpf).
     Newton { count: usize, residual: f64 },
     /// Nonlinear-program diagnostics. The primal residual is Tellegen's
-    /// independent source-model check; the other residuals are POUNCE reports.
+    /// independent maximum P/Q balance mismatch in MW/MVAr; other residuals
+    /// are separated by family below or reported by POUNCE.
     Nlp {
         nlp_iterations: usize,
         primal_residual: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        residuals: Option<Box<AcOpfResiduals>>,
         solver_status: String,
         solver_constraint_violation: f64,
         solver_kkt_error: f64,
@@ -334,11 +337,31 @@ pub enum Iterations {
         /// Restoration entries in the selected solve (not the whole ladder).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         restoration_calls: Option<usize>,
+        /// Restoration entries in the original solve, even when a retry wins.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base_restoration_calls: Option<usize>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         recovery_attempts: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         recovered_by: Option<String>,
     },
+}
+
+/// Independent AC OPF checks, with units stated per family. Objective agreement
+/// is separate from primal feasibility. Bounds are evaluated only when selected.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct AcOpfResiduals {
+    pub active_balance_mw: f64,
+    pub reactive_balance_mvar: f64,
+    pub voltage_bounds_pu: f64,
+    pub active_generation_bounds_mw: f64,
+    pub reactive_generation_bounds_mvar: f64,
+    pub reference_angles_rad: f64,
+    pub angle_limits_rad: f64,
+    pub thermal_limits_mva: f64,
+    pub piecewise_epigraph_cost: f64,
+    pub objective_relative_error: f64,
 }
 
 /// A scalar keyed by original bus id (LMP, voltage, angle, squared magnitude).
@@ -678,62 +701,61 @@ pub fn solve_ac_opf_instance_cancellable(
 }
 
 #[cfg(feature = "acopf")]
+fn bound_violation(values: &[f64], lower: &[f64], upper: &[f64], active: &[bool]) -> f64 {
+    values
+        .iter()
+        .zip(lower)
+        .zip(upper)
+        .zip(active)
+        .filter(|(_, active)| **active)
+        .map(|(((&value, &lower), &upper), _)| (lower - value).max(value - upper).max(0.0))
+        .fold(0.0, f64::max)
+}
+
+#[cfg(feature = "acopf")]
 fn ac_opf_assemble(
     network: &BalancedNetwork,
     solved: &super::model::AcOpfSolved,
 ) -> Result<SolveResponse, String> {
-    use powerio_matrix::AnalysisBranchSource;
-
+    use super::model::{stable_source_ids, uids_for_source_rows};
     let prep = &solved.preparation;
     let base = prep.base_mva;
     let bus_ids = prep.bus_ids.iter().map(|bus| bus.0).collect::<Vec<_>>();
-    let bus_uids = prep
-        .bus_source_rows
-        .iter()
-        .map(|row| row.and_then(|row| network.buses().get(row)?.uid.clone()))
-        .collect::<Vec<_>>();
-    let injections = bus_ids
-        .iter()
-        .enumerate()
-        .map(|(bus, &id)| BusInjection {
-            bus: id,
-            uid: uid_at(&bus_uids, bus),
-            p: solved.p_injection[bus] * base,
-            q: solved.q_injection[bus] * base,
-        })
-        .collect();
-    let flows = prep
+    let bus_uids = uids_for_source_rows(&prep.bus_source_rows, network.buses(), |b| &b.uid, "bus")?;
+    let injections = zip_injections(
+        &bus_ids,
+        &bus_uids,
+        &solved.p_injection,
+        &solved.q_injection,
+        base,
+    );
+    let branch_source_rows = prep
         .branches
         .analysis_sources
         .iter()
-        .enumerate()
-        .filter_map(|(dense, source)| {
-            let AnalysisBranchSource::Branch { row } = *source else {
-                return None;
-            };
-            let rating = prep.branches.s_max[dense];
-            let loading = if rating > 0.0 {
-                solved.p_from[dense]
-                    .hypot(solved.q_from[dense])
-                    .max(solved.p_to[dense].hypot(solved.q_to[dense]))
-                    / rating
-            } else {
-                0.0
-            };
-            Some(BranchFlow {
-                branch: row + 1,
-                uid: network
-                    .branches()
-                    .get(row)
-                    .and_then(|branch| branch.uid.clone()),
-                pf: solved.p_from[dense] * base,
-                loading,
-                qf: Some(solved.q_from[dense] * base),
-                pt: Some(solved.p_to[dense] * base),
-                qt: Some(solved.q_to[dense] * base),
-            })
+        .map(|source| match source {
+            powerio_matrix::AnalysisBranchSource::Branch { row } => Ok(Some(*row)),
+            powerio_matrix::AnalysisBranchSource::ThreeWindingTransformerWinding { .. } => Ok(None),
+            _ => Err("unknown AC OPF branch source kind".to_owned()),
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
+    let branch_ids = stable_source_ids(&branch_source_rows, network.branches().len(), "branch")?;
+    let branch_uids = uids_for_source_rows(
+        &branch_source_rows,
+        network.branches(),
+        |b| &b.uid,
+        "branch",
+    )?;
+    let flows = ac_branch_flows(
+        &branch_ids,
+        &branch_uids,
+        &solved.p_from,
+        &solved.q_from,
+        &solved.p_to,
+        &solved.q_to,
+        &prep.branches.s_max,
+        base,
+    );
     let dispatch = prep
         .generators
         .source_rows
@@ -756,7 +778,38 @@ fn ac_opf_assemble(
         objective: Some(solved.objective),
         iterations: Some(Iterations::Nlp {
             nlp_iterations: usize::try_from(solved.iterations).unwrap_or(0),
-            primal_residual: solved.residuals.max_violation(),
+            primal_residual: solved
+                .residuals
+                .active_balance
+                .max(solved.residuals.reactive_balance)
+                * base,
+            residuals: Some(Box::new(AcOpfResiduals {
+                active_balance_mw: solved.residuals.active_balance * base,
+                reactive_balance_mvar: solved.residuals.reactive_balance * base,
+                voltage_bounds_pu: bound_violation(
+                    &solved.vm,
+                    &prep.buses.vm_min,
+                    &prep.buses.vm_max,
+                    &prep.buses.voltage_bound_active,
+                ),
+                active_generation_bounds_mw: bound_violation(
+                    &solved.pg,
+                    &prep.generators.pmin,
+                    &prep.generators.pmax,
+                    &prep.generators.capability_active,
+                ) * base,
+                reactive_generation_bounds_mvar: bound_violation(
+                    &solved.qg,
+                    &prep.generators.qmin,
+                    &prep.generators.qmax,
+                    &prep.generators.capability_active,
+                ) * base,
+                reference_angles_rad: solved.residuals.reference_angles,
+                angle_limits_rad: solved.residuals.angle_limits,
+                thermal_limits_mva: solved.residuals.thermal_limits * base,
+                piecewise_epigraph_cost: solved.residuals.piecewise_epigraph,
+                objective_relative_error: solved.residuals.objective,
+            })),
             solver_status: solved.solver_status.upstream_name().to_owned(),
             solver_constraint_violation: solved.solver_constraint_violation,
             solver_kkt_error: solved.solver_kkt_error,
@@ -764,6 +817,7 @@ fn ac_opf_assemble(
             base_solver_status: Some(solved.recovery.base_status.clone()),
             total_nlp_iterations: Some(solved.recovery.total_iterations),
             restoration_calls: Some(solved.recovery.restoration_calls),
+            base_restoration_calls: Some(solved.recovery.base_restoration_calls),
             recovery_attempts: solved.recovery.attempts.clone(),
             recovered_by: solved.recovery.promoted_by.clone(),
         }),
@@ -1574,7 +1628,7 @@ fn zip_gen_pq(
         .collect()
 }
 
-#[cfg(feature = "sensitivity")]
+#[cfg(any(feature = "sensitivity", feature = "acopf"))]
 fn zip_injections(
     bus_ids: &[usize],
     bus_uids: &[Option<String>],
@@ -1627,7 +1681,7 @@ fn dc_branch_flows(
 
 /// AC/conic branch flows: all four legs (MW/MVAr) and loading as the larger end's
 /// apparent power over the rating (both per unit, dimensionless).
-#[cfg(feature = "sensitivity")]
+#[cfg(any(feature = "sensitivity", feature = "acopf"))]
 #[allow(clippy::too_many_arguments)]
 fn ac_branch_flows(
     branch_ids: &[usize],
@@ -2197,6 +2251,29 @@ mod tests {
 
     #[cfg(feature = "acopf")]
     #[test]
+    fn acopf_residuals_keep_units_and_objective_error_separate() {
+        let network = crate::model::parse_matpower(CASE3).unwrap();
+        let instance = AcOpfInstance::from_network(network.clone()).unwrap();
+        let mut solved = crate::model::solve_ac_opf_cancellable(&instance, None).unwrap();
+        solved.residuals.active_balance = 1e-7;
+        solved.residuals.reactive_balance = 2e-7;
+        solved.residuals.objective = 0.25;
+        let value = serde_json::to_value(ac_opf_assemble(&network, &solved).unwrap()).unwrap();
+        let diagnostics = &value["iterations"];
+        assert!((diagnostics["primal_residual"].as_f64().unwrap() - 2e-5).abs() < 1e-12);
+        assert!(
+            (diagnostics["residuals"]["active_balance_mw"]
+                .as_f64()
+                .unwrap()
+                - 1e-5)
+                .abs()
+                < 1e-12
+        );
+        assert_eq!(diagnostics["residuals"]["objective_relative_error"], 0.25);
+    }
+
+    #[cfg(feature = "acopf")]
+    #[test]
     fn acopf_is_available_without_prices_or_sensitivities() {
         let out = solve_test_network_json(&case3_json(), r#"{"formulation":"acopf"}"#)
             .expect("solve AC OPF");
@@ -2206,6 +2283,8 @@ mod tests {
         assert_eq!(value["vm"].as_array().map(Vec::len), Some(3));
         assert_eq!(value["va"].as_array().map(Vec::len), Some(3));
         assert_eq!(value["dispatch"].as_array().map(Vec::len), Some(2));
+        assert_eq!(value["injections"].as_array().map(Vec::len), Some(3));
+        assert_eq!(value["flows"].as_array().map(Vec::len), Some(3));
         assert_eq!(value["iterations"]["solver_status"], "Solve_Succeeded");
         assert!(value["iterations"]["primal_residual"]
             .as_f64()

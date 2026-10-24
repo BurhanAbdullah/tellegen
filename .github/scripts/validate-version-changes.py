@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
@@ -10,13 +11,32 @@ import subprocess
 import sys
 
 
+PRE_STATE = ".changeset/pre.json"
+CHANGESET = re.compile(r"\.changeset/([A-Za-z0-9_-]+)\.md")
+PRE_CHANGESET = re.compile(r"\.changeset/pre/([A-Za-z0-9_-]+)\.md")
+DELETED = {" D", "D "}
+# A changeset moved in pre mode is untracked when the version patch job sees
+# it, intent-to-add while that job seals the patch, and staged once the
+# version pull request job has applied it.
+ADDED = {"??", " A", "A "}
+
+
 def fail(message: str) -> "NoReturn":
     raise SystemExit(message)
 
 
 def status_entries() -> list[tuple[str, str]]:
+    # Without --no-renames, a staged move into .changeset/pre/ is one rename
+    # entry carrying two paths.
     output = subprocess.check_output(
-        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"]
+        [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+        ]
     )
     entries: list[tuple[str, str]] = []
     for raw in output.split(b"\0"):
@@ -44,6 +64,33 @@ def require_regular_nonexecutable(path: str) -> None:
         fail(f"generated file became executable: {path}")
 
 
+def committed(path: str) -> bytes | None:
+    if not subprocess.check_output(["git", "ls-tree", "-z", "HEAD", "--", path]):
+        return None
+    return subprocess.check_output(["git", "show", f"HEAD:{path}"])
+
+
+def committed_pre_mode() -> str | None:
+    """`pre` or `exit` while Changesets prerelease mode is committed.
+
+    Read from HEAD: the generator could rewrite the working tree copy.
+    """
+    raw = committed(PRE_STATE)
+    if raw is None:
+        return None
+    try:
+        state = json.loads(raw)
+    except ValueError as error:
+        fail(f"cannot parse committed {PRE_STATE}: {error}")
+    if not isinstance(state, dict) or state.get("mode") not in {"pre", "exit"}:
+        fail(f"committed {PRE_STATE} is neither in pre nor in exit mode")
+    # The tag names the prerelease and the npm dist-tag it publishes under.
+    tag = state.get("tag")
+    if not isinstance(tag, str) or not tag or tag == "latest":
+        fail(f"committed {PRE_STATE} needs a prerelease tag other than latest")
+    return state["mode"]
+
+
 def validate_npm(entries: list[tuple[str, str]]) -> None:
     # `changeset version` rewrites the dependency range of every workspace
     # consumer, including the three in the `ignore` list whose own versions it
@@ -67,8 +114,15 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
         "packages/svelte/package.json",
         "packages/webmcp/package.json",
     }
+    # In pre mode, Changesets 3 leaves pre.json alone and moves each consumed
+    # changeset into .changeset/pre/ unchanged, so that exiting can still
+    # release it. Exiting removes pre.json and everything in .changeset/pre/.
+    pre_mode = committed_pre_mode()
     changed_manifests: set[str] = set()
-    deleted_changesets = 0
+    deleted_changesets: set[str] = set()
+    moved_changesets: set[str] = set()
+    deleted_pre_changesets = 0
+    deleted_pre_state = False
 
     for status, path in entries:
         if path in allowed_modified:
@@ -78,16 +132,35 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
             if path in package_manifests:
                 changed_manifests.add(path)
             continue
-        if re.fullmatch(r"\.changeset/[A-Za-z0-9_-]+\.md", path):
-            if path == ".changeset/README.md" or status not in {" D", "D "}:
+        match = CHANGESET.fullmatch(path)
+        if match:
+            if path == ".changeset/README.md" or status not in DELETED:
                 fail(f"unexpected changeset change {path}: {status!r}")
-            deleted_changesets += 1
+            deleted_changesets.add(match[1])
+            continue
+        match = PRE_CHANGESET.fullmatch(path)
+        if match and pre_mode == "pre" and status in ADDED:
+            require_regular_nonexecutable(path)
+            with open(path, "rb") as moved:
+                if moved.read() != committed(f".changeset/{match[1]}.md"):
+                    fail(f"pre mode changed or invented a changeset: {path}")
+            moved_changesets.add(match[1])
+            continue
+        if match and pre_mode == "exit" and status in DELETED:
+            deleted_pre_changesets += 1
+            continue
+        if path == PRE_STATE and pre_mode == "exit" and status in DELETED:
+            deleted_pre_state = True
             continue
         fail(f"npm versioning changed an unapproved path: {path} ({status!r})")
 
     if not changed_manifests:
         fail("npm versioning did not change a package manifest")
-    if deleted_changesets == 0:
+    if pre_mode == "pre" and moved_changesets != deleted_changesets:
+        fail("pre mode did not move every consumed changeset into .changeset/pre/")
+    if pre_mode == "exit" and not deleted_pre_state:
+        fail(f"exiting pre mode did not remove {PRE_STATE}")
+    if not deleted_changesets and deleted_pre_changesets == 0:
         fail("npm versioning did not consume a changeset")
 
 

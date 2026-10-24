@@ -59,7 +59,7 @@
 	}
 
 	.head {
-		font-size: 10.5px;
+		font-size: 12.5px;
 		margin: 0 0 4px;
 	}
 
