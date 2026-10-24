@@ -53,7 +53,7 @@
 
 	.formulation-row select {
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: 13px;
 		padding: 3px 22px 3px 8px;
 		border: 1px solid var(--line);
 		border-radius: 2px;

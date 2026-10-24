@@ -43,6 +43,24 @@ export function solveMetaLabel(c: SolveMeta): string {
 	return c.solveBackend === 'rust-server' ? 'server solve' : 'browser solve';
 }
 
+export const INFEASIBLE_DISPATCH =
+	'No feasible dispatch: demand cannot be served within line and generator limits';
+
+/** The message for a local case whose browser solve failed, and the
+ * technical detail to disclose behind it. An infeasible DC OPF means the
+ * network cannot carry the demand, which deserves plain words. The engine
+ * spells it `DC OPF solve infeasible`, and an unbounded one as `unbounded`. */
+export function browserSolveFailure(
+	label: string,
+	reason: string | null
+): { message: string; detail: string | null } {
+	const technical = `${label}: browser solve unavailable${reason ? `: ${reason}` : ''}`;
+	if (reason && /\binfeasible\b/i.test(reason)) {
+		return { message: INFEASIBLE_DISPATCH, detail: technical };
+	}
+	return { message: technical, detail: null };
+}
+
 export function rgbaCss([r, g, b, a]: RGBA): string {
 	return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
 }

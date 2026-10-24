@@ -65,6 +65,54 @@ test('narrow screens show one drawer and keep panel controls reachable', async (
 	await expect(page.getByRole('button', { name: 'Network', exact: true })).toBeFocused();
 });
 
+test('a panel opened from outside the toolbar hands focus back to that control', async ({
+	page
+}) => {
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	// A host shell that hides the toolbar and opens panels from its own rail.
+	await page.locator('.panel-toolbar').evaluate((toolbar: HTMLElement) => {
+		toolbar.style.display = 'none';
+		const rail = document.createElement('button');
+		rail.textContent = 'Rail agent';
+		rail.addEventListener('click', () =>
+			toolbar.querySelector<HTMLButtonElement>('button[aria-label="Agent"]')!.click()
+		);
+		document.body.append(rail);
+	});
+	const rail = page.getByRole('button', { name: 'Rail agent' });
+	await rail.press('Enter');
+	await expect(page.locator('[data-panel="agent"]')).toBeVisible();
+	await page.getByRole('button', { name: 'Close agent panel' }).click();
+	await expect(rail).toBeFocused();
+});
+
+test('a panel closed with no toolbar and no opener hands focus to its dock', async ({ page }) => {
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	// What `PanelHost showToolbar={false}` renders: no toolbar at all. The
+	// Network panel opened with the page, so no control opened it.
+	await page.locator('.panel-toolbar').evaluate((toolbar) => toolbar.remove());
+	await page.getByRole('button', { name: 'Close network panel' }).click();
+	await expect(page.getByRole('region', { name: 'Left panels' })).toBeFocused();
+});
+
+test('panel content takes keyboard focus only while it overflows', async ({ page }) => {
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+	await page.goto('/');
+	const content = page.locator('[data-panel="network"] .panel-content');
+	await expect(content).not.toHaveAttribute('tabindex');
+	const body = page.locator('#control-panel-body');
+	await body.evaluate((element: HTMLElement) => (element.style.minHeight = '3000px'));
+	await expect(content).toHaveAttribute('tabindex', '0');
+	await expect(page.getByRole('region', { name: 'Network panel content' })).toBeVisible();
+	await content.focus();
+	await page.keyboard.press('PageDown');
+	await expect.poll(() => content.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+	await body.evaluate((element: HTMLElement) => (element.style.minHeight = ''));
+	await expect(content).not.toHaveAttribute('tabindex');
+});
+
 test('short desktop windows use one drawer without covering map controls', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 450 });
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));

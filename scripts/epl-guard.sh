@@ -5,12 +5,12 @@ check_no_pounce() {
 	local label="$1"
 	shift
 	local tree
-	if ! tree="$(cargo tree "$@" 2>&1)"; then
+	if ! tree="$(cargo tree --prefix none --format '{p}' "$@" 2>&1)"; then
 		printf '%s\n' "$tree" >&2
 		echo "cargo tree failed for $label" >&2
 		return 1
 	fi
-	if grep -qi pounce <<<"$tree"; then
+	if grep -Eq '^pounce(-[a-z0-9_-]+)? v' <<<"$tree"; then
 		echo "EPL pounce backend leaked into: $label" >&2
 		return 1
 	fi
@@ -20,12 +20,12 @@ check_has_pounce() {
 	local label="$1"
 	shift
 	local tree
-	if ! tree="$(cargo tree "$@" 2>&1)"; then
+	if ! tree="$(cargo tree --prefix none --format '{p}' "$@" 2>&1)"; then
 		printf '%s\n' "$tree" >&2
 		echo "cargo tree failed for $label" >&2
 		return 1
 	fi
-	if ! grep -qi pounce <<<"$tree"; then
+	if ! grep -Eq '^pounce(-[a-z0-9_-]+)? v' <<<"$tree"; then
 		echo "acopf feature did not include the pinned pounce backend: $label" >&2
 		return 1
 	fi

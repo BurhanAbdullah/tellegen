@@ -278,9 +278,11 @@ pub(crate) fn emit_ac_opf_solution(
         transformer_terminal_power,
     )
     .map(|solution| {
-        solution
-            .with_residuals(residuals)
-            .with_producer(producer.into())
+        solution.with_residuals(residuals).with_producer(format!(
+            "{}; POUNCE {}",
+            producer.into(),
+            solved.solver_status.upstream_name()
+        ))
     })
     .map_err(|error| error.to_string())
 }
@@ -430,6 +432,21 @@ mod tests {
     use crate::model::parse_matpower;
     use crate::problem::dc_opf_cancellable;
     use powerio::{PioModule, PioValue};
+
+    #[cfg(feature = "acopf")]
+    #[test]
+    fn acopf_portable_producer_preserves_acceptable_solver_status() {
+        let instance = Arc::new(
+            AcOpfInstance::from_network(parse_matpower(crate::model::CASE3).unwrap()).unwrap(),
+        );
+        let mut solved = crate::model::solve_ac_opf_cancellable(&instance, None).unwrap();
+        solved.solver_status = pounce_rs::ApplicationReturnStatus::SolvedToAcceptableLevel;
+        let emitted = emit_ac_opf_solution(instance, &solved, "caller").unwrap();
+        assert_eq!(
+            emitted.producer(),
+            Some("caller; POUNCE Solved_To_Acceptable_Level")
+        );
+    }
 
     #[cfg(feature = "acopf")]
     #[test]
@@ -709,6 +726,14 @@ mod tests {
             .transformers_3w_mut()
             .extend([idle_transformer, transformer]);
         let instance = Arc::new(AcOpfInstance::from_network(network).unwrap());
+        let compact = crate::solve_ac_opf_instance(
+            &instance,
+            &crate::SolveRequest {
+                formulation: crate::Problem::Acopf,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         let solved = solve_ac_opf_instance_to_solution(instance, "test").unwrap();
         assert_eq!(solved.bus_voltage_magnitudes().len(), 3);
         assert_eq!(solved.branch_from_active_flows().len(), 4);
@@ -731,6 +756,17 @@ mod tests {
             .all(|v| v.is_finite()));
         assert!(terminals[1].p_mw.iter().any(|v| v.abs() > 1.0));
         assert!(terminals[1].p_mw.iter().sum::<f64>() >= -1e-5);
+        let flows = compact.flows.unwrap();
+        assert_eq!(flows.len(), 6);
+        for winding in 0..3 {
+            let flow = flows
+                .iter()
+                .find(|flow| flow.branch == 5 + winding)
+                .unwrap();
+            assert!((flow.pf - terminals[1].p_mw[winding]).abs() < 1e-5);
+            assert!((flow.qf.unwrap() - terminals[1].q_mvar[winding]).abs() < 1e-5);
+            assert!(flow.pt.unwrap().is_finite() && flow.qt.unwrap().is_finite());
+        }
         let module = powerio::PioModule::new(powerio::PioValue::AcOpfSolution(solved));
         let json = crate::ir::serialize_module(&module).unwrap();
         crate::ir::deserialize_module(&json).unwrap();
