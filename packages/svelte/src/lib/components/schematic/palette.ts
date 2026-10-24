@@ -10,8 +10,9 @@ export const SYMBOL_INK: RGBA = [52, 56, 62, 255];
 /** Not connected to any source through closed branches: drawn faint in every colour mode. */
 export const DEAD: RGBA = [196, 191, 182, 110];
 export const HIDDEN: RGBA = [0, 0, 0, 0];
-/** Network tags for networks within limits. */
-export const ZONE_INK: RGBA = [70, 110, 150, 255];
+/** LV networks within limits: corridors, outlines and tags in the warm grey of LV lines, so blue
+ * stays the colour of MV and above. */
+export const ZONE_INK: RGBA = [112, 104, 90, 255];
 
 export const MONO = 'IBM Plex Mono, ui-monospace, monospace';
 
@@ -46,12 +47,12 @@ export const PATH: RGBA = [16, 138, 96, 245];
 /** Fill and outline per zone state. */
 export const ZONE_COLOURS: Record<ZoneState, [RGBA, RGBA]> = {
 	missing: [
-		[70, 110, 150, 16],
-		[70, 110, 150, 90]
+		[112, 104, 90, 16],
+		[112, 104, 90, 90]
 	],
 	normal: [
-		[70, 110, 150, 16],
-		[70, 110, 150, 90]
+		[112, 104, 90, 16],
+		[112, 104, 90, 90]
 	],
 	warning: [
 		[178, 94, 0, 30],
