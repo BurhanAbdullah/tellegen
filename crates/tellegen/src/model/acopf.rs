@@ -847,38 +847,21 @@ pub(super) fn compile_ac_opf_model(
 fn numeric_branch_flow(prep: &AcOpfPreparation, va: &[f64], vm: &[f64], branch: usize) -> [f64; 4] {
     let f = prep.branches.from_bus[branch];
     let t = prep.branches.to_bus[branch];
-    let delta = va[f] - va[t];
-    let wr = vm[f] * vm[t] * delta.cos();
-    let wi = vm[f] * vm[t] * delta.sin();
-    let g = prep.branches.g[branch];
-    let b = prep.branches.b[branch];
-    let tap = prep.branches.tap[branch];
-    let tr = tap * prep.branches.shift[branch].cos();
-    let ti = tap * prep.branches.shift[branch].sin();
-    let tm2 = tap * tap;
-    let p_from = (g + prep.branches.g_fr[branch]) / tm2 * vm[f].powi(2)
-        + (-g * tr + b * ti) / tm2 * wr
-        + (-b * tr - g * ti) / tm2 * wi;
-    let q_from = -(b + prep.branches.b_fr[branch]) / tm2 * vm[f].powi(2)
-        + (b * tr + g * ti) / tm2 * wr
-        + (-g * tr + b * ti) / tm2 * wi;
-    let p_to = (g + prep.branches.g_to[branch]) * vm[t].powi(2)
-        + (-g * tr - b * ti) / tm2 * wr
-        + (b * tr - g * ti) / tm2 * wi;
-    let q_to = -(b + prep.branches.b_to[branch]) * vm[t].powi(2)
-        + (b * tr - g * ti) / tm2 * wr
-        + (g * tr + b * ti) / tm2 * wi;
-    [p_from, q_from, p_to, q_to]
+    // Complex current equations are independent of the polar DAG coefficients.
+    use num_complex::Complex64;
+    let vf = Complex64::from_polar(vm[f], va[f]);
+    let vt = Complex64::from_polar(vm[t], va[t]);
+    let y = Complex64::new(prep.branches.g[branch], prep.branches.b[branch]);
+    let yf = Complex64::new(prep.branches.g_fr[branch], prep.branches.b_fr[branch]);
+    let yt = Complex64::new(prep.branches.g_to[branch], prep.branches.b_to[branch]);
+    let tap = Complex64::from_polar(prep.branches.tap[branch], prep.branches.shift[branch]);
+    let sf = vf * ((y + yf) / tap.norm_sqr() * vf - y / tap.conj() * vt).conj();
+    let st = vt * ((y + yt) * vt - y / tap * vf).conj();
+    [sf.re, sf.im, st.re, st.im]
 }
 
 fn piecewise_value(cost: &powerio_matrix::PiecewiseLinearCost, power: f64) -> f64 {
-    (0..cost.power.len() - 1)
-        .map(|segment| {
-            let slope = (cost.value[segment + 1] - cost.value[segment])
-                / (cost.power[segment + 1] - cost.power[segment]);
-            slope * power + cost.value[segment] - slope * cost.power[segment]
-        })
-        .fold(f64::NEG_INFINITY, f64::max)
+    PiecewiseCost::from_prepared(cost.clone()).evaluate(power)
 }
 
 fn positive_violation(value: f64, lower: f64, upper: f64) -> f64 {

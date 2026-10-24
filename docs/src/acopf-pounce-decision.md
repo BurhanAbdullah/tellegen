@@ -260,3 +260,20 @@ Selected voltage, generator, thermal and angle bounds are checked before model
 construction. Zero thermal ratings remain unlimited. Small full-pi directional
 derivative checks run in ordinary CI, with a complex-current branch-flow oracle
 independent of the polar coefficient transcription.
+
+### Review diagnostics and benchmark timing
+
+Compact AC OPF `primal_residual` is the maximum independent P/Q balance mismatch
+in MW/MVAr. The optional `residuals` object separates voltage and generation
+bounds, reference/branch angles, thermal limits, epigraph gaps and objective
+agreement, with explicit units. Acceptance still checks every residual family;
+objective agreement is not presented as a power mismatch. Compact flow output
+includes three-winding transformer legs using the same synthetic IDs as SOCWR.
+Portable solutions retain the caller's producer and append POUNCE's exact final
+status, including `Solved_To_Acceptable_Level`.
+
+The benchmark emits compact objective/status/iteration records, input and
+artifact hashes, `parse_ms`, `solve_ms`, and `total_elapsed_ms`. Solve timing
+includes model construction and independent validation but excludes parsing,
+file hashing and JSON serialization. Earlier `elapsed_ms` records measured the
+full input/JSON/solve path and must not be compared directly with `solve_ms`.
