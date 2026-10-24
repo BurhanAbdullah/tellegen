@@ -17,6 +17,7 @@
 	} = $props();
 	const layout = getPanelLayout();
 	let menu = $state(false);
+	let menuAnchor: HTMLDivElement | undefined = $state();
 	let card: HTMLElement;
 	const bounds = $derived(layout.bounds(panel));
 	const preferred = $derived(!floating && !mobile && layout.preferred(panel));
@@ -132,6 +133,9 @@
 	onkeydown={(event) => {
 		if (event.key === 'Escape') menu = false;
 	}}
+	onpointerdown={(event) => {
+		if (menu && !menuAnchor?.contains(event.target as Node)) menu = false;
+	}}
 />
 <aside
 	bind:this={card}
@@ -161,7 +165,7 @@
 			>
 		{/if}
 		<div class="header-actions">{@render panel.headerActions?.()}</div>
-		{#if !mobile}<div class="menu-anchor">
+		{#if !mobile}<div class="menu-anchor" bind:this={menuAnchor}>
 				<button
 					class="icon"
 					aria-label={`${panel.title} panel options`}

@@ -107,7 +107,7 @@ fn staged_session_matches_one_shot_and_exposes_previews() {
         }
         if out.stage == Stage::Electrify {
             assert!(session.network().is_some());
-            assert!(session.module_json().unwrap().contains("maptogrid"));
+            assert!(session.module_json().unwrap().contains("tellegen_synth"));
         }
         assert!(out.progress > 0.0 && out.progress <= 1.0);
         if out.done {

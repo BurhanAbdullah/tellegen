@@ -7,8 +7,10 @@ usage: python3 -I scripts/derive-national-demand.py OWID_ENERGY_CSV > \
 
 OWID_ENERGY_CSV is Our World in Data's owid-energy-data.csv
 (https://github.com/owid/energy-data). Its `electricity_demand` column comes
-from Ember's Yearly Electricity Data and its `population` column from OWID's
-population series; both are CC BY 4.0. The CSV is third-party input: it is
+from Ember's Yearly Electricity Data (CC BY 4.0) and its `population` column
+from OWID's population series, compiled from the sources listed at
+https://ourworldindata.org/population-sources under their terms. The CSV is
+third-party input: it is
 read as text, every number is validated, and nothing in it is executed.
 
 Each country keeps its latest year up to --year that states both a positive

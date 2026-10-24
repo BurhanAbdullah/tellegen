@@ -512,7 +512,7 @@ describe('attachBasemapFallback', () => {
 		expect(onFallback).toHaveBeenCalledTimes(1);
 	});
 
-	it('rule 3 ignores a tile 404 or 500, which MapLibre reports with a status', () => {
+	it('rule 3 switches when tile servers answer 5xx and no tile arrives', () => {
 		const map = new FakeMap();
 		const { onFallback } = attach(map);
 		map.emit('style.load');
@@ -520,7 +520,28 @@ describe('attachBasemapFallback', () => {
 			map.emit('error', {
 				sourceId: 'openmaptiles',
 				tile: {},
-				error: ajaxError(500, 'Failed to fetch')
+				error: ajaxError(503, 'Service Unavailable')
+			});
+		}
+		expect(onFallback).toHaveBeenCalledTimes(1);
+		expect(onFallback.mock.calls[0][0]).toMatchObject({ kind: 'tiles-unavailable' });
+	});
+
+	it('rule 3 ignores 500s among tiles that arrive', () => {
+		const map = new FakeMap();
+		const { onFallback } = attach(map);
+		map.emit('style.load');
+		map.emit('error', {
+			sourceId: 'openmaptiles',
+			tile: {},
+			error: ajaxError(500, 'Internal Server Error')
+		});
+		map.emit('sourcedata', { sourceId: 'openmaptiles', dataType: 'source', tile: {} });
+		for (let i = 0; i < 9; i++) {
+			map.emit('error', {
+				sourceId: 'openmaptiles',
+				tile: {},
+				error: ajaxError(500, 'Internal Server Error')
 			});
 		}
 		expect(onFallback).not.toHaveBeenCalled();

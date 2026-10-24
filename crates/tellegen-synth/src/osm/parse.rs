@@ -254,14 +254,21 @@ pub fn parse_voltages(tag: &str) -> Vec<f64> {
     kvs
 }
 
+/// Most circuits one mapped way, or one corridor of joined ways, may carry.
+/// Real lines carry a handful; anything above this is a tagging error, and
+/// every circuit becomes a branch row.
+pub const MAX_OSM_CIRCUITS: u32 = 12;
+
 /// Circuits on a line: the `circuits` tag, else `cables / 3` (three
-/// conductors per AC circuit), at least one.
+/// conductors per AC circuit), between one and [`MAX_OSM_CIRCUITS`].
 pub fn parse_circuits(circuits: &str, cables: &str) -> u32 {
     if let Ok(c) = circuits.trim().parse::<u32>() {
-        return c.max(1);
+        return c.clamp(1, MAX_OSM_CIRCUITS);
     }
     if let Ok(c) = cables.trim().parse::<f64>() {
-        return ((c / 3.0).round() as u32).max(1);
+        if c.is_finite() {
+            return ((c / 3.0).round() as u32).clamp(1, MAX_OSM_CIRCUITS);
+        }
     }
     1
 }

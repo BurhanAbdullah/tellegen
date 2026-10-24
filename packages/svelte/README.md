@@ -247,7 +247,17 @@ its fallback is never `null`. The fallback reasons use the same names in
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
-tiles, fonts and sprites are all fetched.
+tiles, fonts and sprites are all fetched. The engine underneath also needs
+`script-src 'wasm-unsafe-eval'` (never `'unsafe-eval'`) and `worker-src
+'self'`, since its workers are same-origin.
+
+A host that passes its own deck.gl layers in `extraLayers`, or works with the
+MapLibre map from `onMapReady`, must resolve one copy each of
+`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`.
+When two deck.gl versions load, deck.gl throws "multiple versions detected".
+If the host's ranges differ from this package's (`^9.4.0` for deck.gl,
+`^6.15.0` for maplibre-gl), point both at one version with npm `overrides`
+(or `resolutions` in pnpm and Yarn).
 
 The map needs no Vite settings, in a build or in the dev server. MapLibre's
 worker comes from a `?worker&url` import, which a production build bundles
@@ -327,3 +337,13 @@ release. The package ships only `dist`, the README, the MIT license text, and
 package metadata. The packed smoke test installs the generated tarballs into a
 temporary Svelte consumer and builds it so missing exports, styles, or wasm
 assets fail before publish.
+
+## Citing
+
+If you use this package in published work, please cite the tellegen paper:
+Samuel Talkington, Frederik Geth, Qian Zhang, Le Xie, and Skyler Liu. 2026.
+*Interactive Power Flow in the Browser*. The Inaugural ACM Conference on Digital
+Transformation (ACM DXConf 2026), Ann Arbor, MI, USA.
+[doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038). The
+[repository README](https://github.com/eigenergy/tellegen#citing) has the BibTeX
+entry.

@@ -2578,7 +2578,7 @@
     "request",
     "response"
   ],
-  "title": "StudyContract",
+  "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "1306906de5fcd1aba6b963113fcc2b007a4efbf1966ed0fed29925ade8be54e5"
+  "x-rust-source-sha256": "6d25a972d621aec9483c3d5c94a3294e4baffe1ed4b76b2338225fb91d65897e"
 }
