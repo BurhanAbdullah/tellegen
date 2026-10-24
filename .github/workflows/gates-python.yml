@@ -162,7 +162,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install --force-reinstall dist/*.whl
-          cp evidence/studies/case3.m "${RUNNER_TEMP}/case3.m"
+          cp docs/evidence/studies/case3.m "${RUNNER_TEMP}/case3.m"
           cd "${RUNNER_TEMP}"
           python - <<'PY'
           import tellegen

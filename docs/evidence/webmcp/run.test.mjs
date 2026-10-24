@@ -364,7 +364,7 @@ test("native browser evidence matches its checked in media", async () => {
   const videoRun = JSON.parse(
     await readFile(new URL("./native/video-run.json", import.meta.url), "utf8"),
   );
-  const repoRoot = new URL("../../", import.meta.url);
+  const repoRoot = new URL("../../../", import.meta.url);
 
   assert.equal(native.schema, "tellegen.native-webmcp-evidence/1");
   assert.equal(native.software.powerio_version, "1.0.0");

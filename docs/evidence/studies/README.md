@@ -8,8 +8,8 @@ Build the optimized CLI for large grids:
 
 ```sh
 cargo build --release -p tellegen-cli --features conic
-python evidence/studies/run.py evidence/studies/case3-voltage.json \
-  --source evidence/studies/case3.m --powerio /path/to/powerio \
+python docs/evidence/studies/run.py docs/evidence/studies/case3-voltage.json \
+  --source docs/evidence/studies/case3.m --powerio /path/to/powerio \
   --tellegen target/release/tellegen --output /path/to/new-evidence-directory
 ```
 
@@ -33,7 +33,7 @@ labelled scenario replaces each such curve by its lower convex envelope:
 ```sh
 cargo run --release -p tellegen --example convex_cost_scenario -- \
   /path/to/Texas7k_20210804.m /path/to/scenario.pio.json /path/to/cost-comparison.json
-python evidence/studies/run.py evidence/studies/texas7k-convex-cost-capacity.json \
+python docs/evidence/studies/run.py docs/evidence/studies/texas7k-convex-cost-capacity.json \
   --source /path/to/scenario.pio.json --scenario-evidence /path/to/cost-comparison.json \
   --powerio /path/to/powerio --tellegen target/release/tellegen \
   --output /path/to/new-evidence-directory
@@ -53,7 +53,7 @@ persistence, branching, goal revisions, approvals, failed saves and continuation
 
 ```sh
 TELLEGEN_STUDY_CLI=target/release/tellegen POWERIO_CLI=/path/to/powerio \
-  python evidence/studies/test_native_cancellation.py
+  python docs/evidence/studies/test_native_cancellation.py
 ```
 
 The POSIX cancellation test sends SIGTERM after an exact trial checkpoint and

@@ -8,9 +8,9 @@ writes every verdict as the engine returned it.
 ```sh
 cargo build --release -p tellegen-cli
 # Measure the reference cases staged in the repository.
-python3 evidence/synth/run.py references --tellegen target/release/tellegen
+python3 docs/evidence/synth/run.py references --tellegen target/release/tellegen
 # Generate every spec and seed, then compare.
-python3 evidence/synth/run.py run evidence/synth/specs/*.json \
+python3 docs/evidence/synth/run.py run docs/evidence/synth/specs/*.json \
   --tellegen target/release/tellegen --output /path/to/new-evidence-directory
 ```
 
@@ -37,7 +37,7 @@ carries no coordinates, so the length based statistics are zero for these
 cases and are not compared. Larger cases (ACTIVSg2000, Texas7k, CATS) can be
 measured once staged with `scripts/stage-data.sh`: pass each with `--case`.
 Third-party datasets are not vendored here, the same policy as
-`evidence/studies`.
+`docs/evidence/studies`.
 
 The published ranges are the generator's default calibration targets
 (Birchfield et al., IEEE TPWRS 32(4), 2017, Table II): mean degree 2.2–3.0
@@ -101,18 +101,18 @@ measured against each country's official peak:
 # Natural Earth v5.1.2, 1:50m admin-0 countries (public domain); regions.py
 # checks the file's SHA-256 (SOURCE_SHA256) before writing the specs.
 curl -LO https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson
-python3 -I evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs50
-python3 -I evidence/synth/regions.py /path/to/maptogrid/static/data/countries-110m.geojson \
+python3 -I docs/evidence/synth/regions.py ne_50m_admin_0_countries.geojson --out /path/to/specs50
+python3 -I docs/evidence/synth/regions.py /path/to/maptogrid/static/data/countries-110m.geojson \
   --outline app-110m --out /path/to/specs110
 TELLEGEN_ALLOW_FALLBACK=1 cargo build --release -p tellegen-cli --features conic
-python3 evidence/synth/run.py sweep /path/to/specs50/*.json --seeds 1,7,2026 \
+python3 docs/evidence/synth/run.py sweep /path/to/specs50/*.json --seeds 1,7,2026 \
   --tellegen target/release/tellegen --output /path/to/new-sweep-directory
-python3 evidence/synth/run.py sweep /path/to/specs110/*.json --seeds 1,7,2026 --missing fra \
+python3 docs/evidence/synth/run.py sweep /path/to/specs110/*.json --seeds 1,7,2026 --missing fra \
   --outline "the MapToGrid app's 1:110m layer" \
   --tellegen target/release/tellegen --output /path/to/another-new-directory
 # The same sessions through the wasm build, timed in Node (SEED defaults to 2026):
 npm run wasm
-node evidence/synth/wasm_time.mjs packages/engine/src/wasm-pkg \
+node docs/evidence/synth/wasm_time.mjs packages/engine/src/wasm-pkg \
   crates/tellegen-synth/data/populated_places.json /path/to/specs110/usa.json
 ```
 

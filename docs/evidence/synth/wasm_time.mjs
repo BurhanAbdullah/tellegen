@@ -1,6 +1,6 @@
 // Time synthetic generation through the real wasm build: one SynthSession
 // per spec, every stage, with the engine's own stage clock (Date.now).
-// usage: [SEED=2026] node evidence/synth/wasm_time.mjs WASM_PKG_DIR PLACES_JSON SPEC.json...
+// usage: [SEED=2026] node docs/evidence/synth/wasm_time.mjs WASM_PKG_DIR PLACES_JSON SPEC.json...
 // SEED defaults to 2026, the MapToGrid app's default seed.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

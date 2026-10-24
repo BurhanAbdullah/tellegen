@@ -153,13 +153,14 @@ stages the complete cases into `data/`; the server serves whatever is staged.
 
 ## Repository layout
 
-- `crates/`: Rust workspace — `tellegen` (engine), `tellegen-wasm` (WebAssembly), `tellegen-server` (HTTP), `tellegen-cli`, `benchmarks`
+- `crates/`: Rust workspace — `tellegen` (engine), `tellegen-synth` (geographic synthetic grids), `tellegen-wasm` (WebAssembly), `tellegen-server` (HTTP), `tellegen-cli`, `benchmarks`
 - `packages/engine/`: `@tellegen/engine` browser package
 - `packages/svelte/`: `@tellegen/svelte` component package
 - `packages/webmcp/`: reusable WebMCP tools, validation, and registration
 - `apps/web/`: the hosted demo, a SvelteKit consumer of the Svelte package
 - `examples/`: minimal Vite and Svelte integrations of each package
 - `docs/src/`: mdBook source; `scripts/build-docs.sh` builds it
+- `docs/evidence/`: checked-in measurement records (generator sweeps, WebMCP challenge runs, studies, multiconductor references) and the scripts that reproduce them
 
 The [HTTP API](https://eigenergy.github.io/tellegen/http-api.html),
 [deployment](https://eigenergy.github.io/tellegen/deployment.html), and

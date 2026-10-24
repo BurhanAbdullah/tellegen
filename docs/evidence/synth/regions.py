@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the country-scale sweep specs from a country outline layer.
 
-usage: python3 -I evidence/synth/regions.py GEOJSON [--outline 50m|app-110m] [--out DIR]
+usage: python3 -I docs/evidence/synth/regions.py GEOJSON [--outline 50m|app-110m] [--out DIR]
 
 Two outlines:
 

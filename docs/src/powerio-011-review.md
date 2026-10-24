@@ -2,7 +2,7 @@
 
 Tellegen uses the published PowerIO 0.11.6 crates. All seven PowerIO components
 resolve from crates.io at 0.11.6 with registry checksums.
-`evidence/webmcp/powerio-releases.json` maps each release tag, such as
+`docs/evidence/webmcp/powerio-releases.json` maps each release tag, such as
 [`v0.11.6`](https://github.com/eigenergy/powerio/releases/tag/v0.11.6), to its
 commit.
 

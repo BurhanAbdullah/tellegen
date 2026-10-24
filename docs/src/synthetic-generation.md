@@ -323,16 +323,16 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
   and 1.5 s in wasm (Node, Apple M5 Pro), end to end with both validations;
   the United States takes 1.4–1.5 s and 2.0 s, about 0.9 s of it an AC power
   flow that does not converge over five starts. A 500-bus country takes
-  under 0.1 s. `evidence/synth` records the measurements.
+  under 0.1 s. `docs/evidence/synth` records the measurements.
 - Whether the AC power flow converges inside the band depends on the seed
-  for several countries. `evidence/synth` sweeps three seeds on two
+  for several countries. `docs/evidence/synth` sweeps three seeds on two
   outlines (Natural Earth 1:50m and the MapToGrid app's 1:110m layer):
   91% and 92% of the runs pass AC, every run passes DC, and the United
   States fails at every seed.
 - Clustering in generated grids runs higher than in the ACTIVSg200 and
   GOC500 references, because the Gabriel mesh is rich in triangles. Their
   highest nodal degree is also lower, since the mesh caps it at 8.
-  `evidence/synth` measures both against the references.
+  `docs/evidence/synth` measures both against the references.
 - Continental regions span several thousand kilometres as one AC island.
   Their planning-case angle spread stays well above 44° within the branch
   budget, so the plan reports `planning_incomplete`. Real systems of that

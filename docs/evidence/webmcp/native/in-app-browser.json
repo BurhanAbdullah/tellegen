@@ -536,6 +536,6 @@
   "video": {
     "path": "docs/assets/challenge/native-webmcp-demo.mp4",
     "sha256": "04ab59aad80a0542df1cf0f2c488f0a625cd9dbcf55338e26d5481b1d7aa21e6",
-    "run": "evidence/webmcp/native/video-run.json"
+    "run": "docs/evidence/webmcp/native/video-run.json"
   }
 }

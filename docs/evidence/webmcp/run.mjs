@@ -491,7 +491,7 @@ function exactRevisions(repoRoot) {
   );
   const releases = parseJson(
     readFileSync(
-      resolve(repoRoot, "evidence/webmcp/powerio-releases.json"),
+      resolve(repoRoot, "docs/evidence/webmcp/powerio-releases.json"),
       "utf8",
     ),
     "PowerIO release revisions",
@@ -520,7 +520,7 @@ function trackedTreeIsClean(repoRoot) {
     .filter(
       (line) =>
         !(
-          line.startsWith("?? evidence/webmcp/results/") &&
+          line.startsWith("?? docs/evidence/webmcp/results/") &&
           line.endsWith(".json")
         ),
     );
@@ -543,7 +543,7 @@ export async function runEvidence(
   { allowDirty = false } = {},
 ) {
   const harnessDir = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = resolve(harnessDir, "../..");
+  const repoRoot = resolve(harnessDir, "../../..");
   const absoluteSpec = resolve(repoRoot, specPath);
   const specRelativeToRoot = relative(repoRoot, absoluteSpec);
   if (
@@ -565,7 +565,7 @@ export async function runEvidence(
   const absoluteOutput = resolve(repoRoot, outputPath);
   const expectedOutput = resolve(
     repoRoot,
-    `evidence/webmcp/results/${spec.case_id}.json`,
+    `docs/evidence/webmcp/results/${spec.case_id}.json`,
   );
   if (!allowDirty && absoluteOutput !== expectedOutput) {
     fail(
@@ -616,7 +616,7 @@ export async function runEvidence(
     schema: RESULT_SCHEMA,
     case_id: spec.case_id,
     reproducible: clean && !allowDirty,
-    invocation: `node evidence/webmcp/run.mjs ${specRelative} ${outputRelative}`,
+    invocation: `node docs/evidence/webmcp/run.mjs ${specRelative} ${outputRelative}`,
     software: {
       ...revisions,
       cargo_lock_sha256: cargoLockDigest,
@@ -697,7 +697,7 @@ async function main() {
   if (allowDirty) args.splice(allowDirtyIndex, 1);
   if (args.length !== 2) {
     fail(
-      "usage: node evidence/webmcp/run.mjs [--allow-dirty] <spec.json> <result.json>",
+      "usage: node docs/evidence/webmcp/run.mjs [--allow-dirty] <spec.json> <result.json>",
     );
   }
   const artifact = await runEvidence(args[0], args[1], { allowDirty });

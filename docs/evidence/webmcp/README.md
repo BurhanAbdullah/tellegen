@@ -12,8 +12,8 @@ this compact record.
 Run from the repository root at a clean commit:
 
 ```sh
-node evidence/webmcp/run.mjs evidence/webmcp/specs/cats.json evidence/webmcp/results/cats.json
-node evidence/webmcp/run.mjs evidence/webmcp/specs/texas7k.json evidence/webmcp/results/texas7k.json
+node docs/evidence/webmcp/run.mjs docs/evidence/webmcp/specs/cats.json docs/evidence/webmcp/results/cats.json
+node docs/evidence/webmcp/run.mjs docs/evidence/webmcp/specs/texas7k.json docs/evidence/webmcp/results/texas7k.json
 ```
 
 The runner refuses tracked or untracked changes other than earlier generated
