@@ -42,7 +42,7 @@
 		<text
 			class="axis-label y-label"
 			x={-(T + PLOT_H / 2)}
-			y="8"
+			y="11"
 			text-anchor="middle"
 			transform="rotate(-90)"
 		>
@@ -70,7 +70,7 @@
 	.axis-label {
 		fill: var(--text-tertiary);
 		font-family: var(--font-mono);
-		font-size: 9px;
+		font-size: 12px;
 		letter-spacing: 0;
 	}
 

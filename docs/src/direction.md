@@ -94,7 +94,8 @@ the Safari sensitivity gap
 Long term: graduate the native AC OPF feature after its solver and distribution
 gates, then add browser AC OPF through a dedicated WASI worker with hard
 cancellation. WebGPU follows when deck.gl's backend gains picking and basemap
-support. Synthetic grid generation pairs with in-browser compute.
+support. Synthetic grid generation already runs in the browser through `tellegen-synth`
+([Synthetic Grid Generation](synthetic-generation.md)).
 
 ## Sources
 

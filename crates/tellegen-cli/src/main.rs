@@ -8,6 +8,8 @@
 //! tellegen '{"formulation":"socwr"}' < case.pio.json
 //! tellegen solve-module < case.pio.json       # stored module in, solution module out
 //! tellegen plan < plan-request.json          # capacity planning proposal
+//! tellegen generate --request req.json --out DIR   # a synthetic grid and its report
+//! tellegen stats < case.pio.json              # structural statistics of a case
 //! ```
 //!
 //! `solve-module` and `plan` accept a stored
@@ -32,10 +34,14 @@ use tellegen::ir::{balanced_module, deserialize_module, serialize_module};
 
 use tellegen::plan::CapacityPlanSpec;
 
+mod synth;
+
 const USAGE: &str =
     "usage: tellegen [REQUEST_JSON | capabilities | --help]   (PowerIO module on stdin)\n\
      \n\
      REQUEST_JSON  a solve request; default '{}' is a base-case DC OPF.\n\
+                   '@PATH' reads the request from a file, for requests larger\n\
+                   than the operating system's argument limit.\n\
      capabilities  print the formulation/operand/parameter capability matrix.\n\
      describe      print supported commands and generated JSON schemas.\n\
      prepare-model\n\
@@ -51,7 +57,14 @@ const USAGE: &str =
                    create, inspect, continue or move a durable Study.\n\
      plan\n\
                    read {\"module\": POWERIO_MODULE, \"spec\": CAPACITY_PLAN_SPEC}\n\
-                   from stdin and print the proposal and exact proposed solution.";
+                   from stdin and print the proposal and exact proposed solution.\n\
+     generate --request PATH --out DIR [--places PATH] [--osm PATH]\n\
+              [--export FORMAT[,FORMAT...]] [--gridfm]\n\
+                   generate a synthetic grid for a region; write the module,\n\
+                   its report, a GeoJSON layer and the requested exports.\n\
+     stats [--case PATH] [--targets PATH]\n\
+                   print the structural statistics of a case file, or of the\n\
+                   module on stdin.";
 
 fn main() -> ExitCode {
     let arg = std::env::args().nth(1).unwrap_or_default();
@@ -110,6 +123,29 @@ fn main() -> ExitCode {
                 }
             });
         }
+        "generate" => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            return run(|| {
+                let parsed = synth::parse_generate_args(&args)?;
+                synth::generate_command(&parsed, Some(&synth::ctrlc_cancel))
+            });
+        }
+        "stats" => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            return run(|| {
+                let (case, targets) = synth::parse_stats_args(&args)?;
+                let targets = targets
+                    .map(|path| {
+                        std::fs::read_to_string(&path)
+                            .map_err(|e| format!("cannot read {}: {e}", path.display()))
+                    })
+                    .transpose()?;
+                match case {
+                    Some(path) => synth::stats_case(&path, targets.as_deref()),
+                    None => synth::stats_text(&read_stdin()?, targets.as_deref()),
+                }
+            });
+        }
         "plan" => {
             if std::env::args().nth(2).is_some() {
                 eprintln!("tellegen plan: the planning request belongs on stdin\n\n{USAGE}");
@@ -120,11 +156,24 @@ fn main() -> ExitCode {
         _ => {}
     }
 
-    let request = if arg.is_empty() { "{}" } else { arg.as_str() };
     run(|| {
+        let request = request_text(&arg)?;
         let module_json = read_stdin()?;
-        tellegen::solve_module_json(&module_json, request)
+        tellegen::solve_module_json(&module_json, &request)
     })
+}
+
+/// The solve request named by the first argument: `{}` when empty, the
+/// contents of the file when it is `@PATH`, otherwise the argument itself.
+fn request_text(arg: &str) -> Result<String, String> {
+    if arg.is_empty() {
+        return Ok("{}".to_owned());
+    }
+    match arg.strip_prefix('@') {
+        Some(path) => std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read request file {path}: {e}")),
+        None => Ok(arg.to_owned()),
+    }
 }
 
 fn study_command() -> Result<String, String> {
@@ -413,6 +462,22 @@ mpc.gencost = [
                 "exact_solve_budget": 2
             }
         })
+    }
+
+    #[test]
+    fn request_text_reads_a_file_when_prefixed_with_at() {
+        assert_eq!(request_text("").unwrap(), "{}");
+        assert_eq!(
+            request_text("{\"formulation\":\"dcopf\"}").unwrap(),
+            "{\"formulation\":\"dcopf\"}"
+        );
+        let path =
+            std::env::temp_dir().join(format!("tellegen-request-{}.json", std::process::id()));
+        std::fs::write(&path, "{\"formulation\":\"dcopf\"}").unwrap();
+        let text = request_text(&format!("@{}", path.display())).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(text, "{\"formulation\":\"dcopf\"}");
+        assert!(request_text("@/nonexistent/request.json").is_err());
     }
 
     #[test]

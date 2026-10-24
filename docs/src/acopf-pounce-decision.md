@@ -252,12 +252,11 @@ private solver adapter, not the PowerIO problem or solution contract.
 
 ### Input preparation safeguards
 
-PowerIO 0.11.3 aggregates load and shunt injections without checking service
-status. Tellegen therefore masks inactive injections in a private instance copy
-before preparation, retaining all source rows, units, objective, selected
-constraints, and initial-point identities. The caller's instance is unchanged.
-As with the existing models, a network claiming to be normalized while still
-carrying inactive loads/shunts or isolated buses is rejected. Active voltage
-and generator bounds must be finite and ordered; invalid bounds return a
-source-identifying error before starting-point clamping.
-
+PowerIO 0.11.5 filters inactive loads and shunts during preparation; Tellegen
+uses that preparation directly and retains a regression covering source rows,
+selected constraints, objective and explicit warm-start voltages. Networks
+claiming to be normalized while retaining inactive injections are rejected.
+Selected voltage, generator, thermal and angle bounds are checked before model
+construction. Zero thermal ratings remain unlimited. Small full-pi directional
+derivative checks run in ordinary CI, with a complex-current branch-flow oracle
+independent of the polar coefficient transcription.

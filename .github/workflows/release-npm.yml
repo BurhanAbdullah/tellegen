@@ -83,6 +83,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/validate-version-changes.py npm
+          # In pre mode the generator moves consumed changesets into
+          # .changeset/pre/, new files that `git diff` would leave out of the
+          # patch. The validator admits no other new path.
+          git ls-files -z --others --exclude-standard -- .changeset/pre \
+            | xargs -0 -r git add --intent-to-add --
           git diff --check
           patch="$RUNNER_TEMP/npm-version.patch"
           git diff --binary --full-index --no-ext-diff --output="$patch"

@@ -1,4 +1,5 @@
 import "./generate-study-contracts.mjs";
+import "./generate-synth-contracts.mjs";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
