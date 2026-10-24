@@ -85,6 +85,7 @@
 	} from '../diagram/index.js';
 	import { canvasPng, download, fileStem, sceneSvg } from './schematic/export.js';
 	import {
+		createLayerCache,
 		morphLayers,
 		sceneLayers,
 		stackRadius,
@@ -712,6 +713,9 @@
 		})
 	);
 
+	/** Layer data kept between frames, so a hover redraws only what it changes. */
+	const layerCache = createLayerCache();
+
 	/** Everything a frame draws; the layers and the SVG export both read it. */
 	function scene(): SchematicScene {
 		return {
@@ -754,6 +758,8 @@
 			hover,
 			stacks,
 			spreadStacks,
+			textSource: text,
+			cache: layerCache,
 			fans: fanned(),
 			fannedGroups,
 			fan

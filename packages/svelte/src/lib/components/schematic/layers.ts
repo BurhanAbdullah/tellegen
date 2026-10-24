@@ -92,6 +92,47 @@ export function morphLayers(
 	];
 }
 
+/** The last value for the last keys, compared by identity. */
+function keyed<R>() {
+	let last: unknown[] | null = null;
+	let value: R;
+	return (keys: unknown[], compute: () => R): R => {
+		if (!last || keys.length !== last.length || keys.some((k, i) => k !== last![i])) {
+			value = compute();
+			last = keys;
+		}
+		return value;
+	};
+}
+
+/** Per-canvas memory of layer data. deck.gl compares a layer's `data` by reference, so a layer
+ * whose inputs did not change gets the same data and is left alone: a hover or selection change
+ * rebuilds only the small highlight layers, not 50,000 segment colours and every label. */
+/** Columnar layer data: a count and typed-array attributes. */
+type BinaryData = {
+	length: number;
+	attributes: Record<
+		string,
+		{ value: Float32Array | Uint8Array; size: number; normalized?: boolean }
+	>;
+};
+
+export function createLayerCache() {
+	return {
+		branches: keyed<BinaryData>(),
+		underlay: keyed<BinaryData>(),
+		equipment: keyed<BinaryData>(),
+		ticks: keyed<BinaryData>(),
+		arrows: keyed<BinaryData>(),
+		itemTexts: keyed<EquipmentItem[]>(),
+		transformerTexts: keyed<EquipmentItem[]>(),
+		zoneTags: keyed<SchematicScene['zones']['tags']>(),
+		corridors: keyed<{ segments: { z: number; s: number }[]; buses: { z: number; i: number }[] }>(),
+		segmentsOf: keyed<Map<number, number[]>>()
+	};
+}
+export type LayerCache = ReturnType<typeof createLayerCache>;
+
 /** Everything one frame of the diagram draws, as the canvas derives it. */
 export interface SchematicScene {
 	graph: DistGraph;
@@ -150,6 +191,9 @@ export interface SchematicScene {
 	} | null;
 	stacks: BusStacks | null;
 	spreadStacks: number[];
+	/** Changes whenever attachment text would (the canvas's text source). */
+	textSource: unknown;
+	cache: LayerCache;
 	fans: FannedBranch[];
 	fannedGroups: number[];
 	fan: FanState;
@@ -160,6 +204,8 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 	const common = cartesian(kit);
 	const g = s.geometry;
 	const d = s.drawn;
+	const cache = s.cache;
+	const segmentsOf = cache.segmentsOf([d], () => segmentIndex(d));
 	const point = (i: number): [number, number, number] => [
 		g.positions[i * 3],
 		g.positions[i * 3 + 1],
@@ -191,10 +237,13 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 		new TextLayer({
 			...common,
 			id: 'zone-tags',
-			data:
-				s.layout === 'source' && symbols
-					? []
-					: s.zones.tags.filter((t) => t.width * 2 ** s.zones.tagZoom >= 150),
+			data: cache.zoneTags(
+				[s.zones.tags, s.zones.tagZoom, s.layout === 'source' && !!symbols],
+				() =>
+					s.layout === 'source' && symbols
+						? []
+						: s.zones.tags.filter((t) => t.width * 2 ** s.zones.tagZoom >= 150)
+			),
 			getPosition: (t: { position: [number, number] }) => [...t.position, 0],
 			getText: (t: { text: string }) => t.text,
 			getColor: (t: { z: number }) => {
@@ -219,13 +268,13 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 					new LineLayer({
 						...common,
 						id: 'topology-underlay',
-						data: {
+						data: cache.underlay([d], () => ({
 							length: d.segmentEdge.length,
 							attributes: {
 								getSourcePosition: { value: d.sources, size: 3 },
 								getTargetPosition: { value: d.targets, size: 3 }
 							}
-						},
+						})),
 						getColor: [120, 114, 102, 70],
 						getWidth: 1,
 						widthUnits: 'pixels'
@@ -234,26 +283,29 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 		new LineLayer({
 			...common,
 			id: `branches-${s.layout}`,
-			data: {
-				length: d.segmentEdge.length,
-				attributes: {
-					getSourcePosition: { value: d.sources, size: 3 },
-					getTargetPosition: { value: d.targets, size: 3 },
-					getColor: {
-						value: segmentColours(d, s.edgeColours, s.edgeMv, s.zoomedOut, s.fan),
-						size: 4,
-						normalized: true
-					},
-					getWidth: { value: segmentWidths(d, s.edgeMv, s.colour !== 'none'), size: 1 }
-				}
-			},
+			data: cache.branches(
+				[d, s.edgeColours, s.edgeMv, s.zoomedOut, s.fan, s.colour !== 'none'],
+				() => ({
+					length: d.segmentEdge.length,
+					attributes: {
+						getSourcePosition: { value: d.sources, size: 3 },
+						getTargetPosition: { value: d.targets, size: 3 },
+						getColor: {
+							value: segmentColours(d, s.edgeColours, s.edgeMv, s.zoomedOut, s.fan),
+							size: 4,
+							normalized: true
+						},
+						getWidth: { value: segmentWidths(d, s.edgeMv, s.colour !== 'none'), size: 1 }
+					}
+				})
+			),
 			widthUnits: 'pixels',
 			pickable: true
 		}),
 		new LineLayer({
 			...common,
 			id: 'selected-branch',
-			data: highlighted(d, s.selectedEdges, s.fan),
+			data: highlighted(d, segmentsOf, s.selectedEdges, s.fan),
 			getSourcePosition: (i: number) => segment(i, d.sources),
 			getTargetPosition: (i: number) => segment(i, d.targets),
 			getColor: ACCENT,
@@ -267,7 +319,7 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 					new LineLayer({
 						...common,
 						id: 'equipment',
-						data: {
+						data: cache.equipment([symbols, s.fan.edges, s.live], () => ({
 							length: symbols.sources.length / 3,
 							attributes: {
 								getSourcePosition: { value: symbols.sources, size: 3 },
@@ -278,17 +330,17 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 									normalized: true
 								}
 							}
-						},
+						})),
 						getWidth: 1.25,
 						widthUnits: 'pixels'
 					}),
-					...(s.valuesOn && s.arrows ? [flowArrowLayer(kit, s.arrows, s.fan.edges)] : []),
+					...(s.valuesOn && s.arrows ? [flowArrowLayer(kit, s.arrows, s.fan.edges, cache)] : []),
 					...(s.ticksOn
 						? [
 								new LineLayer({
 									...common,
 									id: 'conductor-ticks',
-									data: {
+									data: cache.ticks([symbols, s.fan.edges, s.live], () => ({
 										length: symbols.ticks.edge.length,
 										attributes: {
 											getSourcePosition: { value: symbols.ticks.sources, size: 3 },
@@ -299,7 +351,7 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 												normalized: true
 											}
 										}
-									},
+									})),
 									getWidth: 1,
 									widthUnits: 'pixels'
 								})
@@ -319,7 +371,9 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 					new TextLayer({
 						...common,
 						id: 'equipment-text',
-						data: symbols.items.filter((item) => item.bus >= 0 && s.itemText(item)),
+						data: cache.itemTexts([symbols.items, s.textSource], () =>
+							symbols.items.filter((item) => item.bus >= 0 && s.itemText(item))
+						),
 						getPosition: (item: EquipmentItem) => [item.x + symbols.unit * 1.1, item.y, 0],
 						getText: s.itemText,
 						updateTriggers: { getText: [s.valuesOn, s.labelsOn, s.powers] },
@@ -338,7 +392,9 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 					new TextLayer({
 						...common,
 						id: 'transformer-text',
-						data: s.labelsOn ? symbols.items.filter((item) => item.label) : [],
+						data: cache.transformerTexts([symbols.items, s.labelsOn], () =>
+							s.labelsOn ? symbols.items.filter((item) => item.label) : []
+						),
 						getPosition: (item: EquipmentItem) => [item.x, item.y, 0],
 						getText: (item: EquipmentItem) => item.label ?? '',
 						getColor: SYMBOL_INK,
@@ -399,7 +455,7 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 		new LineLayer({
 			...common,
 			id: 'hovered-branch',
-			data: highlighted(d, s.hoveredEdges, s.fan),
+			data: highlighted(d, segmentsOf, s.hoveredEdges, s.fan),
 			getSourcePosition: (i: number) => segment(i, d.sources),
 			getTargetPosition: (i: number) => segment(i, d.targets),
 			getColor: alpha(ACCENT, 110),
@@ -442,24 +498,42 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 	];
 }
 
-/** Drawn segments of `edges`, except those replaced by a fanned route. */
-function highlighted(d: SchematicGeometry, edges: Set<number>, fan: FanState): number[] {
+/** Each edge's drawn segments, built once per drawing. */
+function segmentIndex(d: SchematicGeometry): Map<number, number[]> {
+	const out = new Map<number, number[]>();
+	for (let i = 0; i < d.segmentEdge.length; i++) {
+		const k = d.segmentEdge[i];
+		const list = out.get(k);
+		if (list) list.push(i);
+		else out.set(k, [i]);
+	}
+	return out;
+}
+
+/** Drawn segments of `edges`, except those replaced by a fanned route: proportional to the edges
+ * asked for, not to the drawing. */
+function highlighted(
+	d: SchematicGeometry,
+	segmentsOf: Map<number, number[]>,
+	edges: Set<number>,
+	fan: FanState
+): number[] {
 	const out: number[] = [];
-	if (edges.size)
-		for (let i = 0; i < d.segmentEdge.length; i++)
-			if (edges.has(d.segmentEdge[i]) && !hiddenUnderFan(d, i, fan)) out.push(i);
+	for (const k of edges)
+		for (const i of segmentsOf.get(k) ?? []) if (!hiddenUnderFan(d, i, fan)) out.push(i);
 	return out;
 }
 
 function flowArrowLayer(
 	kit: DeckKit,
 	arrows: { edge: Int32Array; sources: Float32Array; targets: Float32Array },
-	fannedEdges: Set<number>
+	fannedEdges: Set<number>,
+	cache: LayerCache
 ): Layer {
 	return new kit.layers.LineLayer({
 		...cartesian(kit),
 		id: 'flow-arrows',
-		data: {
+		data: cache.arrows([arrows, fannedEdges], () => ({
 			length: arrows.edge.length,
 			attributes: {
 				getSourcePosition: { value: arrows.sources, size: 3 },
@@ -472,7 +546,7 @@ function flowArrowLayer(
 					normalized: true
 				}
 			}
-		},
+		})),
 		getWidth: 1.5,
 		widthUnits: 'pixels'
 	});
@@ -659,8 +733,10 @@ function corridorLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 		}
 		return alpha(ZONE_INK, 56);
 	};
-	const segments = corridors.flatMap((c) => c.segments.map((i) => ({ z: c.z, s: i })));
-	const buses = corridors.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })));
+	const { segments, buses } = s.cache.corridors([corridors], () => ({
+		segments: corridors.flatMap((c) => c.segments.map((i) => ({ z: c.z, s: i }))),
+		buses: corridors.flatMap((c) => c.buses.map((i) => ({ z: c.z, i })))
+	}));
 	return [
 		new LineLayer({
 			...common,
@@ -702,7 +778,12 @@ function hoverHalos(kit: DeckKit, s: SchematicScene): Layer[] {
 		new kit.layers.LineLayer({
 			...cartesian(kit),
 			id,
-			data: highlighted(d, edges, s.fan),
+			data: highlighted(
+				d,
+				s.cache.segmentsOf([d], () => segmentIndex(d)),
+				edges,
+				s.fan
+			),
 			getSourcePosition: (i: number) => [d.sources[i * 3], d.sources[i * 3 + 1], 0],
 			getTargetPosition: (i: number) => [d.targets[i * 3], d.targets[i * 3 + 1], 0],
 			getColor: alpha(h.tint, a),
@@ -724,7 +805,12 @@ function hoverMarks(kit: DeckKit, s: SchematicScene): Layer[] {
 					new kit.layers.LineLayer({
 						...common,
 						id: 'hover-path',
-						data: highlighted(d, h.path, s.fan),
+						data: highlighted(
+							d,
+							s.cache.segmentsOf([d], () => segmentIndex(d)),
+							h.path,
+							s.fan
+						),
 						getSourcePosition: (i: number) => [d.sources[i * 3], d.sources[i * 3 + 1], 0],
 						getTargetPosition: (i: number) => [d.targets[i * 3], d.targets[i * 3 + 1], 0],
 						getColor: PATH,
