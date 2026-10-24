@@ -59,7 +59,7 @@ jobs:
         run: |
           cargo test --workspace
           cargo test -p tellegen --features conic
-          cargo test -p tellegen-wasm --features conic
+          cargo test -p tellegen-wasm --features conic,synth
       - name: Build candidate WebAssembly
         run: npm run wasm
       - name: Test WebMCP and package surfaces

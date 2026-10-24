@@ -4,6 +4,7 @@
 # engine; the adapters and benchmarks build only when a command selects them.
 members = [
   "crates/tellegen",
+  "crates/tellegen-synth",
   "crates/tellegen-wasm",
   "crates/tellegen-server",
   "crates/tellegen-cli",

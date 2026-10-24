@@ -306,7 +306,7 @@
 
 	.tag {
 		margin: 0 0 10px;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-secondary);
 		letter-spacing: 0;
 		text-transform: uppercase;
@@ -353,7 +353,7 @@
 		background: color-mix(in srgb, var(--tc) 26%, transparent);
 		color: var(--ink);
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: 13px;
 	}
 
 	.term.grounded {
@@ -377,7 +377,7 @@
 		border-radius: 3px;
 		background: var(--bc);
 		color: #fff;
-		font-size: 10px;
+		font-size: 12px;
 		letter-spacing: 0;
 	}
 
@@ -389,7 +389,7 @@
 
 	.load-editor h4 {
 		margin: 0 0 8px;
-		font-size: 11px;
+		font-size: 13px;
 	}
 
 	.load-row {
@@ -404,7 +404,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		font-size: 9px;
+		font-size: 12px;
 		color: var(--text-secondary);
 	}
 
@@ -412,11 +412,11 @@
 		min-width: 0;
 		width: 100%;
 		box-sizing: border-box;
-		font: 10px var(--font-mono);
+		font: 12px var(--font-mono);
 	}
 
 	.load-row button {
-		font-size: 9px;
+		font-size: 12px;
 	}
 
 	/* The global stylesheet's .legend is the 6px color-ramp strip; its height
@@ -426,7 +426,7 @@
 		flex-direction: column;
 		gap: 4px;
 		margin-top: 12px;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-secondary);
 	}
 
@@ -469,7 +469,7 @@
 
 	.footnote {
 		margin: 8px 0 0;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-tertiary);
 		letter-spacing: 0;
 	}

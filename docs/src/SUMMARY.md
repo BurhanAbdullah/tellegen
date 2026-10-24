@@ -17,6 +17,7 @@
 - [Data Provenance](data-provenance.md)
 - [Display Data](display-data.md)
 - [Synthetic Layout](synthetic-layout.md)
+- [Synthetic Grid Generation](synthetic-generation.md)
 - [Technology choices](technology-evaluation.md)
 - [Architecture](architecture.md)
   - [Release Architecture](release-architecture.md)
