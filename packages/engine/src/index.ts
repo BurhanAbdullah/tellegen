@@ -152,6 +152,31 @@ export interface DistGraphAttachment {
   id: string;
 }
 
+/** How a load or generator is connected; an IBR's inverter topology. */
+export type DistConnection =
+  | "wye"
+  | "delta"
+  | "single_phase"
+  | "three_leg"
+  | "four_leg"
+  | "other";
+
+/** An attachment with its terminals in its own order and, where the model states it, its
+ * connection. */
+export interface DistAttachmentDetail extends DistGraphAttachment {
+  terminals: string[];
+  connection?: DistConnection;
+}
+
+/** One transformer winding: its bus, wye or delta, its terminals, rated volts and volt-amperes. */
+export interface DistWindingDetail {
+  bus: string;
+  connection: "wye" | "delta" | "other";
+  terminals: string[];
+  v_ref: number;
+  s_rating: number;
+}
+
 /** One bus node in the collapsed distribution graph. `xy` is present when the
  * source carried a position (`[x, y]`, longitude/latitude when the case is
  * geographic); `terminal_attachments` maps each terminal name to the elements
@@ -174,6 +199,8 @@ export interface DistGraphBus {
    * polyphase winding's line-to-line rating, a single-phase winding's own, a polyphase source's
    * line-to-line magnitude. For telling voltage levels apart, not a base for calculation. */
   nominal_voltage?: number;
+  /** The bus's attachments with their terminals and connections. */
+  attachments?: DistAttachmentDetail[];
 }
 
 export interface DistVoltageLimits {
@@ -204,6 +231,8 @@ export interface DistGraphEdge {
   n_phases: number;
   /** Present only when the model declares a rating. */
   rating?: DistEdgeRating;
+  /** For a transformer: all its windings. Every winding-pair edge of it carries the same list. */
+  windings?: DistWindingDetail[];
 }
 
 /** The render-ready bus/terminal projection of a distribution network. */
