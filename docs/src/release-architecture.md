@@ -147,7 +147,7 @@ and commit the file it writes. See `.changeset/README.md`.
 
 On a push to `main`, `.github/workflows/release-npm.yml` keeps a "Release
 packages" pull request open. That pull request applies every pending changeset:
-version bumps, changelog entries, the engine `CONTRACT_VERSION`, and the
+version bumps, changelog entries, the engine `ENGINE_VERSION`, and the
 lockfile. Merge it to run the gates and publish. Tags take the form
 `@tellegen/<name>@X.Y.Z`.
 

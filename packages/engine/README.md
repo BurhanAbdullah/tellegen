@@ -56,20 +56,20 @@ Every API that accepts a byte buffer rejects inputs larger than
   `kind: "distribution"` with a `format`; `not-json` is `unknown`; and
   `transmission` and `ambiguous` are additional outcomes.
 
-## Contracts
+## Generated types
 
-The public contract version is `CONTRACT_VERSION`, which matches the package version. `CONTRACT_SOURCE_SHA256` records the `crates/tellegen/src/api.rs` content used to generate `src/generated/contracts.ts`.
+`ENGINE_VERSION` is the package version. `API_SOURCE_SHA256` records the `crates/tellegen/src/api.rs` content used to generate `src/generated/api-types.ts`.
 
 Run the generator after Rust API changes:
 
 ```sh
-npm run contracts
+npm run types
 ```
 
 CI runs `npm run build:engine` from the repository root, and that runs
-`contracts:check`. A stale generated contract fails the build.
+`types:check`. Stale generated types fail the build.
 
-Breaking contract changes:
+Breaking changes to the generated types:
 
 - Removing or renaming exported request or response fields.
 - Changing field units, enum tags, formulation ids, solve status tags, or sensitivity operand/parameter shapes.

@@ -2755,7 +2755,7 @@
     "preview",
     "error"
   ],
-  "title": "SynthContract",
+  "title": "SynthSchema",
   "type": "object",
   "x-rust-source-sha256": "88b06fa7d48944718c254433a835ffde1bf727bd52e1d33714be5958d7ff66f6"
 }

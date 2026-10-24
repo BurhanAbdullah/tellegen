@@ -49,7 +49,7 @@ sensitivity = ["dep:faer", "dep:num-complex"]
 # Clarabel's second-order cone support (already linked); the sensitivity reuses the faer
 # paths, so `conic` pulls `sensitivity`. Additive, no new dependency.
 conic = ["sensitivity"]
-# JSON Schema derives used by the headless CLI contract. Kept out of the
+# JSON Schema derives for the CLI's `describe` output. Kept out of the
 # browser and numerical builds.
 schema = ["dep:schemars", "powerio/schema"]
 
@@ -57,7 +57,7 @@ schema = ["dep:schemars", "powerio/schema"]
 workspace = true
 
 [[example]]
-name = "study_contract"
+name = "study_schema"
 required-features = ["schema"]
 
 [[example]]

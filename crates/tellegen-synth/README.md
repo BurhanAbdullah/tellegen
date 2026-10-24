@@ -55,5 +55,5 @@ println!("{} buses, DC OPF {:?}", module.value().buses().len(), dc.status);
 map preview between stages, for hosts that show progress or cancel.
 
 Features: `schema` derives JSON Schema for the generated TypeScript
-contracts; `embedded-places` bundles `data/populated_places.json` for the
+types; `embedded-places` bundles `data/populated_places.json` for the
 CLI and offline tests.

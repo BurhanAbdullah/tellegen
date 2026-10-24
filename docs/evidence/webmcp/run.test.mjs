@@ -109,7 +109,7 @@ test("invocation requires every capacity and solve bound", () => {
   );
 });
 
-test("invocation rejects request fields the Rust contract does not state", () => {
+test("invocation rejects request fields the Rust request type does not state", () => {
   assert.throws(
     () =>
       validateSpec({
@@ -252,7 +252,7 @@ test("proposal reconstructs exactly from accepted trials", () => {
   );
 });
 
-test("the JSON Schemas parse and name the checked in contracts", async () => {
+test("the JSON Schemas parse and name the checked in formats", async () => {
   const specSchema = JSON.parse(
     await readFile(new URL("./spec.schema.json", import.meta.url), "utf8"),
   );

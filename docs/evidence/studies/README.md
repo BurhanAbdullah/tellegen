@@ -2,7 +2,7 @@
 
 These declarations exercise capacity changes, conserved demand redistribution
 and an AC power-flow voltage target through the installed native interface.
-The browser and PowerMCP use the same Rust contracts and experiment model.
+The browser and PowerMCP use the same Rust request types and experiment model.
 
 Build the optimized CLI for large grids:
 

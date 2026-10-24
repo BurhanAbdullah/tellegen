@@ -4,8 +4,8 @@
 
 ## Constants
 
-- `CONTRACT_VERSION`: the public TypeScript contract version. It matches the package version.
-- `CONTRACT_SOURCE_SHA256`: the `crates/tellegen/src/api.rs` hash used to generate the TypeScript contracts.
+- `ENGINE_VERSION`: the `@tellegen/engine` package version.
+- `API_SOURCE_SHA256`: the `crates/tellegen/src/api.rs` hash the generated TypeScript types were built from.
 - `FORMULATION_IDS` and `SOLVE_STATUSES`: generated enum tags from the Rust API layer.
 - `FORMULATIONS` and `DEFAULT_FORMULATION`: browser UI formulation list and default formulation.
 
@@ -153,4 +153,4 @@ Public types include:
 - `IngestedJsonDrop`, `JsonDropClassification`, `JsonDropKind`
 - `BrowserFormulation`, `FormulationId`, `SolveStatus`
 
-The generated file is committed at `packages/engine/src/generated/contracts.ts` and checked in CI.
+The generated file is committed at `packages/engine/src/generated/api-types.ts` and checked in CI.

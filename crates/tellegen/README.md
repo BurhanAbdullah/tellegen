@@ -67,13 +67,13 @@ into the current build.
 The 0.3 release uses PowerIO 0.11 typed problem instances and generation-2
 `pio-ir` documents. Rust consumers must use the matching PowerIO types when
 calling `solve_instance`, `solve_ac_pf_instance`, or `solve_ac_instance`.
-The module JSON entry points require the same generation-2 input contract.
+The module JSON entry points require the same generation-2 input format.
 These input changes require migration from the 0.2 API and are released as a
 new minor version, rather than a compatible patch to 0.2.
 
 Persistent investigations use `document::StudyDocument` and the operations in
 `study_ops`, with immutable states, goal revisions and explicit application.
-The document's schema version identifies its storage contract separately from
+The document's schema version identifies its storage format separately from
 the crate version and PowerIO IR generation.
 
 ## Build

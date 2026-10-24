@@ -6,7 +6,7 @@ use std::fmt::Write;
 
 #[derive(JsonSchema)]
 #[allow(dead_code)]
-struct StudyContract {
+struct StudySchema {
     bundle: tellegen::document::StudyBundle,
     create: tellegen::study_ops::CreateStudy,
     request: tellegen::study_ops::StudyRequest,
@@ -21,7 +21,7 @@ fn main() {
         include_str!("../src/exploration.rs"),
         include_str!("../src/study_ops.rs"),
         include_str!("../src/api.rs"),
-        include_str!("../src/sens/contract.rs"),
+        include_str!("../src/sens/interface.rs"),
         include_str!("../src/solve.rs"),
     ];
     let mut hash = Sha256::new();
@@ -29,7 +29,7 @@ fn main() {
         hash.update(source.as_bytes());
     }
     let mut schema =
-        serde_json::to_value(schemars::schema_for!(StudyContract)).expect("Study schema");
+        serde_json::to_value(schemars::schema_for!(StudySchema)).expect("Study schema");
     let digest = hash.finalize();
     let mut hex = String::with_capacity(64);
     for byte in digest {

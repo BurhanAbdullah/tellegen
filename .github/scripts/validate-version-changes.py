@@ -100,7 +100,7 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
         "package-lock.json",
         "packages/engine/CHANGELOG.md",
         "packages/engine/package.json",
-        "packages/engine/src/generated/contracts.ts",
+        "packages/engine/src/generated/api-types.ts",
         "packages/svelte/CHANGELOG.md",
         "packages/svelte/package.json",
         "packages/webmcp/CHANGELOG.md",

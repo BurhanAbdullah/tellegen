@@ -28,9 +28,9 @@ creates outputs with exclusive writes, so a second run cannot replace evidence
 silently.
 
 The checked-in CATS, Texas7k, and native-browser result files use the historical
-generation-1 contract and identify their old PowerIO revision in `software`.
+generation-1 result format and identify their old PowerIO revision in `software`.
 They remain audit records, not evidence for the v0.11 pin. A clean rerun writes
-the generation-2 result contract and must replace them before they are cited as
+the generation-2 result format and must replace them before they are cited as
 current.
 
 `--allow-dirty` exists for local harness debugging and always marks the

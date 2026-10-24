@@ -1,5 +1,5 @@
-// TypeScript contracts for synthetic grid generation, generated from the
-// JSON Schema that `crates/tellegen-synth/examples/synth_contract.rs` emits.
+// TypeScript types for synthetic grid generation, generated from the
+// JSON Schema that `crates/tellegen-synth/examples/synth_schema.rs` emits.
 // `--check` fails when the schema is older than the Rust records or the
 // TypeScript is older than the schema.
 import { createHash } from "node:crypto";
@@ -15,7 +15,7 @@ const hash = createHash("sha256");
 for (const source of sources) hash.update(readFileSync(join(root, "crates/tellegen-synth/src", source)));
 if (hash.digest("hex") !== schema["x-rust-source-sha256"]) {
   throw new Error(
-    "Synth schema is stale. Run cargo run -p tellegen-synth --example synth_contract --features schema > packages/engine/src/generated/synth.schema.json",
+    "Synth schema is stale. Run cargo run -p tellegen-synth --example synth_schema --features schema > packages/engine/src/generated/synth.schema.json",
   );
 }
 
@@ -65,13 +65,13 @@ function type(node) {
 }
 
 const definitions = Object.entries(schema.$defs).map(([name, definition]) => `export type ${name} = ${type(definition)};`);
-const generated = `// Generated from Rust by synth_contract and generate-synth-contracts.mjs.\n// Source SHA256: ${schema["x-rust-source-sha256"]}\n\n${definitions.join("\n\n")}\n`;
-const typesOutput = join(generatedDir, "synth-contracts.ts");
+const generated = `// Generated from Rust by synth_schema and generate-synth-types.mjs.\n// Source SHA256: ${schema["x-rust-source-sha256"]}\n\n${definitions.join("\n\n")}\n`;
+const typesOutput = join(generatedDir, "synth-types.ts");
 const schemaOutput = join(generatedDir, "synth-schema.ts");
-const schemaSource = `// Generated from the Rust synthetic generation contract.\nexport const synthSchema: Record<string, unknown> = ${JSON.stringify(schema)};\n`;
+const schemaSource = `// Generated from the Rust synthetic generation types.\nexport const synthSchema: Record<string, unknown> = ${JSON.stringify(schema)};\n`;
 if (process.argv.includes("--check")) {
-  if (readFileSync(typesOutput, "utf8") !== generated) throw new Error("Synth TypeScript contracts are stale; run npm run contracts");
-  if (readFileSync(schemaOutput, "utf8") !== schemaSource) throw new Error("Synth runtime schema is stale; run npm run contracts");
+  if (readFileSync(typesOutput, "utf8") !== generated) throw new Error("Synth TypeScript types are stale; run npm run types");
+  if (readFileSync(schemaOutput, "utf8") !== schemaSource) throw new Error("Synth runtime schema is stale; run npm run types");
 } else {
   writeFileSync(typesOutput, generated);
   writeFileSync(schemaOutput, schemaSource);

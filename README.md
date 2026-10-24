@@ -25,7 +25,7 @@ Live demo: [tellegen.dev](https://tellegen.dev). Documentation:
 ```sh
 npm install @tellegen/engine   # case parsing and wasm solves, framework agnostic
 npm install @tellegen/svelte   # map, panels, and solve card as Svelte components
-npm install @tellegen/webmcp   # WebMCP tools and host adapter contract
+npm install @tellegen/webmcp   # WebMCP tools and host adapter
 ```
 
 `@tellegen/engine` exports case parsing, browser solving, the `Study` preview

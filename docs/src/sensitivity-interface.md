@@ -1,4 +1,4 @@
-# The sensitivity contract
+# The sensitivity interface
 
 Every sensitivity comes from a converged solution by the implicit function theorem
 on a residual $K(z, p) = 0$:

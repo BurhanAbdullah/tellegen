@@ -15,8 +15,8 @@
   ],
   "scripts": {
     "wasm": "npm --workspace @tellegen/engine run wasm",
-    "contracts": "npm --workspace @tellegen/engine run contracts",
-    "contracts:check": "npm --workspace @tellegen/engine run contracts:check",
+    "types": "npm --workspace @tellegen/engine run types",
+    "types:check": "npm --workspace @tellegen/engine run types:check",
     "check:engine": "npm --workspace @tellegen/engine run check",
     "build:engine": "npm --workspace @tellegen/engine run build",
     "pack:engine": "npm --workspace @tellegen/engine pack --dry-run",
@@ -44,7 +44,7 @@
     "test:downstream": "npm run test:import && npm run test:svelte-packed",
     "ci:js": "npm run check && npm run build && npm run pack:webmcp && npm run pack:svelte && npm run smoke:web && npm run test:downstream && npm run test:evidence",
     "changeset": "changeset",
-    "version:packages": "changeset version && npm run contracts && npm install --package-lock-only --ignore-scripts"
+    "version:packages": "changeset version && npm run types && npm install --package-lock-only --ignore-scripts"
   },
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",

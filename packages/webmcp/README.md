@@ -3,7 +3,7 @@
 WebMCP tools for interactive Tellegen cases that do not depend on a UI
 framework. The package owns tool descriptors, JSON Schemas, runtime validation,
 security annotations, bounded responses, registration lifecycle, and an
-adapter contract. It has no dependency on Svelte or `@tellegen/engine`.
+adapter interface. It has no dependency on Svelte or `@tellegen/engine`.
 
 ```sh
 npm install @tellegen/webmcp
@@ -72,7 +72,7 @@ PowerIO v0.11 generation-2 `pio-ir` modules, typed state selection, and
 calculation instances behind that interface.
 
 See the [WebMCP guide](https://eigenergy.github.io/tellegen/webmcp.html) for the
-tool contract, security model, and test workflow.
+tool definitions, security model, and test workflow.
 
 ## Citing
 
