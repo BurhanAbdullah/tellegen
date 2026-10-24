@@ -1303,7 +1303,8 @@ dependencies = [
 [[package]]
 name = "powerio"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c248cd67235f98bafdd2fc575d8ae0cbde1845cb505e4c9c6de0a9d15bbc461"
 dependencies = [
  "num-complex",
  "powerio-core",
@@ -1319,7 +1320,8 @@ dependencies = [
 [[package]]
 name = "powerio-core"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b9c40c8403e8ec2770f02d4af61290e114d313971aba5868b675c3c93bfbc40"
 dependencies = [
  "errno",
  "libc",
@@ -1331,7 +1333,8 @@ dependencies = [
 [[package]]
 name = "powerio-dist"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12bd6ad1814877fec6ebee338a958f398d29bb1334c5656ba2b8a897ad732c54"
 dependencies = [
  "memchr",
  "num-complex",
@@ -1347,7 +1350,8 @@ dependencies = [
 [[package]]
 name = "powerio-matrix"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59145ea129e0cddfca2f8518c97c3b70f31486feccb929db768ec93dd8f3071e"
 dependencies = [
  "faer",
  "num-complex",
@@ -1368,7 +1372,8 @@ dependencies = [
 [[package]]
 name = "powerio-prob"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88daa842edd21385ade7087d0693f033517a71b7d89c422f4361f7d3b6a12de9"
 dependencies = [
  "powerio-core",
  "powerio-dist",
@@ -1382,7 +1387,8 @@ dependencies = [
 [[package]]
 name = "powerio-tnd"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21870b68b08554883197ecb5d849814f0830d1dbfc96999574300a3f8075aafb"
 dependencies = [
  "num-complex",
  "powerio-core",
@@ -1396,7 +1402,8 @@ dependencies = [
 [[package]]
 name = "powerio-tx"
 version = "0.11.6"
-source = "git+https://github.com/eigenergy/powerio.git?rev=305614168d09daf7ddcc3128d08453f0a59cb8b8#305614168d09daf7ddcc3128d08453f0a59cb8b8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7924816e537a4321b6eb11a7a85c97499cacaa618b2c2a972995235830ee2cf8"
 dependencies = [
  "lexical-core",
  "memchr",
