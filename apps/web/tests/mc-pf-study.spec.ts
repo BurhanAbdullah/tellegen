@@ -450,6 +450,7 @@ for (const nominalVoltage of [200, 240]) {
 		).toHaveText(modelLoss);
 
 		await page.reload();
+		await expect(page.getByText('no default cases loaded')).toBeVisible();
 		await page.locator('header input[type="file"][accept*=".dss"]').setInputFiles({
 			name: 'mc-pf-load-models-constant-power.bmopf.json',
 			mimeType: 'application/json',
