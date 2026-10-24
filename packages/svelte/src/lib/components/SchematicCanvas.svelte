@@ -43,7 +43,6 @@
 		describeBus,
 		treeWalk,
 		type WalkKey,
-		BASEMAP_ATTRIBUTION,
 		BASEMAP_STYLE,
 		basemapCamera,
 		cameraFromMap,
@@ -97,17 +96,36 @@
 	import PickCard from './schematic/PickCard.svelte';
 	import { SchematicText, tooltip } from './schematic/text.js';
 	import { HoverPin, StoredFlag } from './schematic/view-prefs.svelte.js';
+	import {
+		applyBasemapTuning,
+		attachBasemapFallback,
+		basemapCredit,
+		type BasemapProvider,
+		type BasemapSpec
+	} from '../basemap.js';
+
+	/** Without a basemap from the map: the keyless CARTO style it used to default to. */
+	const DEFAULT_BASEMAP: BasemapSpec = {
+		primary: BASEMAP_STYLE,
+		fallback: null,
+		hideLabels: false,
+		primaryProvider: 'carto',
+		fallbackProvider: null
+	};
 
 	let {
 		mc,
 		onselectbus,
 		onselectedge,
-		onclose
+		onclose,
+		basemap: basemapSpec = DEFAULT_BASEMAP
 	}: {
 		mc: MulticonductorCase;
 		onselectbus: (id: string) => void;
 		onselectedge: (id: string) => void;
 		onclose: () => void;
+		/** The background map under geographic positions: the map's own basemap, light-themed. */
+		basemap?: BasemapSpec;
 	} = $props();
 
 	type Layout = 'schematic' | 'source';
@@ -145,6 +163,8 @@
 	let mapBox = $state<HTMLDivElement>();
 	let basemap: import('maplibre-gl').Map | null = null;
 	let basemapLoading = false;
+	/** Who serves the basemap on screen, for its credit line. */
+	let basemapProvider = $state<BasemapProvider>('custom');
 	/** Landmarks placed for the current view, with their fixed-pixel glyph strokes. */
 	let marks = $state.raw<{
 		placed: Landmark[];
@@ -227,20 +247,30 @@
 		if (!basemapWanted || !mapBox || basemap || basemapLoading) return;
 		basemapLoading = true;
 		const container = mapBox;
+		const spec = basemapSpec;
+		basemapProvider = spec.primaryProvider ?? 'custom';
 		Promise.all([
 			import('maplibre-gl'),
-			import('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url')
+			// As the map loads it: a package export keeps the worker out of the dev pre-bundle.
+			import('@tellegen/svelte/maplibre-worker').then((m) => m.maplibreWorkerUrl())
 		])
-			.then(([maplibre, worker]) => {
-				maplibre.setWorkerUrl(worker.default);
+			.then(([maplibre, workerUrl]) => {
+				maplibre.setWorkerUrl(workerUrl);
 				const origin = source?.mercatorOrigin ?? [0, 0];
-				basemap = new maplibre.Map({
+				const m = new maplibre.Map({
 					container,
-					style: BASEMAP_STYLE,
+					style: spec.primary,
 					interactive: false,
 					attributionControl: false,
 					...basemapCamera(camera, origin)
 				});
+				// The same style handling as the map: labels hidden when asked, OpenFreeMap tuned, and
+				// the fallback style when the primary cannot be shown.
+				m.on('style.load', () => applyBasemapTuning(m, spec, 'light'));
+				attachBasemapFallback(m, spec, {
+					onFallback: (reason) => (basemapProvider = reason.to ?? 'custom')
+				});
+				basemap = m;
 			})
 			.catch(() => {
 				basemapLoading = false;
@@ -1685,7 +1715,7 @@
 			style:right="{panels.compact ? 12 : panels.dockWidth('right') + 24}px"
 			style:bottom="{panels.compact ? app.sheetInset + 8 : 8}px"
 		>
-			{BASEMAP_ATTRIBUTION}
+			{basemapCredit(basemapProvider)}
 		</p>
 	{/if}
 	{#if status}<p class="status" role="status">{status}</p>{/if}

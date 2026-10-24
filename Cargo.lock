@@ -1293,9 +1293,9 @@ dependencies = [
 
 [[package]]
 name = "powerio"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "008b630a95787a45417ee63035167f82d07c2b7c140043f7a36db04944f157ca"
+checksum = "dae1f471e5054298d10fd67c5773fd45a495e52cdeb8907905349ef39e4fbeab"
 dependencies = [
  "num-complex",
  "powerio-core",
@@ -1309,9 +1309,9 @@ dependencies = [
 
 [[package]]
 name = "powerio-core"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bb971c50ae0e2327b46a127491f0a7a72e4136cae04e5a38535f9e842cd1638"
+checksum = "1a9219e47c41c8a8d7e87f41109bda551b977cd83a9b92551d26de4e81f1710d"
 dependencies = [
  "errno",
  "libc",
@@ -1322,9 +1322,9 @@ dependencies = [
 
 [[package]]
 name = "powerio-dist"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f7f4fe9733a6fe3078b89bf8570953bc874b21efcc239bf03b8ee6dfe7f5c7"
+checksum = "4b2f0edc7d2a571dbffcd6d3f78e680b5e185c606cb392a9aa0b2dc2be6dba49"
 dependencies = [
  "num-complex",
  "powerio-core",
@@ -1336,9 +1336,9 @@ dependencies = [
 
 [[package]]
 name = "powerio-matrix"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5691f3165e002d2e27f0d7e77b27aff08ab9017c4dcb5953c537384947071325"
+checksum = "bca025b4cb36e133c7ea05838810aaf6087dd5c421ade4a01a2a03c319774a3a"
 dependencies = [
  "faer",
  "num-complex",
@@ -1358,9 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "powerio-prob"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fe781218603563a2b8888d6f455767b56ad88095379a4f292a5302275a632d"
+checksum = "daa0f52781ec322f80415c1333da738a2019254658dbd3083590d717a70a9503"
 dependencies = [
  "powerio-core",
  "powerio-dist",
@@ -1373,11 +1373,12 @@ dependencies = [
 
 [[package]]
 name = "powerio-tx"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28068bc61d049f228a158841c40747c976e7fd988a7b4498c0259c4412747c2"
+checksum = "0e51fe909042fae6bd81716e67c6c8f9f1205ca6a8a47c36d4a1a720591c00fb"
 dependencies = [
  "lexical-core",
+ "memchr",
  "petgraph",
  "powerio-core",
  "quick-xml",
@@ -2034,9 +2035,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
 dependencies = [
  "bytes",
  "libc",

@@ -222,7 +222,7 @@
 
 	.footnote {
 		margin: 8px 0 0;
-		font-size: 10px;
+		font-size: 12px;
 		color: var(--text-tertiary);
 		letter-spacing: 0;
 	}
@@ -231,7 +231,7 @@
 		margin: 8px 0 0;
 		padding: 0;
 		list-style: none;
-		font-size: 10.5px;
+		font-size: 12.5px;
 		line-height: 1.5;
 		color: var(--text-accent);
 	}
@@ -254,7 +254,7 @@
 		padding: 4px;
 		list-style: none;
 		min-width: 100%;
-		background: var(--surface, #fff);
+		background: var(--surface, var(--surface-menu));
 		border: 1px solid var(--border, rgba(0, 0, 0, 0.15));
 		border-radius: 6px;
 		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);

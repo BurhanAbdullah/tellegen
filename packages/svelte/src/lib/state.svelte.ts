@@ -431,6 +431,10 @@ export class AppState {
 	/** Re-runs the operation behind the current `error`, when one applies. Every
 	 * write to `error` clears it, so a retry op can never outlive its message. */
 	errorRetry: (() => void) | null = $state.raw<(() => void) | null>(null);
+	/** Technical detail behind the current `error`, when the message itself is
+	 * written for people; notices keep it in their disclosure. Every write to
+	 * `error` clears it, as it clears `errorRetry`. */
+	errorDetail = $state<string | null>(null);
 
 	get error(): string | null {
 		return this.#error;
@@ -440,6 +444,7 @@ export class AppState {
 		this.#error = message;
 		if (message) this.errorRevision++;
 		this.errorRetry = null;
+		this.errorDetail = null;
 	}
 
 	/** Case files parsed in the browser via the powerio wasm module. */

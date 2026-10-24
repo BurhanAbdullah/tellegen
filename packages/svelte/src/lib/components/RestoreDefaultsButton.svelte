@@ -24,7 +24,7 @@
 		color: var(--text-secondary);
 		font-size: 11px;
 		cursor: pointer;
-		box-shadow: 0 2px 10px rgba(32, 36, 43, 0.1);
+		box-shadow: var(--elev-1);
 	}
 
 	.restore-defaults:hover {
