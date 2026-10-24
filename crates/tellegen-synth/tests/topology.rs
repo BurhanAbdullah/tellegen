@@ -100,7 +100,7 @@ fn heavy_demand_adds_circuits_keeps_ratings_physical_and_says_so() {
     assert!(plan.max_planning_loading <= PLANNING_UTILISATION + 1e-9);
     assert!(plan.angle_spread_deg <= MAX_ANGLE_SPREAD_RAD.to_degrees() + 1e-9);
     for br in net.branches() {
-        let e = &br.extras["maptogrid"];
+        let e = &br.extras["tellegen_synth"];
         let (class, ratio) = class_ratio(e["nominal_kv"].as_f64().unwrap());
         match e["rating_basis"].as_str().unwrap() {
             "thermal" | "loadability" => assert!(br.rate_a <= class.thermal_mva * ratio + 1e-9),

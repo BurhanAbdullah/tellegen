@@ -36,7 +36,7 @@ pub struct DraftHvdc {
 }
 
 /// Key under which element extras are stored in the module.
-pub const EXTRAS_KEY: &str = "maptogrid";
+pub const EXTRAS_KEY: &str = "tellegen_synth";
 
 pub struct BuiltNetwork {
     pub net: BalancedNetwork,

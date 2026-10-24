@@ -33,9 +33,9 @@ read-only pull-request access; repository metadata read access is implicit.
 ## Prereleases
 
 While `.changeset/pre.json` exists, the repository is in Changesets pre mode.
-It is in pre mode with the `next` tag until 0.4.0 ships, so that MapToGrid can
+The 0.4.0 cycle entered pre mode with the `next` tag so that MapToGrid could
 build against `@tellegen/engine` and `@tellegen/svelte` from npm before the
-stable release.
+stable release, and left it before any prerelease was published.
 
 Changesets work as usual in pre mode. The version pull request differs in three
 ways:

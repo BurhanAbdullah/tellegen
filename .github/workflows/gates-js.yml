@@ -46,7 +46,7 @@ jobs:
       # them unnoticed.
       - run: npm run build:example
       - run: npm run smoke:web
-      # The WebMCP challenge evidence harness (evidence/webmcp) has its own
+      # The WebMCP challenge evidence harness (docs/evidence/webmcp) has its own
       # unit tests and nothing else runs them.
       - run: npm run test:evidence
       - name: Build the opt-in AC OPF browser test app

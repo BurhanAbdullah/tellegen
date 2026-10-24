@@ -36,8 +36,11 @@ declared objective. The module carries bus locations and branch routes, so
 it renders on a map without a sidecar.
 
 The library has no clock, no filesystem access and no platform randomness:
-the same request and places table reproduce the same grid, byte for byte,
-natively and in WebAssembly.
+the same request and places table reproduce the same grid, byte for byte, on
+the same build and platform. Native and WebAssembly runs agree in structure in
+the cases tested, but their floating-point values differ in the last bits,
+because the two platforms' math libraries round `ln`, `exp`, `sin` and `cos`
+differently. Compare values across platforms with a tolerance, not by hash.
 
 ```rust
 use std::sync::Arc;
@@ -55,5 +58,5 @@ println!("{} buses, DC OPF {:?}", module.value().buses().len(), dc.status);
 map preview between stages, for hosts that show progress or cancel.
 
 Features: `schema` derives JSON Schema for the generated TypeScript
-contracts; `embedded-places` bundles `data/populated_places.json` for the
+types; `embedded-places` bundles `data/populated_places.json` for the
 CLI and offline tests.

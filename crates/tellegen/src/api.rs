@@ -165,7 +165,7 @@ pub struct Edits {
 
 /// One requested sensitivity cell: an [`Operand`] differentiated with respect to a
 /// [`Parameter`], over an optional parameter-index subset, in an optional direction.
-/// The operand/parameter are the contract's serde-tagged enums verbatim
+/// The operand/parameter are the public serde-tagged enums verbatim
 /// (`{"Price":"Active"}` / `{"Demand":"Active"}`).
 #[cfg(feature = "sensitivity")]
 #[derive(Clone, Debug, Deserialize)]
@@ -1115,7 +1115,7 @@ pub(crate) fn socwr_assemble(
 // ---------------------------------------------------------------------------
 
 /// Run each requested cell against the solved system and rescale to served units.
-/// Takes `&dyn Differentiable` — the contract type — so every concrete system
+/// Takes `&dyn Differentiable` — the trait object — so every concrete system
 /// (`DcKkt`, `AcNewton`, `ConicKkt`) coerces here; the `dyn` boundary is crossed once
 /// per cell, never inside the linear algebra.
 #[cfg(feature = "sensitivity")]
@@ -2097,7 +2097,7 @@ mod tests {
             .map(|f| f["formulation"].as_str().unwrap())
             .collect();
         assert_eq!(tags, vec!["dcpf", "dcopf", "acpf", "socwr", "acopf"]);
-        // DC OPF is always built. AC OPF keeps a stable wire-contract entry and
+        // DC OPF is always built. AC OPF keeps a stable JSON format entry and
         // reports availability according to the opt-in feature.
         let dc_opf = arr.iter().find(|f| f["formulation"] == "dcopf").unwrap();
         assert_eq!(dc_opf["available"], true);
