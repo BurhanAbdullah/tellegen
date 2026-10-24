@@ -36,8 +36,7 @@ export const LEVEL_COLOURS: Record<VoltageClass, RGBA> = {
 	lv: [138, 131, 117, 210]
 };
 
-/** Hover emphasis for a network and its feeder, beneath the lines; a problem network takes its
- * state's colour instead. */
+/** Hover emphasis for a network and its feeder, beneath the lines, whatever the network's state. */
 export const HALO: RGBA = [64, 72, 92, 255];
 
 /** The hovered element's path back to the source: green, the one family no level, state or

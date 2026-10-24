@@ -90,7 +90,7 @@
 		type SchematicScene
 	} from './schematic/layers.js';
 	import type { FanState } from './schematic/paint.js';
-	import { DEAD, HALO, INK, LEVEL_COLOURS, ZONE_COLOURS } from './schematic/palette.js';
+	import { DEAD, HALO, INK, LEVEL_COLOURS } from './schematic/palette.js';
 	import PickCard from './schematic/PickCard.svelte';
 	import { SchematicText, tooltip } from './schematic/text.js';
 	import { HoverPin, StoredFlag } from './schematic/view-prefs.svelte.js';
@@ -553,13 +553,14 @@
 	const hover = $derived.by((): SchematicScene['hover'] => {
 		if (!hoverPlace || hoverPlace.zone < 0) return null;
 		const { zone: z, feeder: f, from } = hoverPlace;
-		const state = zoneStates[z];
 		return {
 			network: new Set(zones.zones[z].edges),
 			feeder: new Set(f >= 0 ? feederSet.feeders[f].edges : []),
 			path: new Set(pathPref.value && from >= 0 ? pathToSource(tree, from) : []),
 			supply: supplyPoint(z),
-			tint: state === 'warning' || state === 'violation' ? ZONE_COLOURS[state][1] : HALO
+			// Neutral, whatever the network's state: the corridors and outlines show the state, the
+			// hover shows where.
+			tint: HALO
 		};
 	});
 	/** Per-edge and per-bus colours for the active mode; results never recolour inactive branches. */
