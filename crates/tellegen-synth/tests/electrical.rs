@@ -21,7 +21,7 @@ fn generated_network_respects_the_electrical_invariants() {
         .count();
     assert_eq!(refs, 1, "exactly one reference bus on one island");
     for br in net.branches() {
-        let extras = &br.extras["maptogrid"];
+        let extras = &br.extras["tellegen_synth"];
         assert!(br.r > 0.0 && br.x > 0.0 && br.b >= 0.0, "{br:?}");
         assert!(br.rate_a > 0.0);
         let (class, ratio) = class_ratio(extras["nominal_kv"].as_f64().unwrap());
