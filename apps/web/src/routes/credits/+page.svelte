@@ -101,6 +101,44 @@
 			</li>
 		</ul>
 	</section>
+
+	<section>
+		<h2>Synthetic Grid Data</h2>
+		<p>
+			The engine's synthetic grid generator is compiled into this site's WebAssembly with these
+			tables:
+		</p>
+		<ul>
+			<li>
+				National electricity demand from Ember's
+				<a
+					href="https://ember-energy.org/data/yearly-electricity-data/"
+					target="_blank"
+					rel="noreferrer">Yearly Electricity Data</a
+				>, through Our World in Data's
+				<a href="https://github.com/owid/energy-data" target="_blank" rel="noreferrer"
+					>energy dataset</a
+				>, under
+				<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer"
+					>CC BY 4.0</a
+				>. The table keeps each country's latest year. Its population column is Our World in Data's
+				series, compiled from the
+				<a href="https://ourworldindata.org/population-sources" target="_blank" rel="noreferrer"
+					>sources it lists</a
+				>.
+			</li>
+			<li>
+				Populated places and country areas from
+				<a href="https://www.naturalearthdata.com/" target="_blank" rel="noreferrer"
+					>Natural Earth</a
+				>, in the public domain.
+			</li>
+			<li>
+				National transmission voltage levels, compiled from the operator, regulator and standards
+				documents each entry cites.
+			</li>
+		</ul>
+	</section>
 </main>
 
 <style>

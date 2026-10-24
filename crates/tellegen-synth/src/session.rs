@@ -521,7 +521,10 @@ impl Generator {
                 }
             }
         }
-        let name = format!("maptogrid_{}", &self.report.provenance.request_sha256[..16]);
+        let name = format!(
+            "tellegen_synth_{}",
+            &self.report.provenance.request_sha256[..16]
+        );
         let (hvdc, coords_kind, osm_ids, makeup) = match self.state.osm.as_ref() {
             Some(osm) => (
                 osm.hvdc_links(),

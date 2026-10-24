@@ -184,7 +184,10 @@ with tempfile.TemporaryDirectory() as directory:
     for _, path in crate_entries:
         write(path)
     validator.validate_crate(crate_entries)
+    validator.validate_crate([(" M", "crates/tellegen/CHANGELOG.md")])
     rejects(lambda: validator.validate_crate(crate_entries[:-1]))
+    rejects(lambda: validator.validate_crate(crate_entries[1:]))
+    rejects(lambda: validator.validate_crate([(" M", "Cargo.lock")]))
     os.chmod("Cargo.lock", 0o755)
     rejects(lambda: validator.validate_crate(crate_entries))
 

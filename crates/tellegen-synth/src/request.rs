@@ -566,12 +566,17 @@ impl SynthRequest {
     /// context stage.
     pub fn validate(&self) -> Result<(), SynthError> {
         let bad = |m: String| Err(SynthError::InvalidRequest(m));
+        // The upper bounds below sit far outside any real system; they keep a
+        // huge but finite number from overflowing later arithmetic.
+        if self.limits.max_bus_count == 0 {
+            return bad("limits.max_bus_count must be at least 1".into());
+        }
         if !self
             .voltage_levels_kv
             .iter()
-            .all(|v| v.is_finite() && *v > 0.0)
+            .all(|v| v.is_finite() && (1.0..=1500.0).contains(v))
         {
-            return bad("voltage levels must be positive finite numbers".into());
+            return bad("voltage levels must be between 1 and 1500 kV".into());
         }
         if let Some(n) = self.target_bus_count {
             if n < 1 || n > self.limits.max_bus_count {
@@ -594,16 +599,16 @@ impl SynthRequest {
                 per_capita_kw,
                 peak_factor,
             } => {
-                if per_capita_kw.is_some_and(|kw| !(kw.is_finite() && kw > 0.0)) {
-                    return bad("demand.per_capita_kw must be positive".into());
+                if per_capita_kw.is_some_and(|kw| !(kw.is_finite() && kw > 0.0 && kw <= 100.0)) {
+                    return bad("demand.per_capita_kw must be positive and at most 100".into());
                 }
-                if !(peak_factor.is_finite() && *peak_factor >= 1.0) {
-                    return bad("demand.peak_factor must be at least 1".into());
+                if !(peak_factor.is_finite() && (1.0..=10.0).contains(peak_factor)) {
+                    return bad("demand.peak_factor must be between 1 and 10".into());
                 }
             }
             DemandSpec::TotalMw { mw } => {
-                if !(mw.is_finite() && *mw >= 0.0) {
-                    return bad("demand.mw must be a non-negative finite number".into());
+                if !(mw.is_finite() && (0.0..=1.0e7).contains(mw)) {
+                    return bad("demand.mw must be between 0 and 1e7".into());
                 }
             }
         }
@@ -637,9 +642,6 @@ impl SynthRequest {
             if !(band[0].is_finite() && band[1].is_finite() && 0.0 < band[0] && band[0] < band[1]) {
                 return bad(format!("{name} must be an increasing positive pair"));
             }
-        }
-        if self.limits.max_bus_count == 0 {
-            return bad("limits.max_bus_count must be at least 1".into());
         }
         crate::geom::region::validate_geometry(&self.region.geometry)
             .map_err(SynthError::InvalidRequest)?;

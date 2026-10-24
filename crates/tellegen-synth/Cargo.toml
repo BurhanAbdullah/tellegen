@@ -38,7 +38,7 @@ schemars = { workspace = true, optional = true }
 
 [features]
 default = []
-# JSON Schema derives for the generated `@tellegen/engine/synth` contracts.
+# JSON Schema derives for the generated `@tellegen/engine/synth` types.
 schema = ["dep:schemars", "tellegen/schema", "powerio/schema"]
 # `include_bytes!` of data/populated_places.json for the CLI and offline tests.
 # Never enabled in the wasm build, which fetches the file beside the binary.
@@ -48,5 +48,5 @@ embedded-places = []
 workspace = true
 
 [[example]]
-name = "synth_contract"
+name = "synth_schema"
 required-features = ["schema"]

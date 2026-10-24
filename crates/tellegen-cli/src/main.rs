@@ -84,7 +84,8 @@ fn main() -> ExitCode {
                 serde_json::to_string(&serde_json::json!({"input": serialize_module(&PioModule::new(PioValue::BalancedNetwork(model)))?, "model_details": details})).map_err(|e| e.to_string())
             })
         }
-        "describe" | "contract" => return run(contract_json),
+        // `contract` is the command's earlier name, kept for existing callers.
+        "describe" | "contract" => return run(describe_json),
         "study" => return run(study_command),
         "-h" | "--help" => {
             println!("{USAGE}");
@@ -307,7 +308,7 @@ fn solve_module_text(text: &str) -> Result<String, String> {
 }
 
 /// A PowerIO IR document, carried as JSON and described by PowerIO's own
-/// schema in the contract.
+/// schema in the `describe` output.
 type PowerIoModule = serde_json::Value;
 type CapabilitiesResponse = Vec<tellegen::ProblemCaps>;
 
@@ -355,7 +356,7 @@ fn plan_from_text(text: &str) -> Result<String, String> {
     serde_json::to_string(&out).map_err(|e| e.to_string())
 }
 
-const CONTRACT_ID: &str = "tellegen.cli/1";
+const DESCRIBE_FORMAT: &str = "tellegen.cli/1";
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -365,9 +366,9 @@ struct PlanResponse {
     solution_module: PowerIoModule,
 }
 
-fn contract_value() -> Result<serde_json::Value, String> {
+fn describe_value() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
-        "contract": CONTRACT_ID,
+        "format": DESCRIBE_FORMAT,
         "tellegen_version": tellegen::VERSION,
         "powerio_version": env!("TELLEGEN_POWERIO_VERSION"),
         "schemas": {
@@ -393,8 +394,8 @@ fn contract_value() -> Result<serde_json::Value, String> {
     }))
 }
 
-fn contract_json() -> Result<String, String> {
-    serde_json::to_string(&contract_value()?).map_err(|error| error.to_string())
+fn describe_json() -> Result<String, String> {
+    serde_json::to_string(&describe_value()?).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -498,7 +499,7 @@ mpc.gencost = [
     }
 
     #[test]
-    fn runtime_outputs_match_each_named_contract_type() {
+    fn runtime_outputs_match_each_named_schema() {
         let module_json = test_module_json();
         let module: PowerIoModule =
             serde_json::from_str(&module_json).expect("powerio_module runtime value");
@@ -544,16 +545,16 @@ mpc.gencost = [
     }
 
     #[test]
-    fn contract_schema_matches_the_runtime_plan_envelope() {
-        let contract = contract_value().expect("contract");
-        assert_eq!(contract["contract"], CONTRACT_ID);
-        assert_eq!(contract["tellegen_version"], tellegen::VERSION);
+    fn describe_schemas_match_the_runtime_plan_envelope() {
+        let description = describe_value().expect("describe output");
+        assert_eq!(description["format"], DESCRIBE_FORMAT);
+        assert_eq!(description["tellegen_version"], tellegen::VERSION);
         assert_eq!(
-            contract["powerio_version"],
+            description["powerio_version"],
             env!("TELLEGEN_POWERIO_VERSION")
         );
 
-        let spec_properties = contract["schemas"]["capacity_plan_spec"]["properties"]
+        let spec_properties = description["schemas"]["capacity_plan_spec"]["properties"]
             .as_object()
             .expect("CapacityPlanSpec properties");
         let expected_spec = [
@@ -570,21 +571,21 @@ mpc.gencost = [
             assert!(spec_properties.contains_key(field), "missing {field}");
         }
 
-        let module_properties = contract["schemas"]["powerio_module"]["properties"]
+        let module_properties = description["schemas"]["powerio_module"]["properties"]
             .as_object()
             .expect("IR document properties");
         for field in ["schema", "version", "producer", "value"] {
             assert!(module_properties.contains_key(field), "missing {field}");
         }
 
-        let request_properties = contract["schemas"]["plan_request"]["properties"]
+        let request_properties = description["schemas"]["plan_request"]["properties"]
             .as_object()
             .expect("PlanRequest properties");
         assert_eq!(request_properties.len(), 2);
         assert!(request_properties.contains_key("module"));
         assert!(request_properties.contains_key("spec"));
 
-        let response_properties = contract["schemas"]["plan_response"]["properties"]
+        let response_properties = description["schemas"]["plan_response"]["properties"]
             .as_object()
             .expect("PlanResponse properties");
         assert_eq!(response_properties.len(), 2);
@@ -592,11 +593,11 @@ mpc.gencost = [
         assert!(response_properties.contains_key("solution_module"));
 
         assert_eq!(
-            contract["schemas"]["solve_response"],
-            contract["schemas"]["powerio_module"]
+            description["schemas"]["solve_response"],
+            description["schemas"]["powerio_module"]
         );
         assert_eq!(
-            contract["schemas"]["capabilities_response"]["type"],
+            description["schemas"]["capabilities_response"]["type"],
             "array"
         );
     }

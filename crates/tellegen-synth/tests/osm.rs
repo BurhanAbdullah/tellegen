@@ -272,3 +272,15 @@ fn antimeridian_halves_merge_in_one_frame() {
         SolveOutcome::Optimal
     );
 }
+
+#[test]
+fn absurd_circuit_counts_are_clamped() {
+    // Ways 301 and 302 claim four billion circuits, the cable a quintillion
+    // conductors. Every circuit becomes a branch row, so unclamped this never
+    // finishes.
+    let doc = FIXTURE
+        .replacen("\"circuits\": \"1\"", "\"circuits\": \"4294967295\"", 2)
+        .replace("\"cables\": \"6\"", "\"cables\": \"1e18\"");
+    let (module, _) = generate(request(OsmIslands::Connect), common::places(), Some(doc)).unwrap();
+    assert!(module.value().branches().len() < 100);
+}

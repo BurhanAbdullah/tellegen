@@ -1,6 +1,6 @@
 //! DC OPF: the B-theta linear program assembled into Clarabel standard form, its
 //! dual readout, and the DC entry points. The variable and constraint layout here
-//! is the contract the [`crate::sens`] KKT mirrors block-for-block.
+//! is what the [`crate::sens`] KKT mirrors block-for-block.
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;

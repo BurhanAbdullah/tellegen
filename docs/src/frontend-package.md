@@ -262,7 +262,17 @@ its fallback is never `null`. The fallback reasons use the same names in
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
-tiles, fonts and sprites are all fetched.
+tiles, fonts and sprites are all fetched. The engine underneath also needs
+`script-src 'wasm-unsafe-eval'` (never `'unsafe-eval'`) and `worker-src
+'self'`, since its workers are same-origin.
+
+A host that passes its own deck.gl layers in `extraLayers`, or works with the
+MapLibre map from `onMapReady`, must resolve one copy each of
+`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`.
+When two deck.gl versions load, deck.gl throws "multiple versions detected".
+If the host's ranges differ from the package's (`^9.4.0` for deck.gl,
+`^6.15.0` for maplibre-gl), point both at one version with npm `overrides`
+(or `resolutions` in pnpm and Yarn).
 
 The map needs no Vite settings, in a build or in the dev server. MapLibre's
 worker comes from a `?worker&url` import, which a production build bundles
