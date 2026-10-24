@@ -3,6 +3,13 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures/page-errors.js';
 
+// These are local browser/WASM tests. Make startup deterministic and wait for
+// hydration before dispatching file-input events, including under parallel CI.
+test.beforeEach(async ({ page }) => {
+	await page.route('**/api/compute', (route) => route.fulfill({ json: { enabled: false } }));
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+});
+
 const typedCase = 'tests/fixtures/mc-pf-browser/public/mc-pf-three-phase.pio.json';
 const loadModelsCase = 'tests/fixtures/mc-pf-browser/public/mc-pf-load-models.bmopf.json';
 
@@ -134,6 +141,7 @@ function expectedLoadPower(spec: LoadModelSpec, ratio: number) {
 test('typed distribution case runs inside Studies and survives saved reopen', async ({ page }) => {
 	test.setTimeout(120_000);
 	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
 	const headerFileInput = page.locator('header input[type="file"][accept*=".dss"]');
 	await expect(headerFileInput).toHaveCount(1);
 	await headerFileInput.setInputFiles(typedCase);
@@ -250,6 +258,7 @@ test('built-in four-wire demo solves and a three-wire case omits neutral-relativ
 }) => {
 	test.setTimeout(120_000);
 	await page.goto('/');
+	await expect(page.getByText('no default cases loaded')).toBeVisible();
 	await page.getByRole('button', { name: 'Studies', exact: true }).click();
 	const demoStudy = page.getByRole('region', { name: 'Study workspace' });
 	await demoStudy.getByRole('button', { name: 'Load 4-conductor example' }).click();
@@ -315,6 +324,7 @@ for (const nominalVoltage of [200, 240]) {
 		}
 
 		await page.goto('/');
+		await expect(page.getByText('no default cases loaded')).toBeVisible();
 		const headerFileInput = page.locator('header input[type="file"][accept*=".dss"]');
 		await expect(headerFileInput).toHaveCount(1);
 		await headerFileInput.setInputFiles({
