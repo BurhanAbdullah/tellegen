@@ -26,10 +26,10 @@
 <header bind:this={headerEl}>
 	<div class="brand">
 		<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-			<path d="M4 18 L12 6 L20 18" stroke="#b25e00" stroke-width="1.6" fill="none" />
-			<circle cx="4" cy="18" r="2.4" fill="#b25e00" />
-			<circle cx="12" cy="6" r="2.4" fill="#20242b" />
-			<circle cx="20" cy="18" r="2.4" fill="#b25e00" />
+			<path class="brand-accent-stroke" d="M4 18 L12 6 L20 18" stroke-width="1.6" fill="none" />
+			<circle class="brand-accent" cx="4" cy="18" r="2.4" />
+			<circle class="brand-ink" cx="12" cy="6" r="2.4" />
+			<circle class="brand-accent" cx="20" cy="18" r="2.4" />
 		</svg>
 		<h1>tellegen</h1>
 	</div>
@@ -130,7 +130,7 @@
 		justify-content: space-between;
 		gap: 16px;
 		padding: 10px 20px;
-		background: linear-gradient(rgba(236, 233, 226, 0.95), rgba(236, 233, 226, 0));
+		background: linear-gradient(rgb(var(--bg-rgb) / 0.95), rgb(var(--bg-rgb) / 0));
 		animation: drop 0.5s ease-out both;
 	}
 
@@ -139,6 +139,19 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+	}
+
+	/* The brand mark follows the theme: accent legs, ink apex. */
+	.brand-accent {
+		fill: var(--accent);
+	}
+
+	.brand-accent-stroke {
+		stroke: var(--accent);
+	}
+
+	.brand-ink {
+		fill: var(--ink);
 	}
 
 	h1 {
@@ -305,8 +318,8 @@
 
 	/* Ghost chip: standing invitation to drop or pick a case file. */
 	.cases > button.ghost {
-		background: rgba(252, 251, 247, 0.36);
-		border: 1px dashed rgba(178, 94, 0, 0.55);
+		background: rgb(var(--paper-rgb) / 0.36);
+		border: 1px dashed rgb(var(--accent-rgb) / 0.55);
 		color: var(--text-secondary);
 		box-shadow: inset 0 0 0 1px rgba(212, 116, 34, 0.08);
 	}
@@ -351,7 +364,7 @@
 			flex-wrap: wrap;
 			gap: 8px;
 			padding: 8px 10px 12px;
-			background: linear-gradient(rgba(236, 233, 226, 0.97), rgba(236, 233, 226, 0.72));
+			background: linear-gradient(rgb(var(--bg-rgb) / 0.97), rgb(var(--bg-rgb) / 0.72));
 		}
 
 		.brand {

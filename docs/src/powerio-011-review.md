@@ -1,9 +1,9 @@
 # PowerIO 0.11 consumer review
 
-Tellegen uses the published PowerIO 0.11.1 crates. All six PowerIO components
-resolve from crates.io at 0.11.1 with registry checksums. The release tag
-[`v0.11.1`](https://github.com/eigenergy/powerio/releases/tag/v0.11.1) identifies
-commit `432f795a3cc10ad3ee2ed5041406e562e6eb929b`.
+Tellegen uses the published PowerIO 0.11.5 crates. All six PowerIO components
+resolve from crates.io at 0.11.5 with registry checksums. The release tag
+[`v0.11.5`](https://github.com/eigenergy/powerio/releases/tag/v0.11.5) identifies
+commit `341d72767f8ff3d535a9bb0aca5cb9d32e886694`.
 `evidence/webmcp/powerio-releases.json` records published release revisions.
 
 Pull requests that change the dependency manifests, lockfile, or pin scripts
@@ -27,9 +27,9 @@ The PowerIO release, stored IR generation, and C ABI are independent:
 
 | Concern            | Current value                        | Tellegen integration                             |
 | ------------------ | ------------------------------------ | ------------------------------------------------ |
-| Rust crate release | `0.11.1`                             | dependency requirement `0.11.1`                  |
+| Rust crate release | `0.11.5`                             | dependency requirement `0.11.5`                  |
 | Stored IR          | `"schema": "pio-ir"`, `"version": 2` | sole durable browser and CLI JSON boundary       |
-| Producer           | `powerio` `0.11.1`                   | records which release wrote an IR document       |
+| Producer           | `powerio` `0.11.5`                   | records which release wrote an IR document       |
 | C ABI              | `7`                                  | unchanged and not used as an IR or crate version |
 
 The historical `powerio.module` version 1 document and bare balanced-network
