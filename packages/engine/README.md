@@ -17,6 +17,10 @@ import {
 The wasm files are resolved relative to the package module. Host apps must serve
 package asset files from `node_modules`.
 
+Under a Content Security Policy the engine needs `script-src 'wasm-unsafe-eval'`
+(to compile WebAssembly; never `'unsafe-eval'`) and `worker-src 'self'`: its
+workers are same-origin module workers.
+
 ## Browser Ingestion
 
 Case and JSON entry points accept the original bytes:
@@ -41,6 +45,38 @@ bare model JSON is now `unknown`; regenerate it as `pio-ir` from source data.
 
 Every API that accepts a byte buffer rejects inputs larger than
 `MAX_ENGINE_INPUT_BYTES` (128 MiB) before worker dispatch.
+
+## Synthetic Grid Generation
+
+`createSynthSession(request, { osm?, places?, signal? })` generates a
+geo-referenced transmission grid for a region, one stage per `advance()`, on a
+dedicated worker. Request and report types come from `@tellegen/engine/synth`.
+The populated places table ships as `dist/data/populated_places.json`;
+`syntheticPlacesUrl()`, `fetchSyntheticPlaces()` and `loadSyntheticPlaces()`
+locate and load it. The
+[synthetic generation guide](https://eigenergy.github.io/tellegen/synthetic-generation.html)
+describes the stages, the demand model and the evidence.
+
+## Data Sources
+
+The package ships data from third parties:
+
+- **Natural Earth** populated places (`dist/data/populated_places.json`) and
+  country areas (compiled into the wasm): public domain,
+  [naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/).
+- **Ember**, *Yearly Electricity Data*, through **Our World in Data**,
+  *Energy dataset*: national electricity demand, compiled into the wasm.
+  Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/);
+  the table keeps each country's latest year, so changes were made. Its
+  population column is Our World in Data's series, compiled from the sources
+  at [ourworldindata.org/population-sources](https://ourworldindata.org/population-sources).
+- **National transmission voltage levels**, compiled into the wasm from the
+  operator, regulator and standards documents each entry cites.
+
+Grids generated with `source: "osm"` contain data from OpenStreetMap, ©
+OpenStreetMap contributors, under the ODbL 1.0. The
+[third-party notices](https://eigenergy.github.io/tellegen/third-party-notices.html)
+give the full credits.
 
 ## Migrating To 0.2
 

@@ -202,7 +202,7 @@ software release you used; GitHub's "Cite this repository" button reads
   title     = {tellegen: interactive power flow and optimal power flow in the browser},
   author    = {Talkington, Samuel and Geth, Frederik and Zhang, Qian and Xie, Le and Liu, Skyler},
   year      = {2026},
-  version   = {0.3.0},
+  version   = {0.4.0},
   url       = {https://github.com/eigenergy/tellegen},
   license   = {MIT}
 }

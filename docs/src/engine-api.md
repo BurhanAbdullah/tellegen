@@ -96,7 +96,7 @@ invalidate the retained interactive Study.
 ## Synthetic Grid Generation
 
 - `createSynthSession(request, { osm?, places?, signal? })`: opens a staged
-  generation on the dedicated synthetic worker (`synthEngineHost()`) and
+  generation on a dedicated synthetic worker and
   returns a `BrowserSynthSession`:
   - `advance({ withPreview? })` runs one stage (`context`, `site_buses`,
     `topology`, `electrify`, `dc_opf`, `calibrate` once per iteration,

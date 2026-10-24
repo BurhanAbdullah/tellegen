@@ -93,9 +93,11 @@ measured against each country's official peak:
   `04be4d555283ceb888758d01e2a359e17db86918794357e72b16bb50fc4686bd`), with
   the request the app sends for an untouched Generation panel
   (`src/lib/engine/request.ts`: synthetic, density and fidelity high,
-  population demand, no voltage levels). France is not in that layer
-  (Natural Earth codes it `-99`), so the app cannot select it and this
-  sweep has 17 regions.
+  population demand, no voltage levels). That hash is the layer as of
+  MapToGrid commit a92a461, which has no France (Natural Earth codes it
+  `-99`), so this sweep has 17 regions. Later app versions add France,
+  Norway and three areas without a code (177 features); the geometry of the
+  17 swept countries is unchanged.
 
 ```sh
 # Natural Earth v5.1.2, 1:50m admin-0 countries (public domain); regions.py
@@ -173,8 +175,9 @@ pockets tried.
 The generator now gives every loaded bus farther than 480 km of corridor
 from a generator (the St. Clair curve's 1.0 SIL knot) a synchronous
 condenser, farthest first, with a reactive range of 0.5 MVAr per MW of the
-load nearest it. It places about 70 in Russia, 32–37 in Australia and
-Brazil, 3–6 in the United States and none in western Europe. Russia,
+load nearest it. Across both outlines and the three seeds it places 66–74
+in Russia, 29–35 in Australia, 33–40 in Brazil, 3–8 in the United States and
+none in western Europe. Russia,
 Brazil, Chile and Egypt now pass at every seed on both outlines.
 
 **What still fails** (AC in band, out of 3):

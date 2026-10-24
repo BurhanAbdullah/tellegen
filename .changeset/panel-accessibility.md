@@ -13,4 +13,4 @@ Accessibility fixes in the panels:
 - The demand range toggle is a labelled group, and the "full range" button's accessible name now contains its visible label.
 - Arrow keys on the demand and rating sliders step about 1% of the range, and never less than 0.5 MW, so every press leaves the 0.25 MW dead zone.
 - An infeasible DC OPF reports "No feasible dispatch: demand cannot be served within line and generator limits". The solver text moves to the new `app.errorDetail` and into the notice's disclosure.
-- `MAP_PALETTE` gains `neutral`, the fill of a neutral terminal in the multiconductor detail, whose outline now follows `--ink`.
+- The `neutral` entry of `MAP_PALETTE` (new in this release) fills a neutral terminal in the multiconductor detail, whose outline now follows `--ink`.

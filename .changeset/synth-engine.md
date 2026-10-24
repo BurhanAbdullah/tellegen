@@ -24,4 +24,9 @@ and report types are generated from Rust and exported from
 `"direct"`). Ingest payloads gain `coords_method`, which is
 `"generated"` when the module's history records a synthetic generation,
 so a generated grid's coordinates are not taken for a topology layout.
-The wasm module grows by about 0.6 MB.
+Generated rows keep their annotations under `extras.tellegen_synth`, and the
+module is named `tellegen_synth_<request hash prefix>`. A ring edge that jumps
+more than 180° of longitude (a region written across the antimeridian the
+short way) is refused, request values are bounded well outside any real
+system, and OpenStreetMap circuit counts are capped at 12 per way. The
+generator adds about 0.8 MB to the wasm module (about 0.3 MB gzipped).
