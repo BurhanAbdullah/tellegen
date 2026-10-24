@@ -100,7 +100,7 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
         "package-lock.json",
         "packages/engine/CHANGELOG.md",
         "packages/engine/package.json",
-        "packages/engine/src/generated/contracts.ts",
+        "packages/engine/src/generated/api-types.ts",
         "packages/svelte/CHANGELOG.md",
         "packages/svelte/package.json",
         "packages/webmcp/CHANGELOG.md",
@@ -165,16 +165,15 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
 
 
 def validate_crate(entries: list[tuple[str, str]]) -> None:
-    required = {
-        "Cargo.lock",
-        "crates/tellegen/CHANGELOG.md",
-        "crates/tellegen/Cargo.toml",
-    }
+    changelog = {"crates/tellegen/CHANGELOG.md"}
+    bump = changelog | {"Cargo.lock", "crates/tellegen/Cargo.toml"}
     actual = {path for _, path in entries}
-    if actual != required:
+    # A version already raised by hand on main (above the crates.io release)
+    # leaves release-plz only the changelog to write.
+    if actual not in (changelog, bump):
         fail(
             "crate versioning changed the wrong paths: "
-            f"expected {sorted(required)!r}, got {sorted(actual)!r}"
+            f"expected {sorted(bump)!r} or only the changelog, got {sorted(actual)!r}"
         )
     for status, path in entries:
         if status not in {" M", "M "}:

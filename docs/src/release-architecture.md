@@ -37,7 +37,8 @@ npm ci
 
 Root scripts define the package order:
 
-- `npm run wasm` builds both wasm packages into `packages/engine`;
+- `npm run wasm` builds the one wasm module (features `conic` and `synth`) into
+  `packages/engine`;
 - `npm run build:engine` builds `@tellegen/engine`;
 - `npm run build:webmcp` builds `@tellegen/webmcp`;
 - `npm run build:svelte` builds `@tellegen/svelte`;
@@ -147,7 +148,7 @@ and commit the file it writes. See `.changeset/README.md`.
 
 On a push to `main`, `.github/workflows/release-npm.yml` keeps a "Release
 packages" pull request open. That pull request applies every pending changeset:
-version bumps, changelog entries, the engine `CONTRACT_VERSION`, and the
+version bumps, changelog entries, the engine `ENGINE_VERSION`, and the
 lockfile. Merge it to run the gates and publish. Tags take the form
 `@tellegen/<name>@X.Y.Z`.
 
@@ -213,7 +214,7 @@ to a caller.
 
 The Rust gates are `cargo fmt --check`, clippy with warnings denied on the
 shipping crates, `cargo-deny`, the EPL guard, the workspace tests, the engine's
-`conic` path, `tellegen-wasm` built with `conic`, and `cargo package --locked`
+`conic` path, `tellegen-wasm` built with `conic` and `synth`, and `cargo package --locked`
 for the published crate. The wasm test matters
 because `tellegen-wasm` declares `default = []`, so the workspace run skips the
 tests that assert an untrusted package or case rejects rather than panicking.

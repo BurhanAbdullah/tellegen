@@ -17,7 +17,9 @@
 //! module carrying bus locations and branch routes, plus a
 //! [`GenerationReport`] that states every verdict as the engine returned it.
 //! The library has no clock, no filesystem access and no platform randomness,
-//! so the same request reproduces the same grid natively and in WebAssembly.
+//! so the same request reproduces the same grid byte for byte on one build and
+//! platform. Native and WebAssembly values can differ in the last bits, since
+//! the platform math libraries round `ln`, `exp`, `sin` and `cos` differently.
 
 pub mod build;
 pub mod calibrate;
