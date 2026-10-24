@@ -7,6 +7,7 @@ import {
 	type Glyph
 } from './schematic-equipment.js';
 import type { SchematicGeometry } from './schematic-layout.js';
+import { transformerGlyph, transformerInfo } from './connections.js';
 
 /** Equipment that should stay findable when the drawing is zoomed out: drawn at a fixed screen
  * size, placed by priority so the overview never fills with markers. */
@@ -26,6 +27,8 @@ export interface Landmark {
 	ids: string[];
 	bus: number;
 	edge: number;
+	/** The marker, when it differs by unit: a transformer's winding marks or centre tap. */
+	glyph?: Glyph;
 }
 
 /** An IBR counts as large from this share of all generation and IBR output upwards. */
@@ -79,8 +82,11 @@ export function landmarkCandidates(
 		if (z.transformers.length && !z.hasSource) fed.set(z.transformers[0], zi);
 	});
 	const index = new Map(graph.buses.map((b, i) => [b.id.toLowerCase(), i]));
+	// One marker per transformer, on its first winding-pair edge.
+	const seen = new Set<string>();
 	graph.edges.forEach((edge, k) => {
-		if (edge.kind !== 'transformer') return;
+		if (edge.kind !== 'transformer' || seen.has(edge.id)) return;
+		seen.add(edge.id);
 		let x = symbols?.anchors[k * 2] ?? NaN;
 		let y = symbols?.anchors[k * 2 + 1] ?? NaN;
 		// A vertical branch has cos exactly 0, so test for a missing direction, not a falsy one.
@@ -113,7 +119,8 @@ export function landmarkCandidates(
 			state,
 			ids: [edge.id],
 			bus: -1,
-			edge: k
+			edge: k,
+			glyph: transformerGlyph(transformerInfo(graph, k), edge.n_phases, false)
 		});
 	});
 	return out.sort((a, b) => a.tier - b.tier || b.weight - a.weight);
@@ -168,7 +175,7 @@ export function landmarkStrokes(
 	const dst: number[] = [];
 	const owner: number[] = [];
 	placed.forEach((l, j) => {
-		for (const line of landmarkGlyph(l.kind))
+		for (const line of l.glyph ?? landmarkGlyph(l.kind))
 			for (let i = 1; i < line.length; i++) {
 				const [ax, ay] = line[i - 1];
 				const [bx, by] = line[i];

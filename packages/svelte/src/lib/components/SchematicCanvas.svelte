@@ -74,6 +74,8 @@
 		energisation,
 		shortNames,
 		branchGlyph,
+		transformerGlyph,
+		transformerInfo,
 		glyphPath,
 		schematicEquipment,
 		type EquipmentItem,
@@ -451,11 +453,50 @@
 		host: equipment?.host ?? null,
 		geometry
 	});
+	/** The kinds of transformer in the drawing, for the key; `unknown` without winding detail. */
+	const transformerKinds = $derived(
+		new Set(
+			graph.edges.flatMap((e, k) =>
+				e.kind === 'transformer' ? [transformerInfo(graph, k)?.kind ?? 'unknown'] : []
+			)
+		)
+	);
+	/** Key entries per transformer kind; the three-phase one shows a Δ–Yn unit as its example. */
+	const winding = (connection: 'wye' | 'delta', terminals: number) => ({
+		bus: '',
+		connection,
+		terminals: Array.from({ length: terminals }, (_, i) => String(i + 1)),
+		v_ref: 0,
+		s_rating: 0
+	});
+	const TRANSFORMER_KEY: [string, Glyph, string][] = [
+		[
+			'poly',
+			transformerGlyph(
+				{ kind: 'poly', from: winding('delta', 3), to: winding('wye', 4), label: '' },
+				3
+			),
+			'three-phase, windings Δ and Y (n: neutral out)'
+		],
+		[
+			'split',
+			transformerGlyph({ kind: 'split', from: null, to: null, label: '' }, 1),
+			'split-phase (centre tap)'
+		],
+		[
+			'single',
+			transformerGlyph({ kind: 'single', from: null, to: null, label: '' }, 1),
+			'single-phase'
+		],
+		['unknown', branchGlyph('transformer', true)!, 'transformer']
+	];
 	const legendGlyphs = $derived(
 		equipment
 			? (
 					[
-						['transformer', branchGlyph('transformer', true), 'transformer'],
+						...TRANSFORMER_KEY.filter(([k]) => transformerKinds.has(k as never)).map(
+							([, glyph, label]) => ['transformer', glyph, label] as const
+						),
 						['switch', branchGlyph('switch', true), 'switch, closed'],
 						['switch', branchGlyph('switch', false), 'switch, open'],
 						...(['source', 'generator', 'ibr', 'load', 'shunt', 'earth', 'ground'] as const).map(
@@ -666,7 +707,8 @@
 			inferred: layout === 'source' ? (geometry.inferred ?? null) : null,
 			feeders: feederSet,
 			tree,
-			busNames: names
+			busNames: names,
+			labelsOn: namesOn
 		})
 	);
 
@@ -682,6 +724,7 @@
 			symbols: symbolsOn ? equipment : null,
 			ticksOn,
 			valuesOn,
+			labelsOn: namesOn,
 			zoomedOut,
 			live,
 			edgeColours,
@@ -1001,6 +1044,7 @@
 			labels,
 			cursor,
 			valuesOn,
+			namesOn,
 			arrows,
 			hoveredBus,
 			hoveredEdges,

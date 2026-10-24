@@ -6,6 +6,7 @@ import {
 	conductorSet,
 	formatPower,
 	loadingState,
+	terminalLabel,
 	type DisplayTree,
 	type EquipmentItem,
 	type Feeders,
@@ -38,6 +39,8 @@ export interface TextContext {
 	tree: DisplayTree;
 	/** Short bus names, as drawn. */
 	busNames: string[];
+	/** Close enough for terminal and transformer labels beside the symbols. */
+	labelsOn: boolean;
 }
 
 const list = (ids: string[]) =>
@@ -125,16 +128,20 @@ export class SchematicText {
 		const name = d.kind in ATTACHMENT_NAMES ? ATTACHMENT_NAMES[d.kind as 'load'] : d.kind;
 		if (d.kind === 'ground')
 			return `solid earth: terminal${d.ids.length > 1 ? 's' : ''} ${d.ids.join(', ')} of ${graph.buses[d.bus].id} perfectly grounded`;
+		const terminals = d.terminals ? ` · terminals ${terminalLabel(d.terminals, d.connection)}` : '';
+		const label = d.label ? ` · ${d.label}` : '';
 		return d.bus >= 0
-			? `${counted(d.ids.length, name)} ${list(d.ids)} at ${graph.buses[d.bus].id}${this.networkNote(d.bus)}`
-			: `${name} ${list(d.ids)}${graph.edges[d.edge].closed ? '' : ' (open)'}`;
+			? `${counted(d.ids.length, name)} ${list(d.ids)} at ${graph.buses[d.bus].id}${terminals}${this.networkNote(d.bus)}`
+			: `${name} ${list(d.ids)}${label}${graph.edges[d.edge].closed ? '' : ' (open)'}`;
 	}
 
 	/** An attachment's text beside its symbol: its count when several, and its solved P and Q when
 	 * values show. Generators, IBRs and sources read as output; loads and shunts as consumption. */
 	itemValue(d: EquipmentItem): string {
-		const { valuesOn, powers } = this.c;
-		const parts = d.ids.length > 1 ? [`×${d.ids.length}`] : [];
+		const { valuesOn, powers, labelsOn } = this.c;
+		const parts: string[] = [];
+		if (labelsOn && d.terminals) parts.push(terminalLabel(d.terminals, d.connection));
+		if (d.ids.length > 1) parts.push(`×${d.ids.length}`);
 		if (valuesOn && powers) {
 			let p = 0;
 			let q = 0;

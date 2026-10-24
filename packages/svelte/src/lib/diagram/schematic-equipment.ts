@@ -1,5 +1,6 @@
-import type { DistAttachmentKind, DistGraph } from '@tellegen/engine';
+import type { DistAttachmentKind, DistConnection, DistGraph } from '@tellegen/engine';
 import type { SchematicGeometry } from './schematic-layout.js';
+import { terminalConductors, transformerGlyph, transformerInfo } from './connections.js';
 
 /** A stroked glyph: polylines in symbol units, x along the connection, y down. */
 export type Glyph = [number, number][][];
@@ -276,7 +277,58 @@ export interface EquipmentItem {
 	ids: string[];
 	x: number;
 	y: number;
+	/** An attachment's terminals in its own order and its connection, where the graph has them. */
+	terminals?: string[];
+	connection?: DistConnection;
+	/** A transformer's vector group and rating, such as "Dyn · 500 kVA". */
+	label?: string;
 }
+
+/** Attachments of one kind at a bus that connect alike: same terminals, same connection. */
+interface AttachmentVariant {
+	ids: string[];
+	terminals: string[] | null;
+	connection?: DistConnection;
+}
+
+/** A bus's attachments by kind, split by how they connect. Without per-attachment detail (a graph
+ * from before connections were exported) each kind is one variant without terminals. */
+function attachmentVariants(
+	bus: DistGraph['buses'][number],
+	earths: Set<string>
+): Map<SymbolKind, AttachmentVariant[]> {
+	const out = new Map<SymbolKind, AttachmentVariant[]>();
+	const symbol = (kind: DistAttachmentKind, id: string): SymbolKind =>
+		kind === 'shunt' && earths.has(id) ? 'earth' : kind;
+	if (bus.attachments?.length) {
+		const keyed = new Map<string, AttachmentVariant>();
+		for (const a of bus.attachments) {
+			const kind = symbol(a.kind, a.id);
+			const key = `${kind}|${a.connection ?? ''}|${a.terminals.join(',')}`;
+			let v = keyed.get(key);
+			if (!v) {
+				v = { ids: [], terminals: a.terminals, connection: a.connection };
+				keyed.set(key, v);
+				out.set(kind, [...(out.get(kind) ?? []), v]);
+			}
+			v.ids.push(a.id);
+		}
+		return out;
+	}
+	for (const list of Object.values(bus.terminal_attachments ?? {}))
+		for (const a of list) {
+			const kind = symbol(a.kind, a.id);
+			const v = out.get(kind)?.[0] ?? { ids: [], terminals: null };
+			if (!v.ids.includes(a.id)) v.ids.push(a.id);
+			out.set(kind, [v]);
+		}
+	return out;
+}
+
+/** Room along a slot for one attachment variant: the lead with its conductor marks, the glyph, and
+ * its label. */
+const LEAD = 1.6;
+const VARIANT_STEP = 7.2;
 
 export interface EquipmentSymbols {
 	/** Glyph strokes: `x, y, 0` per segment end. */
@@ -380,9 +432,18 @@ export function schematicEquipment(
 	// their marks are spread along it instead of drawn on top of each other.
 	const host = new Int32Array(graph.edges.length).fill(-1);
 	const routes = new Map<string, number[]>();
+	// A multi-winding transformer projects to one edge per winding pair; it is drawn once, on its
+	// first edge, and its other edges stay plain lines.
+	const seenTransformers = new Set<string>();
+	const secondary = graph.edges.map((e) => {
+		if (e.kind !== 'transformer') return false;
+		if (seenTransformers.has(e.id)) return true;
+		seenTransformers.add(e.id);
+		return false;
+	});
 	graph.edges.forEach((_, k) => {
 		const list = segs.get(k);
-		if (!list) return;
+		if (!list || secondary[k]) return;
 		const s = engine && geometry.role[k] === 0 ? list[list.length - 1] : list[list.length >> 1];
 		host[k] = s;
 		const a = `${geometry.sources[s * 3]},${geometry.sources[s * 3 + 1]}`;
@@ -407,9 +468,13 @@ export function schematicEquipment(
 		}
 	}
 	graph.edges.forEach((edge, k) => {
-		const glyph = branchGlyph(edge.kind, edge.closed);
 		const list = segs.get(k);
-		if (!list) return;
+		if (!list || secondary[k]) return;
+		const info = edge.kind === 'transformer' ? transformerInfo(graph, k) : null;
+		const glyph =
+			edge.kind === 'transformer'
+				? transformerGlyph(info, edge.n_phases)
+				: branchGlyph(edge.kind, edge.closed);
 		const childEnd = engine && geometry.role[k] === 0;
 		const s = host[k];
 		const [x0, y0, x1, y1] = [
@@ -444,9 +509,9 @@ export function schematicEquipment(
 			anchors[k * 2 + 1] = my;
 			room[k] = len / 2;
 			if (glyph) {
-				stroke(glyph, mx, my, cos, sin, k);
+				stroke(glyph, mx, my, cos * forward, sin * forward, k);
 				const kind = edge.kind as 'transformer' | 'switch';
-				items.push({ kind, edge: k, bus: -1, ids: [edge.id], x: mx, y: my });
+				items.push({ kind, edge: k, bus: -1, ids: [edge.id], x: mx, y: my, label: info?.label });
 				kinds.add(kind);
 			}
 			return;
@@ -467,7 +532,8 @@ export function schematicEquipment(
 				stroke(conductorTicks(phases, neutral), x, y, cos, sin, k, tick);
 			return;
 		}
-		stroke(glyph, x, y, cos, sin, k);
+		// The from winding at −x, so a transformer's winding marks sit at their own buses.
+		stroke(glyph, x, y, cos * forward, sin * forward, k);
 		cuts.set(s, [(along - half) / len, (along + half) / len]);
 		items.push({
 			kind: edge.kind as 'transformer' | 'switch',
@@ -475,49 +541,63 @@ export function schematicEquipment(
 			bus: -1,
 			ids: [edge.id],
 			x,
-			y
+			y,
+			label: info?.label
 		});
 		kinds.add(edge.kind as 'transformer' | 'switch');
 	});
 
 	graph.buses.forEach((bus, i) => {
-		const earths = neutralEarths(bus);
-		const byKind = new Map<SymbolKind, Set<string>>();
-		for (const list of Object.values(bus.terminal_attachments ?? {}))
-			for (const a of list) {
-				const kind: SymbolKind = a.kind === 'shunt' && earths.has(a.id) ? 'earth' : a.kind;
-				const ids = byKind.get(kind) ?? new Set<string>();
-				ids.add(a.id);
-				byKind.set(kind, ids);
-			}
+		const variants = attachmentVariants(bus, neutralEarths(bus));
 		// Perfectly grounded terminals: one solid earth, listing the terminals.
-		if (bus.grounded?.length) byKind.set('ground', new Set(bus.grounded));
-		if (!byKind.size) return;
+		if (bus.grounded?.length) variants.set('ground', [{ ids: [...bus.grounded], terminals: null }]);
+		if (!variants.size) return;
 		const [bx, by] = [geometry.positions[i * 3], geometry.positions[i * 3 + 1]];
-		const present = ATTACHMENT_ORDER.filter((kind) => byKind.has(kind));
+		const present = ATTACHMENT_ORDER.filter((kind) => variants.has(kind));
 		// A neutral earth takes the shunt slot; with a real shunt too, it sits beside it.
-		const slots = present.filter((k) => !(k === 'earth' && byKind.has('shunt')));
+		const slots = present.filter((k) => !(k === 'earth' && variants.has('shunt')));
 		const owner = -(i + 1);
+		const line = (ax: number, ay: number, cx: number, cy: number) => {
+			src.push(ax, ay, 0);
+			dst.push(cx, cy, 0);
+			own.push(owner);
+		};
 		// Riser from the bus down to the last slot.
-		src.push(bx, by, 0);
-		dst.push(bx, by + slots.length * gap, 0);
-		own.push(owner);
+		line(bx, by, bx, by + slots.length * gap);
 		present.forEach((kind) => {
-			const beside = kind === 'earth' && byKind.has('shunt');
+			const beside = kind === 'earth' && variants.has('shunt');
 			const slot = slots.indexOf(beside ? 'shunt' : kind);
 			const y = by + (slot + 1) * gap;
-			const x0 = bx + unit * (beside ? 2.9 : 0.6);
-			src.push(beside ? bx + unit * 2.6 : bx, y, 0);
-			dst.push(x0, y, 0);
-			own.push(owner);
-			stroke(attachmentGlyph(kind), x0, y, 1, 0, owner);
-			items.push({
-				kind,
-				edge: -1,
-				bus: i,
-				ids: [...byKind.get(kind)!],
-				x: x0 + unit * 1.2,
-				y
+			const list = variants.get(kind)!;
+			// Several variants in one slot hang from a rail above it, each on its own drop, so they do
+			// not read as in series.
+			const rail = y - 1.15 * unit;
+			if (list.length > 1 && !beside)
+				line(bx, rail, bx + unit * (list.length - 1) * VARIANT_STEP, rail);
+			// Beside a shunt, a neutral earth continues from the end of the last shunt's glyph, past
+			// room for that shunt's label.
+			const after = ((variants.get('shunt')?.length ?? 1) - 1) * VARIANT_STEP + LEAD + 2.0;
+			const labelRoom = 4.2;
+			list.forEach((v, j) => {
+				const drop = bx + unit * (beside ? after : j * VARIANT_STEP);
+				if (j > 0 && !beside) line(drop, rail, drop, y);
+				const x0 = drop + unit * (beside ? labelRoom : LEAD);
+				line(drop, y, x0, y);
+				if (v.terminals && !beside) {
+					const { phases, neutral } = terminalConductors(v.terminals, bus.neutral_terminal);
+					if (phases + (neutral ? 1 : 0) > 0)
+						stroke(conductorTicks(phases, neutral), drop + (unit * LEAD) / 2, y, 1, 0, owner, tick);
+				}
+				stroke(attachmentGlyph(kind), x0, y, 1, 0, owner);
+				items.push({
+					kind,
+					edge: -1,
+					bus: i,
+					ids: v.ids,
+					x: x0 + unit * 1.2,
+					y,
+					...(v.terminals ? { terminals: v.terminals, connection: v.connection } : {})
+				});
 			});
 			kinds.add(kind);
 		});

@@ -49,6 +49,10 @@ multi-winding transformer counts once in losses and issues, and its loading is
 judged per connected bus. Graph buses carry `nominal_voltage`, the declared rating
 of a winding or source there; the diagram colours lines by voltage level, and a
 hover shows the feeder and network of what it is over, with an optional path back
-to the source. The
+to the source. Graph buses also carry `attachments` (each attachment's terminals in
+its own order and its connection) and transformer edges `windings` (bus, wye or
+delta, terminals, rating). The diagram draws each transformer once with its winding
+connections or centre tap, and each load or shunt with its conductors and, closest
+in, its terminals. The
 renderer-independent logic lives in `src/lib/diagram`, ported from the diagram
 projection draft (#177).

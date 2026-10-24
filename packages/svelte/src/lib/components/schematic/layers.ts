@@ -107,6 +107,8 @@ export interface SchematicScene {
 	symbols: EquipmentSymbols | null;
 	ticksOn: boolean;
 	valuesOn: boolean;
+	/** Terminal and transformer labels beside the symbols, at the deepest zoom. */
+	labelsOn: boolean;
 	zoomedOut: boolean;
 	live: { edges: ArrayLike<boolean | number>; buses: ArrayLike<boolean | number> };
 	edgeColours: RGBA[];
@@ -320,11 +322,33 @@ export function sceneLayers(kit: DeckKit, s: SchematicScene): Layer[] {
 						data: symbols.items.filter((item) => item.bus >= 0 && s.itemText(item)),
 						getPosition: (item: EquipmentItem) => [item.x + symbols.unit * 1.1, item.y, 0],
 						getText: s.itemText,
-						updateTriggers: { getText: [s.valuesOn, s.powers] },
+						updateTriggers: { getText: [s.valuesOn, s.labelsOn, s.powers] },
 						getColor: SYMBOL_INK,
 						getSize: 10,
 						getTextAnchor: 'start',
 						getAlignmentBaseline: 'center',
+						// Legible where a label crosses a lead (a neutral earth beside a shunt).
+						background: true,
+						getBackgroundColor: paperText(200),
+						backgroundPadding: [2, 0],
+						fontFamily: MONO,
+						characterSet: 'auto'
+					}),
+					// A transformer's vector group and rating, above its symbol: below sits a centre tap.
+					new TextLayer({
+						...common,
+						id: 'transformer-text',
+						data: s.labelsOn ? symbols.items.filter((item) => item.label) : [],
+						getPosition: (item: EquipmentItem) => [item.x, item.y, 0],
+						getText: (item: EquipmentItem) => item.label ?? '',
+						getColor: SYMBOL_INK,
+						getSize: 10,
+						getTextAnchor: 'middle',
+						getAlignmentBaseline: 'bottom',
+						getPixelOffset: [0, -12],
+						background: true,
+						getBackgroundColor: paperText(220),
+						backgroundPadding: [2, 1],
 						fontFamily: MONO,
 						characterSet: 'auto'
 					})
