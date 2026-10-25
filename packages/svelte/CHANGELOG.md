@@ -1,5 +1,22 @@
 # @tellegen/svelte
 
+## 0.4.1
+
+### Patch Changes
+
+- [#209](https://github.com/eigenergy/tellegen/pull/209) [`107aa8c`](https://github.com/eigenergy/tellegen/commit/107aa8c9e68e7b19531f33ef18029a7cc7e081de) Thanks [@samtalki](https://github.com/samtalki)! - Show bus demand as colour. A `demand` display mode shades buses by their
+  demand in MW, committed changes included, on a square-root scale with a cool
+  viridis ramp that cannot be mistaken for the nodal value ramp.
+  `AppState.busSizing` chooses how markers are sized: `power` (the default)
+  scales them by the larger of demand and generation as before, and `uniform`
+  draws every bus alike. Uniform markers on the map keep one ground radius
+  between 2 and 4.5 pixels, so a whole country reads as a mesh with its lines
+  showing and a closer view as distinct buses. Changing the calculation keeps a
+  demand colouring, and the bus tooltip does not repeat demand under it.
+  `@tellegen/svelte/map` exports `busMarkerRadius`, `busRadiusFor`,
+  `demandColor`, `demandDomain`, `demandGradient`, `UNIFORM_BUS_RADIUS`,
+  `UNIFORM_BUS_MIN_RADIUS` and `UNIFORM_BUS_GROUND_RADIUS`.
+
 ## 0.4.0
 
 ### Minor Changes
