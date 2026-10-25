@@ -10,8 +10,10 @@
 		MAP_PALETTE,
 		branchColor,
 		branchWidth,
+		busMarkerRadius,
 		busNeutral,
-		busRadius,
+		busRadiusFor,
+		demandColor,
 		priceColor,
 		scalarDomain,
 		sensColor,
@@ -391,6 +393,8 @@
 				if (d.previewDomain.flat) return sensFlatColor(d.previewDomain);
 				return sensColor((d.preview.get(bus.id) ?? 0) / d.previewDomain.scale);
 			}
+			if (d.scalarMode === 'demand')
+				return demandColor(((d.scalar.get(bus.id) ?? 0) - d.scalarLo) / (d.scalarHi - d.scalarLo));
 			const mid = (d.scalarLo + d.scalarHi) / 2;
 			return priceColor(((d.scalar.get(bus.id) ?? mid) - d.scalarLo) / (d.scalarHi - d.scalarLo));
 		};
@@ -781,8 +785,9 @@
 				: `<br>&Delta; LMP ${preview >= 0 ? '+' : ''}${preview.toExponential(2)} objective units/MW`;
 		const localRow =
 			c instanceof CaseState ? '' : '<br><span style="opacity:0.6">local file</span>';
+		// Demand already has its own row below, so the demand colouring shows LMP here alone.
 		const scalarRow =
-			!d || d.scalarMode === 'price'
+			!d || d.scalarMode === 'price' || d.scalarMode === 'demand'
 				? `LMP ${price === undefined ? '&mdash;' : fmt.format(price)} objective units/MW`
 				: `${d.scalarLabel} ${
 						scalar === undefined ? '&mdash;' : displayFmt(d.scalarMode, scalar)
@@ -1054,20 +1059,23 @@
 		if (!overlay || !layerCtors) return;
 		const { PathLayer, ScatterplotLayer, IconLayer } = layerCtors;
 		const layers: Layer[] = [];
+		const marker = busMarkerRadius(app.busSizing);
 		const study = app.studyView;
 		if (study) {
 			const s = study.solution;
 			const mode = app.displayMode;
 			const series =
-				mode === 'angle'
-					? (s?.va ?? [])
-					: mode === 'voltage'
-						? (s?.vm ??
-							(s?.w ?? []).map((v) => ({
-								...v,
-								value: Math.sqrt(Math.max(0, v.value))
-							})))
-						: (s?.lmp ?? []);
+				mode === 'demand'
+					? study.network.buses.map((b) => ({ bus: b.id, value: b.demand_mw }))
+					: mode === 'angle'
+						? (s?.va ?? [])
+						: mode === 'voltage'
+							? (s?.vm ??
+								(s?.w ?? []).map((v) => ({
+									...v,
+									value: Math.sqrt(Math.max(0, v.value))
+								})))
+							: (s?.lmp ?? []);
 			const values = new Map(series.map((v) => [v.bus, v.value]));
 			const domain = scalarDomain(
 				mode,
@@ -1097,13 +1105,17 @@
 					id: 'study-buses',
 					data: study.network.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-					radiusUnits: 'pixels',
+					getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+					radiusUnits: marker.radiusUnits,
+					radiusMinPixels: marker.radiusMinPixels,
+					radiusMaxPixels: marker.radiusMaxPixels,
 					getFillColor: (b) => {
 						const value = values.get(b.id);
 						return value === undefined
 							? palette.grey
-							: priceColor((value - domain.lo) / Math.max(domain.hi - domain.lo, 1e-12));
+							: (mode === 'demand' ? demandColor : priceColor)(
+									(value - domain.lo) / Math.max(domain.hi - domain.lo, 1e-12)
+								);
 					},
 					pickable: true,
 					stroked: true,
@@ -1116,7 +1128,7 @@
 						app.selectedBus = bus.id;
 						return true;
 					},
-					updateTriggers: { getFillColor: [study, mode, theme] }
+					updateTriggers: { getFillColor: [study, mode, theme], getRadius: [app.busSizing] }
 				})
 			);
 			overlay.setProps({ layers: [...layers, ...extraLayers] });
@@ -1163,8 +1175,10 @@
 					id: `buses-${c.id}`,
 					data: c.network.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-					radiusUnits: 'pixels',
+					getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+					radiusUnits: marker.radiusUnits,
+					radiusMinPixels: marker.radiusMinPixels,
+					radiusMaxPixels: marker.radiusMaxPixels,
 					getFillColor: busFill(c.id),
 					stroked: true,
 					billboard: true,
@@ -1184,6 +1198,7 @@
 						return true;
 					},
 					updateTriggers: {
+						getRadius: [app.busSizing],
 						getFillColor: [display],
 						getLineColor: [app.selectedBus, app.activeCaseId, theme],
 						getLineWidth: [app.selectedBus, app.activeCaseId]
@@ -1237,8 +1252,10 @@
 						id: `local-buses-${c.id}`,
 						data: c.view.buses,
 						getPosition: (b) => [b.lon, b.lat],
-						getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-						radiusUnits: 'pixels',
+						getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+						radiusUnits: marker.radiusUnits,
+						radiusMinPixels: marker.radiusMinPixels,
+						radiusMaxPixels: marker.radiusMaxPixels,
 						getFillColor: d ? busFill(c.id) : palette.grey,
 						stroked: true,
 						billboard: true,
@@ -1258,6 +1275,7 @@
 							return true;
 						},
 						updateTriggers: {
+							getRadius: [app.busSizing],
 							getFillColor: [display],
 							getLineColor: [app.selectedBus, app.activeLocalId, theme],
 							getLineWidth: [app.selectedBus, app.activeLocalId]
@@ -1351,7 +1369,7 @@
 					id: `multi-buses-${c.id}`,
 					data: c.view.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.load_kw, b.gen_kw)),
+					getRadius: (b) => busRadiusFor(app.busSizing, Math.max(b.load_kw, b.gen_kw)),
 					radiusUnits: 'pixels',
 					radiusMinPixels: 3,
 					getFillColor: (b) => multiBusFill(b),
@@ -1375,6 +1393,7 @@
 						return true;
 					},
 					updateTriggers: {
+						getRadius: [app.busSizing],
 						getLineColor: [selectedId, theme],
 						getLineWidth: [selectedId]
 					}

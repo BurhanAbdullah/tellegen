@@ -692,7 +692,8 @@ export class Controller {
 		if (values.length === 0) return null;
 		const domain = scalarDomain(this.activeDisplay.mode, values);
 		const { min, max } = extent(values);
-		const flatThreshold = this.activeDisplay.mode === 'price' ? 1 : 1e-5;
+		const flatThreshold =
+			this.activeDisplay.mode === 'price' || this.activeDisplay.mode === 'demand' ? 1 : 1e-5;
 		return {
 			lo: { value: domain.lo, clamped: min < domain.lo - flatThreshold / 20 },
 			hi: { value: domain.hi, clamped: max > domain.hi + flatThreshold / 20 },
@@ -1993,7 +1994,9 @@ export class Controller {
 		}
 		if (FORMULATIONS.find((f) => f.id === next)?.disabled) return;
 		c.formulation = next;
-		this.app.displayMode = next === 'acpf' ? 'voltage' : 'price';
+		// Demand does not depend on the calculation, so a demand colouring stays.
+		if (this.app.displayMode !== 'demand')
+			this.app.displayMode = next === 'acpf' ? 'voltage' : 'price';
 		this.bumpRevision(c);
 		// The committed point carries over (same demand), but the model and its solution do
 		// not; drop the Study and the cached solutions so they rebuild under `next`.
