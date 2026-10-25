@@ -81,4 +81,4 @@ export const fmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
 export const signed = (v: number) => `${v < 0 ? '−' : '+'}${fmt.format(Math.abs(v))}`;
 export const signedExp = (v: number) => `${v < 0 ? '−' : '+'}${Math.abs(v).toExponential(2)}`;
 export const displayFmt = (mode: DisplayMode, value: number) =>
-	mode === 'price' ? fmt.format(value) : value.toFixed(3);
+	mode === 'price' || mode === 'demand' ? fmt.format(value) : value.toFixed(3);

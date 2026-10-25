@@ -1,5 +1,5 @@
 import type { BranchRatingDeltas, DemandDeltas } from './api.js';
-import { priceGradient } from './colors.js';
+import { demandGradient, priceGradient } from './colors.js';
 import { priceCopy } from './format.js';
 import { CaseState, type DisplayMode, type SolvableCase } from './state.svelte.js';
 
@@ -48,17 +48,35 @@ export function displayMetaFor(c: SolvableCase | null): DisplayOption[] {
 			gradient: priceGradient
 		});
 	}
+	// Last, so a mode the result cannot show still falls back to a result variable.
+	if (c.network?.buses.length) {
+		options.push({
+			mode: 'demand',
+			label: 'demand',
+			unit: 'MW',
+			copy: 'Bus demand, including committed changes, on a square-root scale.',
+			gradient: demandGradient
+		});
+	}
 	return options;
 }
 
-/** Bus LMPs, voltage angles in radians, or voltage magnitudes in per unit.
- * SOCWR supplies squared voltages, which are converted to magnitudes here. */
+/** Bus LMPs, voltage angles in radians, voltage magnitudes in per unit, or
+ * demand in MW with the case's committed changes. SOCWR supplies squared
+ * voltages, which are converted to magnitudes here. */
 export function displaySeriesFor(
 	c: SolvableCase | null,
 	mode: DisplayMode
 ): { bus: number; value: number }[] {
 	const sol = c?.solution;
-	if (!sol) return [];
+	if (!c || !sol) return [];
+	if (mode === 'demand') {
+		const deltas = caseDeltas(c);
+		return (c.network?.buses ?? []).map((b) => ({
+			bus: b.id,
+			value: b.demand_mw + (deltas[b.id] ?? 0)
+		}));
+	}
 	if (mode === 'angle') return sol.va;
 	if (mode === 'voltage') {
 		if (sol.vm?.length) return sol.vm;

@@ -157,9 +157,11 @@
 					{@render selectionBlock()}
 				{/if}
 
-				<hr />
+				{#if app.busSizing === 'power'}
+					<hr />
 
-				<SizeLegend />
+					<SizeLegend />
+				{/if}
 			{/if}
 		{/if}
 		{#if app.compactLayout && config.showFooter}

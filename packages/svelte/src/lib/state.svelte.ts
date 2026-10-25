@@ -45,7 +45,11 @@ export interface DiagramCameraSnapshot {
 }
 
 export type DemandRangeMode = 'local' | 'full';
-export type DisplayMode = 'price' | 'angle' | 'voltage';
+export type DisplayMode = 'price' | 'angle' | 'voltage' | 'demand';
+/** How bus markers are sized on the map: by the larger of demand and generation
+ * (`power`), or all at one size (`uniform`) so dense networks keep their lines
+ * readable and colour carries the variable. */
+export type BusSizing = 'power' | 'uniform';
 
 /** The case a removal promoted to active, so the caller can hydrate it: a backend
  * case needs its network/solution loaded, a local needs a browser solve, and
@@ -407,6 +411,7 @@ export class AppState {
 	} | null>(null);
 	demandRangeMode = $state<DemandRangeMode>('local');
 	displayMode = $state<DisplayMode>('price');
+	busSizing = $state<BusSizing>('power');
 	sensitivityLoading = $state(false);
 	#error = $state<string | null>(null);
 	errorRevision = $state(0);
