@@ -1,5 +1,5 @@
 ---
-"@tellegen/svelte": minor
+"@tellegen/svelte": patch
 ---
 
 Show bus demand as colour. A `demand` display mode shades buses by their
