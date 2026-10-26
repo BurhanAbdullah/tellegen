@@ -130,7 +130,10 @@ test('arrow keys commit a demand step on a bus under 50 MW', async ({ page }) =>
 		timeout: 30_000
 	});
 	await expect(page.getByRole('group', { name: 'Demand range' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Full demand range' })).toHaveText('Full range');
+	// The group names the range; each button's name is its visible text (WCAG 2.5.3).
+	await expect(
+		page.getByRole('group', { name: 'Demand range' }).getByRole('button', { name: 'Full range' })
+	).toHaveText('Full range');
 });
 
 test('network and solver panel text is at least 12 px', async ({ page }) => {
