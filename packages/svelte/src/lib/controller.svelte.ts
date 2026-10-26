@@ -271,6 +271,8 @@ export class Controller {
 	// File reads and worker messages retain whole buffers. Admit one validated
 	// batch at a time so repeated drops cannot multiply the aggregate byte cap.
 	private readonly dropBatchGate = new DropBatchGate();
+	// Set by dispose(). Not $state; nothing renders it.
+	disposed = false;
 
 	nearbyRangeAnchor = $state<DemandRangeAnchor | null>(null);
 	// Default cases the user has closed; drives the restore affordance. Seeded in load().
@@ -456,6 +458,8 @@ export class Controller {
 	// under that formulation. Returns null when the sens module can't load; the caller then
 	// falls back to the server, surfacing solveFallbackReason.
 	async getStudy(c: SolvableCase, studyInputJson: string): Promise<BrowserStudy | null> {
+		// A disposed controller builds nothing that would outlive it.
+		if (this.disposed) return null;
 		const latched = this.studyUnavailable.get(c);
 		if (latched) {
 			c.solveFallbackReason ??= latched;
@@ -538,6 +542,26 @@ export class Controller {
 	): Promise<SensitivityColumn | null> {
 		const study = await this.getStudy(c, studyInputJson);
 		return study ? study.sensitivity(c.id, this.caseDeltas(c), this.caseRatings(c), target) : null;
+	}
+
+	/** Release every engine handle this controller holds: each case's browser
+	 * Study, including one still being built, and each multiconductor
+	 * session, with their pending edits and in-flight requests.
+	 * `TellegenProvider` calls it when it unmounts; the controller builds no
+	 * Study and keeps no new session afterwards. */
+	dispose() {
+		if (this.disposed) return;
+		this.disposed = true;
+		this.abort?.abort();
+		this.abort = null;
+		for (const c of [...this.app.cases, ...this.app.localCases]) this.disposeStudy(c);
+		for (const c of this.app.multiCases) {
+			c.solveAbort?.abort();
+			if (c.mcEditTimer !== null) clearTimeout(c.mcEditTimer);
+			c.mcEditTimer = null;
+			c.mcSession?.free();
+			c.mcSession = null;
+		}
 	}
 
 	// Release a case's Study (if any) when the case is removed.
@@ -2392,7 +2416,8 @@ export class Controller {
 		options: McPfOptions = {},
 		signal?: AbortSignal
 	): Promise<McPfSummary> => {
-		if (signal?.aborted) throw new DOMException('Calculation cancelled', 'AbortError');
+		if (signal?.aborted || this.disposed)
+			throw new DOMException('Calculation cancelled', 'AbortError');
 		if (c.solving) throw new Error('A calculation is already running for this case');
 		const unavailable = c.mcPfReason;
 		if (unavailable) {
@@ -2438,7 +2463,9 @@ export class Controller {
 					snapshot?.result ?? (await this.mcTransport.solveMcModule(input, options, abort.signal));
 				result = summarizeMcPfResult(fullResult);
 			}
-			if (abort.signal.aborted) throw new DOMException('Calculation cancelled', 'AbortError');
+			// dispose() aborts too; a session that arrives after it is freed below.
+			if (abort.signal.aborted || this.disposed)
+				throw new DOMException('Calculation cancelled', 'AbortError');
 			if (
 				seq !== c.solveSeq ||
 				(retainedAtStart ? retainedAtStart !== c.mcSession : input !== c.moduleJson) ||

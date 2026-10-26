@@ -16,10 +16,12 @@ export interface TellegenUiConfig {
 	orgLabel: string;
 	showFooter: boolean;
 	/** `'dark'` sets `data-theme="dark"` on the document root while the
-	 * provider is mounted, which switches the `styles.css` tokens. */
+	 * provider is mounted, which switches the `styles.css` tokens. The
+	 * provider keeps it in step with its prop. */
 	theme: 'light' | 'dark';
 	/** CARTO basemap key for the default shell's map, trimmed; empty for
-	 * none. See `TellegenMap`'s `cartoApiKey`. */
+	 * none. See `TellegenMap`'s `cartoApiKey`. The provider keeps it in step
+	 * with its prop. */
 	cartoApiKey: string;
 }
 
@@ -45,11 +47,16 @@ export function resolveTellegenUiConfig(options: TellegenUiOptions = {}): Telleg
 		orgHref: options.orgHref ?? DEFAULT_TELLEGEN_UI_CONFIG.orgHref,
 		orgLabel: options.orgLabel ?? DEFAULT_TELLEGEN_UI_CONFIG.orgLabel,
 		showFooter: options.showFooter ?? DEFAULT_TELLEGEN_UI_CONFIG.showFooter,
-		theme: options.theme ?? DEFAULT_TELLEGEN_UI_CONFIG.theme,
-		cartoApiKey:
-			normalizeCartoApiKey(options.cartoApiKey) ?? DEFAULT_TELLEGEN_UI_CONFIG.cartoApiKey
+		theme: resolveTheme(options.theme),
+		cartoApiKey: resolveCartoApiKey(options.cartoApiKey)
 	};
 }
+
+export const resolveTheme = (theme: TellegenUiOptions['theme']): TellegenUiConfig['theme'] =>
+	theme ?? DEFAULT_TELLEGEN_UI_CONFIG.theme;
+
+export const resolveCartoApiKey = (key: TellegenUiOptions['cartoApiKey']): string =>
+	normalizeCartoApiKey(key) ?? DEFAULT_TELLEGEN_UI_CONFIG.cartoApiKey;
 
 export const setAppState = (a: AppState): AppState => setContext(APP, a);
 export const setController = (c: Controller): Controller => setContext(CTRL, c);
