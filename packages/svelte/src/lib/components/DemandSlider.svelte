@@ -41,7 +41,6 @@
 					type="button"
 					class:active={app.demandRangeMode === 'local'}
 					aria-pressed={app.demandRangeMode === 'local'}
-					aria-label="Nearby demand range"
 					{disabled}
 					title="Range near the committed demand"
 					onclick={() => ctrl.setDemandRangeMode('local')}>Nearby</button
@@ -50,7 +49,6 @@
 					type="button"
 					class:active={app.demandRangeMode === 'full'}
 					aria-pressed={app.demandRangeMode === 'full'}
-					aria-label="Full demand range"
 					{disabled}
 					title="Zero load to the local physical limit"
 					onclick={() => ctrl.setDemandRangeMode('full')}>Full range</button
