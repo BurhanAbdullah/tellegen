@@ -33,7 +33,7 @@
 	} from './basemap.js';
 	import { caseDeltas, caseRatings, displayMetaFor, displaySeriesFor } from './display.js';
 	import {
-		CaseState,
+		type CaseState,
 		type CameraSnapshot,
 		type DisplayMode,
 		type LocalCase
@@ -710,13 +710,13 @@
 			if (info.layer.id === 'study-branches') {
 				const flow = view?.flows?.find((f) => f.branch === id);
 				return {
-					html: `<b>branch ${id}</b><br>saved state: ${esc(app.studyView.label)}${flow ? `<br>P from ${flow.pf.toFixed(3)} MW, loading ${(100 * flow.loading).toFixed(1)}%` : ''}`
+					html: `<b>Branch ${id}</b><br>Saved state: ${esc(app.studyView.label)}${flow ? `<br>P from ${flow.pf.toFixed(3)} MW<br>Loading ${(100 * flow.loading).toFixed(1)}%` : ''}`
 				};
 			}
 			const p = view?.lmp?.find((v) => v.bus === id),
 				v = view?.vm?.find((v) => v.bus === id);
 			return {
-				html: `<b>bus ${id}</b><br>saved state: ${esc(app.studyView.label)}${p ? `<br>LMP ${p.value.toFixed(4)}` : ''}${v ? `<br>voltage ${v.value.toFixed(5)} pu` : ''}`
+				html: `<b>Bus ${id}</b><br>Saved state: ${esc(app.studyView.label)}${p ? `<br>LMP ${p.value.toFixed(4)}` : ''}${v ? `<br>Voltage ${v.value.toFixed(5)} pu` : ''}`
 			};
 		}
 		if (info.layer?.id.startsWith('local-subs-')) {
@@ -726,25 +726,22 @@
 			const s = object as { number: number; name: string };
 			const named = s.name ? ` ${esc(s.name)}` : '';
 			return {
-				html: `<div class="tt"><b>substation ${Number(s.number)}</b>${named}<br><span style="opacity:0.6">.pwd diagram, approximate position</span></div>`
+				html: `<div class="tt"><b>Substation ${Number(s.number)}</b>${named}<br>Approximate position</div>`
 			};
 		}
 		const layerId = info.layer?.id;
 		if (layerId?.startsWith('multi-edges-')) {
 			const e = object as PlacedMultiEdge;
-			const state = e.kind === 'switch' ? (e.closed ? ' &#8901; closed' : ' &#8901; open') : '';
+			const state = e.kind === 'switch' ? (e.closed ? '<br>Closed' : '<br>Open') : '';
 			return {
-				html: `<div class="tt"><b>${esc(e.kind)} ${esc(e.from)}&#8201;&ndash;&#8201;${esc(e.to)}</b> ${e.n_phases}&#8202;&phi;${state}</div>`
+				html: `<div class="tt"><b>${esc(e.kind)} ${esc(e.from)}&#8201;&ndash;&#8201;${esc(e.to)}</b><br>${e.n_phases}&#8202;&phi;${state}</div>`
 			};
 		}
 		if (layerId?.startsWith('multi-buses-')) {
 			const b = object as PlacedMultiBus;
-			const roles = b.attachmentKinds.length ? b.attachmentKinds.join(', ') : 'none';
+			const roles = b.attachmentKinds.length ? b.attachmentKinds.join(', ') : 'None';
 			return {
-				html: `<div class="tt"><b>bus ${esc(b.id)}</b>
-					${b.terminals.length} terminals${b.grounded.length ? ` &#8901; ${b.grounded.length} grounded` : ''}<br>
-					load ${b.load_kw.toFixed(0)} kW &#8901; gen ${b.gen_kw.toFixed(0)} kW<br>
-					<span style="opacity:0.6">${esc(roles)}</span></div>`
+				html: `<div class="tt"><b>Bus ${esc(b.id)}</b><br>${b.terminals.length} terminals${b.grounded.length ? `, ${b.grounded.length} grounded` : ''}<br>Load ${b.load_kw.toFixed(0)} kW<br>Generation ${b.gen_kw.toFixed(0)} kW<br>Attachments: ${esc(roles)}</div>`
 			};
 		}
 		const c = caseOf(info);
@@ -753,17 +750,15 @@
 			const b = object as NetworkBranch;
 			const flow = d
 				? `${((d.loading.get(b.id) ?? 0) * 100).toFixed(0)}% of ${b.rate_mw.toFixed(0)} MW`
-				: `rate ${b.rate_mw.toFixed(0)} MW`;
+				: `Rating ${b.rate_mw.toFixed(0)} MW`;
 			return {
-				html: `<div class="tt"><b>line ${b.from}&#8201;&ndash;&#8201;${b.to}</b> ${flow}</div>`
+				html: `<div class="tt"><b>Line ${b.from}&#8201;&ndash;&#8201;${b.to}</b><br>${flow}</div>`
 			};
 		}
 		const bus = object as NetworkBus;
 		if (!c) {
 			return {
-				html: `<div class="tt"><b>bus ${bus.id}</b>
-					load ${bus.demand_mw.toFixed(0)} MW &#8901; gen ${bus.gen_mw.toFixed(0)} MW<br>
-					<span style="opacity:0.6">local file</span></div>`
+				html: `<div class="tt"><b>Bus ${bus.id}</b><br>Load ${bus.demand_mw.toFixed(0)} MW<br>Generation ${bus.gen_mw.toFixed(0)} MW</div>`
 			};
 		}
 		const price = d?.prices.get(bus.id);
@@ -773,8 +768,8 @@
 		const delta = caseDeltas(c)[bus.id] ?? 0;
 		const loadRow =
 			delta === 0
-				? `load ${bus.demand_mw.toFixed(0)} MW`
-				: `load ${(bus.demand_mw + delta).toFixed(0)} MW (${delta > 0 ? '+' : ''}${delta.toFixed(0)})`;
+				? `Load ${bus.demand_mw.toFixed(0)} MW`
+				: `Load ${(bus.demand_mw + delta).toFixed(0)} MW (${delta > 0 ? '+' : ''}${delta.toFixed(0)})`;
 		const sensRow =
 			sens === undefined
 				? ''
@@ -783,8 +778,6 @@
 			preview === undefined
 				? ''
 				: `<br>&Delta; LMP ${preview >= 0 ? '+' : ''}${preview.toExponential(2)} objective units/MW`;
-		const localRow =
-			c instanceof CaseState ? '' : '<br><span style="opacity:0.6">local file</span>';
 		// Demand already has its own row below, so the demand colouring shows LMP here alone.
 		const scalarRow =
 			!d || d.scalarMode === 'price' || d.scalarMode === 'demand'
@@ -793,9 +786,7 @@
 						scalar === undefined ? '&mdash;' : displayFmt(d.scalarMode, scalar)
 					} ${d.scalarUnit}<br>LMP ${price === undefined ? '&mdash;' : fmt.format(price)} objective units/MW`;
 		return {
-			html: `<div class="tt"><b>bus ${bus.id}</b>
-				${scalarRow}<br>
-				${loadRow} &#8901; gen ${bus.gen_mw.toFixed(0)} MW${sensRow}${previewRow}${localRow}</div>`
+			html: `<div class="tt"><b>Bus ${bus.id}</b><br>${scalarRow}<br>${loadRow}<br>Generation ${bus.gen_mw.toFixed(0)} MW${sensRow}${previewRow}</div>`
 		};
 	}
 
@@ -1542,14 +1533,14 @@
 {#if app.placingId && map}
 	<button
 		type="button"
-		class="place-at-center mono"
+		class="place-at-center"
 		onclick={() => {
 			if (!map) return;
 			const center = map.getCenter();
 			onplacecase(center.lng, center.lat);
 		}}
 	>
-		place at map center
+		Place at map center
 	</button>
 {/if}
 
@@ -1739,6 +1730,7 @@
 		border: 1px solid var(--accent);
 		border-radius: 3px;
 		color: var(--text-accent);
+		font-family: inherit;
 		font-size: 11px;
 		cursor: pointer;
 		box-shadow: var(--elev-cue);
@@ -1816,8 +1808,9 @@
 		background: var(--panel) !important;
 		border: 1px solid var(--line);
 		color: var(--ink) !important;
-		font-family: var(--font-mono);
-		font-size: 11px;
+		font-family: var(--font-display);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
 		line-height: 1.5;
 		padding: 8px 10px !important;
 		border-radius: 2px;

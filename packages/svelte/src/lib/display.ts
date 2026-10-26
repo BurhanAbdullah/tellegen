@@ -1,6 +1,5 @@
 import type { BranchRatingDeltas, DemandDeltas } from './api.js';
 import { demandGradient, priceGradient } from './colors.js';
-import { priceCopy } from './format.js';
 import { CaseState, type DisplayMode, type SolvableCase } from './state.svelte.js';
 
 /** One bus-color variable the panel and map can show, without its per-bus values.
@@ -23,7 +22,10 @@ export function displayMetaFor(c: SolvableCase | null): DisplayOption[] {
 			mode: 'price',
 			label: 'LMP',
 			unit: 'objective units/MW',
-			copy: priceCopy(c.formulation),
+			copy:
+				c.formulation === 'socwr'
+					? 'Locational marginal price, SOCWR relaxation'
+					: 'Locational marginal price',
 			gradient: priceGradient
 		});
 	}
@@ -32,19 +34,16 @@ export function displayMetaFor(c: SolvableCase | null): DisplayOption[] {
 			mode: 'voltage',
 			label: '|V|',
 			unit: 'pu',
-			copy:
-				c.formulation === 'socwr'
-					? 'SOCWR voltage magnitude from the current relaxed solution.'
-					: 'Bus voltage magnitude from the current power-flow result.',
+			copy: c.formulation === 'socwr' ? 'Voltage magnitude, SOCWR relaxation' : 'Voltage magnitude',
 			gradient: priceGradient
 		});
 	}
 	if (c.solution.va.length > 0) {
 		options.push({
 			mode: 'angle',
-			label: 'angle',
+			label: 'Angle',
 			unit: 'rad',
-			copy: 'Bus voltage angle from the current result.',
+			copy: 'Voltage angle',
 			gradient: priceGradient
 		});
 	}
@@ -52,9 +51,9 @@ export function displayMetaFor(c: SolvableCase | null): DisplayOption[] {
 	if (c.network?.buses.length) {
 		options.push({
 			mode: 'demand',
-			label: 'demand',
+			label: 'Demand',
 			unit: 'MW',
-			copy: 'Bus demand, including committed changes, on a square-root scale.',
+			copy: 'Demand, square-root scale',
 			gradient: demandGradient
 		});
 	}

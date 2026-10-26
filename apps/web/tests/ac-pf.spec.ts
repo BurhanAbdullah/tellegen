@@ -21,12 +21,12 @@ test('AC power flow shows voltages, supports equipment inspection, and saves its
 		{ name: 'case3-coords.csv', mimeType: 'text/csv', buffer: Buffer.from(CASE3_COORDS) },
 		{ name: 'case3pf.m', mimeType: 'text/plain', buffer: Buffer.from(CASE3_PLANNING) }
 	]);
-	await expect(page.locator('.solvecard')).toContainText('OPF solve', { timeout: 60_000 });
+	await expect(page.locator('.solvecard')).toContainText('DC OPF', { timeout: 60_000 });
 	const calculation = page.getByRole('combobox', { name: 'Calculation', exact: true });
 	await expect(calculation).toBeEnabled();
 	await expect(calculation.locator('option[value="acopf"]')).toHaveJSProperty('disabled', true);
 	await calculation.selectOption('acpf');
-	await expect(page.locator('.solvecard')).toContainText('Power flow');
+	await expect(page.locator('.solvecard')).toContainText('AC power flow');
 	await expect(calculation).toBeEnabled();
 	await expect(page.getByRole('button', { name: '|V|', exact: true })).toHaveAttribute(
 		'aria-pressed',
@@ -62,8 +62,8 @@ test('AC power flow shows voltages, supports equipment inspection, and saves its
 	expect(loadBus.voltage_pu).toBeLessThan(1);
 	for (const bus of buses.filter((bus) => bus.legacy_id !== 2))
 		expect(bus.voltage_pu).toBeCloseTo(1, 8);
-	await page.getByRole('combobox', { name: 'bus lookup', exact: true }).fill('2');
-	await page.getByRole('combobox', { name: 'bus lookup', exact: true }).press('Enter');
+	await page.getByRole('combobox', { name: 'Bus lookup', exact: true }).fill('2');
+	await page.getByRole('combobox', { name: 'Bus lookup', exact: true }).press('Enter');
 	const equipment = page.getByRole('region', { name: 'Power-flow equipment results' });
 	await expect(equipment).toContainText(`${loadBus.voltage_pu.toFixed(4)} pu`);
 	await expect(equipment).toContainText('90 MW');
@@ -100,7 +100,7 @@ test('AC power flow shows voltages, supports equipment inspection, and saves its
 	await calculation.selectOption('dcopf');
 	await expect(calculation).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'LMP', exact: true })).toBeVisible();
-	await expect(page.locator('.solvecard')).toContainText('OPF solve');
+	await expect(page.locator('.solvecard')).toContainText('DC OPF');
 	await expect(page.locator('.error')).toHaveCount(0);
 	const download = page.waitForEvent('download');
 	await page.getByRole('button', { name: 'Export', exact: true }).click();
@@ -113,7 +113,7 @@ test('AC power flow shows voltages, supports equipment inspection, and saves its
 	});
 	await expect(calculation).toHaveValue('acpf');
 	await expect(calculation).toBeEnabled();
-	await expect(page.locator('.solvecard')).toContainText('Power flow');
+	await expect(page.locator('.solvecard')).toContainText('AC power flow');
 	await expect(page.getByRole('button', { name: '|V|', exact: true })).toHaveAttribute(
 		'aria-pressed',
 		'true'
@@ -144,7 +144,7 @@ test('a rejected AC power flow stops the solving indicator and can recover with 
 		{ name: 'case3-coords.csv', mimeType: 'text/csv', buffer: Buffer.from(CASE3_COORDS) },
 		{ name: 'reference-angle.m', mimeType: 'text/plain', buffer: Buffer.from(nonzeroReference) }
 	]);
-	await expect(page.locator('.solvecard')).toContainText('OPF solve', { timeout: 60_000 });
+	await expect(page.locator('.solvecard')).toContainText('DC OPF', { timeout: 60_000 });
 	const calculation = page.getByRole('combobox', { name: 'Calculation', exact: true });
 	await expect(calculation).toBeEnabled();
 	const network = page.getByRole('complementary', { name: 'Network', exact: true });
@@ -159,7 +159,7 @@ test('a rejected AC power flow stops the solving indicator and can recover with 
 		await expect(page.locator('.solvecard')).toHaveCount(0);
 		await calculation.selectOption('dcopf');
 		await expect(calculation).toBeEnabled();
-		await expect(page.locator('.solvecard')).toContainText('OPF solve');
+		await expect(page.locator('.solvecard')).toContainText('DC OPF');
 		await expect(network).not.toContainText('results available.');
 	}
 });

@@ -123,6 +123,19 @@ inside `TellegenProvider`:
 <PanelFrame id="region" title="Region" side="left">...</PanelFrame>
 ```
 
+The components show data, labels and controls, not host copy. A host that
+wants a note under a local case's stats passes `ControlPanel` a `caseNote`
+snippet, which receives the case; `DropZone` renders its children under the
+drop prompt:
+
+```svelte
+<ControlPanel>
+  {#snippet caseNote(lc)}
+    <p>{lc.label} is a synthetic grid.</p>
+  {/snippet}
+</ControlPanel>
+```
+
 `ShellEnvironment` is renderless and keeps the compact-layout, pointer and
 viewport state in step, as the default shell does. `PanelHost` reads
 `--tellegen-dock-left`, `--tellegen-dock-right` and `--tellegen-dock-bottom`

@@ -7,7 +7,7 @@
 </script>
 
 <div class="mode display-mode">
-	<div class="segment mono" aria-label="bus color variable">
+	<div class="segment" aria-label="Bus color variable">
 		{#each ctrl.displayOptions as option (option.mode)}
 			<button
 				type="button"
@@ -19,27 +19,16 @@
 	</div>
 	<span class="mono dim">{ctrl.activeDisplay?.unit ?? ''}</span>
 	{#if app.sensitivityLoading}
-		<span class="mono dim blink">&part; loading&hellip;</span>
+		<span class="dim blink">Loading&hellip;</span>
 	{/if}
 </div>
 {#if ctrl.activeDisplay && ctrl.displayStats}
-	{#if ctrl.activeDisplay.mode === 'price'}
-		<div class="legend-heading">
-			<span class="legend-title">Locational marginal price</span>
-			<span
-				class="hint-dot mono"
-				title={ctrl.activeDisplay.copy}
-				aria-label={ctrl.activeDisplay.copy}>i</span
-			>
-		</div>
-	{:else}
-		<p class="dim small">{ctrl.activeDisplay.copy}</p>
-	{/if}
+	<p class="legend-title">{ctrl.activeDisplay.copy}</p>
 	<div class="legend" style:background={ctrl.activeDisplay.gradient}></div>
 	<div class="legend-labels mono">
 		{#if ctrl.displayStats.uniform !== null}
 			<span>
-				uniform {displayFmt(ctrl.activeDisplay.mode, ctrl.displayStats.uniform)}
+				Uniform {displayFmt(ctrl.activeDisplay.mode, ctrl.displayStats.uniform)}
 				{ctrl.activeDisplay.unit}
 			</span>
 		{:else}
@@ -70,18 +59,10 @@
 {/if}
 
 <style>
-	.legend-heading {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-top: 10px;
-	}
-
 	.legend-title {
+		margin: 10px 0 0;
 		font-size: 12px;
 		font-weight: 600;
 		color: var(--ink);
 	}
-
-	/* .hint-dot lives in the shared stylesheet; SensitivityReadout uses it too. */
 </style>
