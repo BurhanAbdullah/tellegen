@@ -1,5 +1,5 @@
 // Generated from Rust by synth_schema and generate-synth-types.mjs.
-// Source SHA256: b2d354010a3f758877a42e749b8a52cbf3dd40aada9e9c51a6583f794e2a0068
+// Source SHA256: 4d012c8adfdfccf207affed59b5cc0ae52390c38b3da4f60f1039ddda55c01ca
 
 export type AcPfOutcome = "converged" | "not_converged" | "skipped";
 
@@ -63,7 +63,7 @@ export type IslandOptions = { "beyond"?: FarIslandPolicy; /** Landmasses whose n
 
 export type IslandOutcome = { "branches": number; "buses": number; "generators": number; "index": number; "load_mw": number; "message"?: string | null; "status": string; };
 
-export type Limits = { /** Spherical area cap of the region, km². */ "max_area_km2"?: number; "max_branch_factor"?: number; "max_bus_count"?: number; };
+export type Limits = { /** Spherical area cap of the region, km²; positive and finite. */ "max_area_km2"?: number; /** Upper bound of `branch_factor`; finite and at least 1. */ "max_branch_factor"?: number; /** Bus cap. A synthetic grid's count is held at it (`bus_count_capped`); an OpenStreetMap grid drops its lowest voltage levels until it fits (`osm_bus_count_capped`) and is refused when its highest level alone exceeds it. */ "max_bus_count"?: number; };
 
 export type LmpSummary = { "max": number; "mean": number; "min": number; "spread": number; };
 
@@ -73,7 +73,7 @@ export type OsmOptions = { /** Infrastructure this far outside the region polygo
 
 export type OsmProvenance = { "counts": { [key: string]: number; }; "document_sha256": string; "elements": number; "generator": string; "timestamp_osm_base"?: string | null; };
 
-export type PlacesProvenance = { "count": number; "sha256": string; };
+export type PlacesProvenance = { "count": number; /** SHA-256 of the table as loaded. */ "sha256": string; /** The dataset the table was derived from (the bundled table names Natural Earth's release); absent for a bare array of rows. */ "source"?: string | null; /** SHA-256 of that dataset. */ "source_sha256"?: string | null; };
 
 export type PlanningReport = { /** The highest level the plan added above the modelled ones (one of `RegionContext::promotion_levels_kv`) because corridors at the highest modelled level needed more than two circuits; absent when the modelled levels sufficed or the region has no higher level in service. */ "added_level_kv"?: number | null; /** Widest island angle spread of the planning case (DC), degrees. */ "angle_spread_deg": number; /** Branches the requested branch factor asks for. */ "branch_target": number; /** Branches in the network. */ "branches": number; "capacitor_banks": number; /** Total capacitor rating, MVAr at 1 pu. */ "capacitor_mvar": number; /** Circuits added beyond one per corridor because the planning flow needed them. */ "capacity_circuits": number; /** Corridors at the cap whose planning flow still needs more circuits. */ "capped_corridors": number; /** Parallel circuits one corridor may hold. */ "circuit_cap": number; /** False when the plan stopped at its round or circuit cap. */ "converged": boolean; /** The planning case: `economic_dispatch_at_peak`, the least-cost dispatch of the generators serving peak load on a lossless network with no limits. */ "dispatch": string; /** Circuits added, heaviest planned loading first, to reach the target. */ "filler_circuits": number; /** Largest angle difference across one branch in the AC solution of the planning case at the planned voltage profile, degrees. */ "max_angle_difference_deg": number; /** Most parallel circuits on one corridor. */ "max_parallel_circuits": number; /** Highest circuit loading in the planning case. */ "max_planning_loading": number; /** Corridors still above their rating in the planning case. */ "overloaded_corridors": number; /** Buses raised to the next voltage level because an incident corridor would have needed more than two circuits at the lower one. */ "promoted_buses": number; "reactor_banks": number; /** Total shunt reactor rating, MVAr at 1 pu. */ "reactor_mvar": number; /** Capacity and stiffening rounds the corridor plan ran (each one DC power flow). */ "rounds": number; /** Circuits added to hold each island's angle spread within the St. Clair stability margin (44.4°). */ "stiffening_circuits": number; /** Transformer corridors whose bank the plan enlarged (up to the rating of the line it terminates) before adding circuits. */ "upsized_transformers": number; /** Share of its rating no circuit may exceed in the planning case. */ "utilisation_target": number; };
 

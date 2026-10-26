@@ -287,6 +287,13 @@ antimeridian-crossing region), the grid is built as follows:
    reserve margin.
 6. The island policy applies: `connect` (default), `cut` or `keep`.
 
+`limits.max_bus_count` (3000) caps this mode too. When the mapped substation
+levels and converters make more buses than that, the lowest substation level
+is left out, one at a time, until they fit, and its lines with it;
+`osm_bus_count_capped` names the levels kept. A region whose highest level
+alone exceeds the cap is refused as `invalid_request`: choose a smaller region
+or raise the cap.
+
 Mapped circuits are real, so the corridor plan only measures them; the
 reactive plan still applies. A way's circuit count, and a corridor's, is
 capped at 12: a larger `circuits` or `cables` tag is a tagging error, and each
@@ -319,10 +326,18 @@ session.free();
 - **Host.** Sessions run on a dedicated worker. Cancelling one terminates
   only that worker, so interactive studies are untouched.
 - **Places table.** The Natural Earth table (public domain) ships in the
-  package and loads once per worker. The national demand table is compiled
-  into the module.
+  package and loads once per worker. It is derived from Natural Earth
+  v5.1.2's 1:10m populated places by `scripts/derive-populated-places.py`,
+  names that release and its file's SHA-256, and the report repeats both
+  (`provenance.places`). A host may load its own bare array of
+  `{n, lo, la, p, c}` rows instead; its provenance then names no source. The
+  national demand table is compiled into the module.
 - **Types.** Request and report types are generated from Rust under
   `@tellegen/engine/synth`.
+- **Strict requests.** An unknown key at any level of the request, such as
+  a misspelt `limits` or `islands` option, is refused as `invalid_request`
+  rather than ignored. `limits.max_area_km2` must be positive and finite,
+  and `limits.max_branch_factor` finite and at least 1.
 - **Coordinates.** The ingest payload has `coords_kind: "synthetic"` and
   `coords_method: "generated"`: the buses are sites chosen on real
   geography, not a topology layout, and the case panel says so.
@@ -341,8 +356,10 @@ PowerIO's `gridfm` format is the Parquet dataset layout.
 
 ## Limits
 
-- Requests are capped at 3000 buses, which the automatic count reaches for
-  the largest countries. China at 3000 buses takes about 1.0–1.2 s natively
+- Requests are capped at 3000 buses (`limits.max_bus_count`), which the
+  automatic count reaches for the largest countries. OpenStreetMap mode
+  keeps to the same cap by leaving out its lowest voltage levels. China at
+  3000 buses takes about 1.0–1.2 s natively
   and 1.5 s in wasm (Node, Apple M5 Pro), end to end with both validations;
   the United States takes 1.4–1.5 s and 2.0 s, about 0.9 s of it an AC power
   flow that does not converge over five starts. A 500-bus country takes

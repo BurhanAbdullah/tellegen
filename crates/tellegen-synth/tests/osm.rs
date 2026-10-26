@@ -182,6 +182,69 @@ fn island_policies() {
 }
 
 #[test]
+fn the_bus_cap_drops_the_lowest_levels_first() {
+    // Nine buses at 110 kV and above. A cap of eight drops the 110 kV level:
+    // sites A, B and C keep their 380 kV buses, and the two converters stay.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 8;
+    let (module, report) = generate(req, common::places(), Some(FIXTURE.to_owned())).unwrap();
+    let net = module.value();
+    assert_eq!(
+        net.buses().len(),
+        5,
+        "{:?}",
+        net.buses().iter().map(|b| &b.name).collect::<Vec<_>>()
+    );
+    assert!(net.buses().iter().all(|b| b.base_kv == 380.0
+        || b.name
+            .as_deref()
+            .is_some_and(|n| n.starts_with("OSM Converter"))));
+    assert_eq!(count(&report, "substation_sites"), 3);
+    assert_eq!(count(&report, "converters"), 2);
+    assert_eq!(count(&report, "transformers"), 0);
+    let capped = report
+        .warnings
+        .iter()
+        .find(|w| w.code == "osm_bus_count_capped")
+        .expect("the cap is reported");
+    assert!(
+        capped.message.contains("9 OpenStreetMap buses"),
+        "{}",
+        capped.message
+    );
+    assert!(
+        capped.message.contains("below 380 kV"),
+        "{}",
+        capped.message
+    );
+
+    // At the cap nothing is dropped.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 9;
+    let (module, report) = generate(req, common::places(), Some(FIXTURE.to_owned())).unwrap();
+    assert_eq!(module.value().buses().len(), 9);
+    assert!(!report
+        .warnings
+        .iter()
+        .any(|w| w.code == "osm_bus_count_capped"));
+}
+
+#[test]
+fn a_highest_level_over_the_bus_cap_is_refused() {
+    // The 380 kV level and the converters alone make five buses.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 4;
+    let err = generate(req, common::places(), Some(FIXTURE.to_owned()))
+        .err()
+        .unwrap();
+    assert!(matches!(err, SynthError::InvalidRequest(_)), "{err}");
+    assert!(
+        err.to_string().contains("limits.max_bus_count = 4"),
+        "{err}"
+    );
+}
+
+#[test]
 fn too_little_data_is_a_typed_refusal() {
     let thin = r#"{"elements":[
         {"type":"node","id":1,"lat":50.0,"lon":8.2,"tags":{"power":"substation","voltage":"110000"}},

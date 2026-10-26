@@ -109,3 +109,74 @@ fn huge_finite_values_are_refused_without_panicking() {
         assert!(req.validate().is_ok(), "boundary {i}");
     }
 }
+
+#[test]
+fn limit_caps_must_be_positive_and_finite() {
+    let refusals: Vec<Edit> = vec![
+        Box::new(|r| r.limits.max_area_km2 = f64::NAN),
+        Box::new(|r| r.limits.max_area_km2 = f64::INFINITY),
+        Box::new(|r| r.limits.max_area_km2 = 0.0),
+        Box::new(|r| r.limits.max_area_km2 = -1.0),
+        Box::new(|r| r.limits.max_branch_factor = f64::NAN),
+        Box::new(|r| r.limits.max_branch_factor = f64::INFINITY),
+        Box::new(|r| r.limits.max_branch_factor = 0.5),
+        Box::new(|r| r.limits.max_branch_factor = -2.0),
+    ];
+    for (i, refuse) in refusals.iter().enumerate() {
+        let mut req = common::request(common::iraq_box(), 1, Some(30));
+        refuse(&mut req);
+        assert!(
+            matches!(req.validate(), Err(SynthError::InvalidRequest(_))),
+            "case {i}"
+        );
+    }
+    let mut req = common::request(common::iraq_box(), 1, Some(30));
+    req.limits.max_area_km2 = 1.0;
+    req.limits.max_branch_factor = 1.0;
+    req.branch_factor = Some(1.0);
+    assert!(req.validate().is_ok());
+}
+
+#[test]
+fn unknown_keys_in_nested_options_are_refused() {
+    let base = serde_json::json!({
+        "region": {
+            "geometry": {"type": "Polygon", "coordinates": [[[42.1, 31.1], [48.5, 31.1], [48.5, 36.8], [42.1, 36.8], [42.1, 31.1]]]},
+            "label": "Iraq box"
+        },
+        "demand": {"kind": "total_mw", "mw": 500.0},
+        "islands": {"max_interconnect_km": 100.0, "beyond": "keep"},
+        "osm": {"voltage_floor_kv": 220.0},
+        "calibration": {"enabled": false, "targets": tellegen_synth::CalibrationTargets::published()},
+        "validation": {"run_ac_pf": false},
+        "limits": {"max_bus_count": 100},
+        "fallback_from": {"source": "osm", "reason": "osm_insufficient", "buses": 2}
+    });
+    let parsed: SynthRequest = serde_json::from_value(base.clone()).expect("every key is known");
+    assert_eq!(parsed.limits.max_bus_count, 100);
+    for pointer in [
+        "/region",
+        "/demand",
+        "/islands",
+        "/osm",
+        "/calibration",
+        "/calibration/targets",
+        "/validation",
+        "/limits",
+        "/fallback_from",
+    ] {
+        let mut misspelt = base.clone();
+        misspelt
+            .pointer_mut(pointer)
+            .and_then(|v| v.as_object_mut())
+            .unwrap()
+            .insert("max_buses".into(), serde_json::json!(5));
+        let err = serde_json::from_value::<SynthRequest>(misspelt)
+            .err()
+            .unwrap_or_else(|| panic!("{pointer} accepted an unknown key"));
+        assert!(
+            err.to_string().contains("unknown field `max_buses`"),
+            "{pointer}: {err}"
+        );
+    }
+}
