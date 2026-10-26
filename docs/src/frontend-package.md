@@ -42,6 +42,10 @@ files in the browser, and runs supported local solves in WebAssembly.
 - `orgLabel`
 - `showFooter`, default `true`
 - `theme`, `light` (default) or `dark`
+- `cartoApiKey`, the basemap key (see [Basemap](#basemap))
+
+`theme` and `cartoApiKey` follow their props. The others are read once, when
+the viewer mounts; remount it to change them.
 
 Use a different backend base path like this:
 
@@ -83,6 +87,11 @@ persistent layout and render the shell on the page:
 
 <TellegenShell />
 ```
+
+The provider owns the controller and its cases. Unmounting it disposes the
+controller, which frees every case's browser Study and multiconductor session
+in the engine worker, so a provider that should keep its cases across pages
+belongs in a layout that stays mounted.
 
 `@tellegen/svelte` also exports lower level pieces for custom shells:
 
@@ -208,7 +217,8 @@ besides its click callbacks:
 - `attribution`: `'compact'` (default) or `'full'`. There is no off switch.
 - `onMapReady(map, overlay)`: called with the MapLibre map and the deck
   overlay once they exist. It may return a cleanup, and it fires again after
-  a context-loss or basemap rebuild.
+  a context-loss or basemap rebuild. If it throws, the map and its window
+  and document listeners are still released when the map is torn down.
 - `onBasemapFallback(reason)`: the switch to the fallback happened.
   `reason.from` and `reason.to` name the two providers.
 - `onBasemapError(reason)`: no basemap can be shown. The network layers
@@ -216,7 +226,8 @@ besides its click callbacks:
   `reason.to` is `null`.
 
 `TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
-together with `theme`, to the default shell's map. A SvelteKit 3 host can
+together with `theme`, to the default shell's map. Both follow their props:
+changing either rebuilds that map in place. A SvelteKit 3 host can
 declare the key as an optional public build-time variable:
 
 ```ts

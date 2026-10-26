@@ -983,25 +983,9 @@
 
 				map = m;
 				overlay = o;
-				const detachReady = onMapReady?.(m, o);
-				// Frame the active grid once the map is ready. The initial frame request
-				// (from the case load) can fire before the async map import finishes and
-				// be lost; re-issuing it here ensures the first view is the active case,
-				// not the default world view. A rebuilt map opens at the default view
-				// too, so it restores the camera the last map saved.
-				if (restoreCamera && app.camera) m.jumpTo(app.camera);
-				else if (app.cameraSeq === handledCameraSeq)
-					app.requestFrame(app.activeCaseId ?? app.activeLocalId ?? 'all');
-				if (mapGen > 0) {
-					// This is a rebuilt map. Once it has held a live context without
-					// another loss, zero the budget so the cap only ever catches a tight
-					// loss loop, not recoveries spread across a long session.
-					stabilizeTimer = setTimeout(() => {
-						glRebuilds = 0;
-						stabilizeTimer = null;
-					}, 10000);
-				}
-
+				// Assign the teardown before host code runs: if onMapReady throws,
+				// the map and its window and document listeners are still released.
+				let detachReady: void | (() => void);
 				cleanup = () => {
 					clearRebuild();
 					clearStabilize();
@@ -1019,6 +1003,24 @@
 					map = null;
 					overlay = null;
 				};
+				detachReady = onMapReady?.(m, o);
+				// Frame the active grid once the map is ready. The initial frame request
+				// (from the case load) can fire before the async map import finishes and
+				// be lost; re-issuing it here ensures the first view is the active case,
+				// not the default world view. A rebuilt map opens at the default view
+				// too, so it restores the camera the last map saved.
+				if (restoreCamera && app.camera) m.jumpTo(app.camera);
+				else if (app.cameraSeq === handledCameraSeq)
+					app.requestFrame(app.activeCaseId ?? app.activeLocalId ?? 'all');
+				if (mapGen > 0) {
+					// This is a rebuilt map. Once it has held a live context without
+					// another loss, zero the budget so the cap only ever catches a tight
+					// loss loop, not recoveries spread across a long session.
+					stabilizeTimer = setTimeout(() => {
+						glRebuilds = 0;
+						stabilizeTimer = null;
+					}, 10000);
+				}
 			})
 			.catch((e) => {
 				if (!cancelled) app.error = `map failed to load: ${e instanceof Error ? e.message : e}`;
