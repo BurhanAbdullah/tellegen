@@ -181,13 +181,61 @@ with tempfile.TemporaryDirectory() as directory:
         (" M", "crates/tellegen/CHANGELOG.md"),
         (" M", "crates/tellegen/Cargo.toml"),
     ]
-    for _, path in crate_entries:
-        write(path)
-    validator.validate_crate(crate_entries)
+    def manifest(name: str, version: str) -> str:
+        return f'[package]\nname = "{name}"\nversion = "{version}"\n'
+
+    def lock(engine: str, wheel: str) -> str:
+        return (
+            f'[[package]]\nname = "tellegen"\nversion = "{engine}"\n\n'
+            f'[[package]]\nname = "tellegen-py"\nversion = "{wheel}"\n'
+        )
+
+    # The checkout base: engine and wheel agree on 0.3.0.
+    commit(
+        {
+            "crates/tellegen/CHANGELOG.md": "# Changelog\n",
+            "crates/tellegen/Cargo.toml": manifest("tellegen", "0.3.0"),
+            "crates/tellegen-py/Cargo.toml": manifest("tellegen-py", "0.3.0"),
+            "Cargo.lock": lock("0.3.0", "0.3.0"),
+        }
+    )
+    # A version already raised by hand: release-plz writes only the changelog.
+    write("crates/tellegen/CHANGELOG.md", "# Changelog\n\n## 0.3.0\n")
     validator.validate_crate([(" M", "crates/tellegen/CHANGELOG.md")])
+    # The wheel must still agree with the engine.
+    write("crates/tellegen-py/Cargo.toml", manifest("tellegen-py", "0.2.0"))
+    rejects(lambda: validator.validate_crate([(" M", "crates/tellegen/CHANGELOG.md")]))
+    rejects(
+        lambda: validator.validate_crate(
+            [(" M", "crates/tellegen/CHANGELOG.md"), (" M", "crates/tellegen-py/Cargo.toml")]
+        )
+    )
+
+    # A release-plz bump to 0.3.1, then the wheel synchronized to it.
+    write("crates/tellegen/Cargo.toml", manifest("tellegen", "0.3.1"))
+    write("crates/tellegen-py/Cargo.toml", manifest("tellegen-py", "0.3.1"))
+    write("Cargo.lock", lock("0.3.1", "0.3.1"))
+    synchronized = crate_entries + [(" M", "crates/tellegen-py/Cargo.toml")]
+    validator.validate_crate(synchronized)
     rejects(lambda: validator.validate_crate(crate_entries[:-1]))
     rejects(lambda: validator.validate_crate(crate_entries[1:]))
     rejects(lambda: validator.validate_crate([(" M", "Cargo.lock")]))
+    rejects(
+        lambda: validator.validate_crate(
+            [(" M", "crates/tellegen/CHANGELOG.md"), (" M", "crates/tellegen-py/Cargo.toml")]
+        )
+    )
+    # Anything beyond the version in the wheel's manifest is refused.
+    write(
+        "crates/tellegen-py/Cargo.toml",
+        manifest("tellegen-py", "0.3.1") + "publish = true\n",
+    )
+    rejects(lambda: validator.validate_crate(synchronized))
+    write("crates/tellegen-py/Cargo.toml", manifest("tellegen-py", "0.3.1"))
+    # A lock entry left behind is refused.
+    write("Cargo.lock", lock("0.3.1", "0.3.0"))
+    rejects(lambda: validator.validate_crate(synchronized))
+    write("Cargo.lock", lock("0.3.1", "0.3.1"))
     os.chmod("Cargo.lock", 0o755)
     rejects(lambda: validator.validate_crate(crate_entries))
 
