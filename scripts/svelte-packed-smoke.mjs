@@ -138,6 +138,13 @@ async function writeConsumer(engineTarball, svelteTarball) {
       "vite",
     ].map((name) => [name, sveltePackage.devDependencies[name]]),
   );
+  // The map libraries are peers the host installs: the install below passes
+  // `--legacy-peer-deps`, so nothing else would bring them in.
+  const mapPeers = Object.fromEntries(
+    Object.entries(sveltePackage.peerDependencies).filter(
+      ([name]) => name !== "svelte",
+    ),
+  );
 
   await mkdir(join(consumerDir, "src"), { recursive: true });
   await writeFile(
@@ -153,6 +160,7 @@ async function writeConsumer(engineTarball, svelteTarball) {
         dependencies: {
           "@tellegen/engine": packageFileSpec(engineTarball),
           "@tellegen/svelte": packageFileSpec(svelteTarball),
+          ...mapPeers,
         },
         devDependencies,
       },
@@ -264,10 +272,16 @@ export default defineConfig({
     join(consumerDir, "src/main.ts"),
     `import { mount } from "svelte";
 import { AppFooter } from "@tellegen/svelte/components";
+import engineWasmUrl from "@tellegen/engine/wasm?url";
+import placesUrl from "@tellegen/engine/places?url";
 import App from "./App.svelte";
 import "@tellegen/svelte/styles.css";
 
 void AppFooter;
+// A host that preloads the engine's assets names them by export, not by path.
+for (const url of [engineWasmUrl, placesUrl]) {
+  if (typeof url !== "string") throw new Error("asset export is not a URL");
+}
 
 mount(App, {
   target: document.getElementById("app")!
@@ -293,6 +307,20 @@ async function assertTarballInstall() {
       throw new Error(`${path} is a symlink, not an installed package tarball`);
     }
   }
+  // The map shares MapLibre and deck.gl with the host (`extraLayers`,
+  // `onMapReady`), so the package must not bring copies of its own.
+  for (const name of [
+    "maplibre-gl",
+    "@deck.gl/core",
+    "@deck.gl/layers",
+    "@deck.gl/maplibre",
+  ]) {
+    const nested = join(svelteInstall, "node_modules", name);
+    if (await lstat(nested).catch(() => null)) {
+      throw new Error(`@tellegen/svelte installed its own copy of ${name}`);
+    }
+    await lstat(join(consumerDir, "node_modules", name));
+  }
 }
 
 async function assertBuildOutput() {
@@ -307,6 +335,9 @@ async function assertBuildOutput() {
   }
   if (!wasmFiles.some((file) => /tellegen_bg.*\.wasm$/.test(file))) {
     throw new Error("consumer build did not emit the engine wasm asset");
+  }
+  if (!files.some((file) => /populated_places.*\.json$/.test(file))) {
+    throw new Error("consumer build did not emit the places table");
   }
   if (!files.some((file) => /worker/.test(file) && file.endsWith(".js"))) {
     throw new Error("consumer build did not emit the engine worker chunk");

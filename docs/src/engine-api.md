@@ -15,6 +15,12 @@
 - `createBrowserWasmTransport()`: returns the browser wasm transport facade.
 - `preloadEngine()`: initializes the wasm package.
 
+The package also exports its two large assets as files, so a host can preload
+or budget them without a path into `dist`: `@tellegen/engine/wasm` is the
+WebAssembly binary and `@tellegen/engine/places` the populated places table.
+Vite imports them as URLs with `?url`
+(`import engineWasmUrl from "@tellegen/engine/wasm?url"`).
+
 The facade has the same methods as the direct exports:
 
 - `classifyJson(bytes)`

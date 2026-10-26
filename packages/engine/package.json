@@ -50,7 +50,9 @@
     "./synth": {
       "types": "./dist/generated/synth-types.d.ts",
       "default": "./dist/generated/synth-types.js"
-    }
+    },
+    "./wasm": "./dist/wasm-pkg/tellegen_bg.wasm",
+    "./places": "./dist/data/populated_places.json"
   },
   "scripts": {
     "types": "node scripts/generate-types.mjs",

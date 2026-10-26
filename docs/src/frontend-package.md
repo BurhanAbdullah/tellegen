@@ -16,8 +16,12 @@ route level concerns such as SEO pages, `/credits`, and `/privacy`.
 Install:
 
 ```sh
-npm install @tellegen/svelte
+npm install @tellegen/svelte maplibre-gl @deck.gl/core @deck.gl/layers @deck.gl/maplibre
 ```
+
+`maplibre-gl` and the three `@deck.gl` packages are peer dependencies: the map
+shares their instances with the host through `extraLayers` and `onMapReady`, so
+the app installs them and resolves one copy of each.
 
 Render the full viewer:
 
@@ -277,13 +281,13 @@ tiles, fonts and sprites are all fetched. The engine underneath also needs
 `script-src 'wasm-unsafe-eval'` (never `'unsafe-eval'`) and `worker-src
 'self'`, since its workers are same-origin.
 
-A host that passes its own deck.gl layers in `extraLayers`, or works with the
-MapLibre map from `onMapReady`, must resolve one copy each of
-`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`.
-When two deck.gl versions load, deck.gl throws "multiple versions detected".
-If the host's ranges differ from the package's (`^9.4.0` for deck.gl,
-`^6.15.0` for maplibre-gl), point both at one version with npm `overrides`
-(or `resolutions` in pnpm and Yarn).
+`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`
+are peer dependencies (`^9.4.0` for deck.gl, `^6.15.0` for maplibre-gl), so
+the host's copies are the ones the map uses, including the deck.gl layers it
+passes in `extraLayers` and the MapLibre map it gets from `onMapReady`. When
+two deck.gl versions load, deck.gl throws "multiple versions detected"; if
+another dependency pulls in a second copy, point both at one version with npm
+`overrides` (or `resolutions` in pnpm and Yarn).
 
 The map needs no Vite settings, in a build or in the dev server. MapLibre's
 worker comes from a `?worker&url` import, which a production build bundles

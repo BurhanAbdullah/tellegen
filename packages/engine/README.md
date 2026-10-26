@@ -17,6 +17,19 @@ import {
 The wasm files are resolved relative to the package module. Host apps must serve
 package asset files from `node_modules`.
 
+A host that preloads or budgets the engine's two large assets names them by
+export rather than by path: `@tellegen/engine/wasm` is the WebAssembly binary
+and `@tellegen/engine/places` the populated places table. In Vite, import them
+with `?url`:
+
+```ts
+import engineWasmUrl from "@tellegen/engine/wasm?url";
+import placesUrl from "@tellegen/engine/places?url";
+```
+
+Elsewhere, `import.meta.resolve("@tellegen/engine/wasm")` gives the file's URL.
+`syntheticPlacesUrl()` returns the places table's URL at run time.
+
 Under a Content Security Policy the engine needs `script-src 'wasm-unsafe-eval'`
 (to compile WebAssembly; never `'unsafe-eval'`) and `worker-src 'self'`: its
 workers are same-origin module workers.
