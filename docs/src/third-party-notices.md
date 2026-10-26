@@ -32,8 +32,10 @@ archives.
 
 The synthetic grid generator ships `crates/tellegen-synth/data/populated_places.json`
 (copied into `@tellegen/engine` as `data/populated_places.json`): name,
-longitude, latitude, `pop_max` and country of the Natural Earth 1:10m
-populated places. Natural Earth data is in the public domain
+longitude, latitude, `pop_max` and country of the Natural Earth v5.1.2 1:10m
+populated places, derived by `scripts/derive-populated-places.py` from
+`ne_10m_populated_places_simple.geojson`, whose SHA-256 the table records.
+Natural Earth data is in the public domain
 ([naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/)).
 
 It also ships `crates/tellegen-synth/data/national_demand.json`, compiled

@@ -115,6 +115,8 @@ impl Generator {
             places: Some(PlacesProvenance {
                 count: places.len(),
                 sha256: places.sha256().to_owned(),
+                source: places.source().map(str::to_owned),
+                source_sha256: places.source_sha256().map(str::to_owned),
             }),
             demand_table: None,
             voltage_table: None,

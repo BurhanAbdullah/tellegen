@@ -1,8 +1,10 @@
-//! Populated places (Natural Earth 10m `ne_10m_populated_places`, public
-//! domain), trimmed to `{n: name, lo: lon, la: lat, p: pop_max, c: iso_a3}`.
-//! They anchor buses on real cities and carry the population signal that
-//! sizes and allocates load (through each country's demand, see
-//! [`crate::demand`]). Parsed once per process and shared by sessions.
+//! Populated places (Natural Earth v5.1.2, 1:10m
+//! `ne_10m_populated_places_simple`, public domain), trimmed to
+//! `{n: name, lo: lon, la: lat, p: pop_max, c: adm0_a3}` by
+//! `scripts/derive-populated-places.py`. They anchor buses on real cities and
+//! carry the population signal that sizes and allocates load (through each
+//! country's demand, see [`crate::demand`]). Parsed once per process and
+//! shared by sessions.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -36,6 +38,10 @@ pub const PLACE_SNAP_KM: f64 = 15.0;
 /// metropolitan area a few percent.
 pub const PLACE_SNAP_COUNTRY_SHARE: f64 = 0.5;
 
+/// Schema of the bundled table: the rows under `places`, beside the Natural
+/// Earth release and the SHA-256 of the file they were derived from.
+pub const SCHEMA: &str = "tellegen.synth-populated-places/1";
+
 /// One populated place.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Place {
@@ -57,6 +63,20 @@ struct Row {
     c: String,
 }
 
+/// The bundled table's layout.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Table {
+    schema: String,
+    source: String,
+    #[allow(dead_code)]
+    source_url: String,
+    source_sha256: String,
+    #[allow(dead_code)]
+    note: String,
+    places: Vec<Row>,
+}
+
 /// The places table: rows sorted by population descending, plus a latitude
 /// sorted index for window queries.
 #[derive(Clone, Debug)]
@@ -67,6 +87,9 @@ pub struct Places {
     /// Population of every place of a country, by country code.
     country_population: BTreeMap<String, f64>,
     sha256: String,
+    /// The dataset the rows were derived from and its SHA-256, when the table
+    /// names them; a bare array of rows names neither.
+    source: Option<(String, String)>,
 }
 
 /// A place positioned in a region's continuous longitude frame. `lon` may
@@ -85,10 +108,28 @@ pub struct PlacedCity {
 }
 
 impl Places {
-    /// Parse the compact JSON array.
+    /// Parse the bundled table (`{schema, source, ..., places: [rows]}`) or a
+    /// bare JSON array of rows.
     pub fn parse(bytes: &[u8]) -> Result<Self, SynthError> {
-        let rows: Vec<Row> = serde_json::from_slice(bytes)
-            .map_err(|e| SynthError::Places(format!("cannot parse places table: {e}")))?;
+        let unreadable =
+            |e: serde_json::Error| SynthError::Places(format!("cannot parse places table: {e}"));
+        let bare = bytes
+            .iter()
+            .find(|b| !b.is_ascii_whitespace())
+            .is_some_and(|b| *b == b'[');
+        let (rows, source) = if bare {
+            let rows: Vec<Row> = serde_json::from_slice(bytes).map_err(unreadable)?;
+            (rows, None)
+        } else {
+            let table: Table = serde_json::from_slice(bytes).map_err(unreadable)?;
+            if table.schema != SCHEMA {
+                return Err(SynthError::Places(format!(
+                    "places table schema {:?}, expected {SCHEMA:?}",
+                    table.schema
+                )));
+            }
+            (table.places, Some((table.source, table.source_sha256)))
+        };
         let mut places = Vec::with_capacity(rows.len());
         for (i, row) in rows.into_iter().enumerate() {
             if !(-180.0..=180.0).contains(&row.lo) || !(-90.0..=90.0).contains(&row.la) {
@@ -137,6 +178,7 @@ impl Places {
             by_lat,
             country_population,
             sha256: digest.iter().map(|b| format!("{b:02x}")).collect(),
+            source,
         })
     }
 
@@ -158,6 +200,7 @@ impl Places {
                 .iter()
                 .map(|b| format!("{b:02x}"))
                 .collect(),
+            source: None,
         }
     }
 
@@ -171,6 +214,16 @@ impl Places {
 
     pub fn sha256(&self) -> &str {
         &self.sha256
+    }
+
+    /// The dataset the rows were derived from, as the table names it.
+    pub fn source(&self) -> Option<&str> {
+        self.source.as_ref().map(|(source, _)| source.as_str())
+    }
+
+    /// SHA-256 of the dataset the rows were derived from.
+    pub fn source_sha256(&self) -> Option<&str> {
+        self.source.as_ref().map(|(_, sha256)| sha256.as_str())
     }
 
     pub fn rows(&self) -> &[Place] {
@@ -355,6 +408,34 @@ mod tests {
             .windows(2)
             .all(|w| w[0].population >= w[1].population));
         assert_eq!(places.sha256().len(), 64);
+    }
+
+    #[test]
+    fn the_bundled_table_names_its_source_and_bare_rows_name_none() {
+        let bundled = Places::parse(include_bytes!("../data/populated_places.json")).unwrap();
+        assert_eq!(bundled.len(), 7342);
+        assert!(bundled
+            .source()
+            .unwrap()
+            .starts_with("Natural Earth v5.1.2"));
+        assert_eq!(bundled.source_sha256().unwrap().len(), 64);
+        let bare = Places::parse(FIXTURE).unwrap();
+        assert_eq!((bare.source(), bare.source_sha256()), (None, None));
+        let table = |schema: &str, extra: &str| {
+            format!(
+                r#"{{"schema":"{schema}","source":"s","source_url":"u","source_sha256":"x","note":"n","places":[]{extra}}}"#
+            )
+        };
+        assert!(Places::parse(table(SCHEMA, "").as_bytes()).is_ok());
+        for refused in [table("other/1", ""), table(SCHEMA, r#","extra":1"#)] {
+            assert!(
+                matches!(
+                    Places::parse(refused.as_bytes()),
+                    Err(SynthError::Places(_))
+                ),
+                "{refused}"
+            );
+        }
     }
 
     #[test]

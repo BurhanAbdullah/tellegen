@@ -61,8 +61,9 @@ describes the stages, the demand model and the evidence.
 
 The package ships data from third parties:
 
-- **Natural Earth** populated places (`dist/data/populated_places.json`) and
-  country areas (compiled into the wasm): public domain,
+- **Natural Earth** v5.1.2 populated places (`dist/data/populated_places.json`,
+  which names the release and its source file's SHA-256) and country areas
+  (compiled into the wasm): public domain,
   [naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/).
 - **Ember**, *Yearly Electricity Data*, through **Our World in Data**,
   *Energy dataset*: national electricity demand, compiled into the wasm.

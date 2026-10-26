@@ -262,6 +262,7 @@
       "type": "string"
     },
     "CalibrationOptions": {
+      "additionalProperties": false,
       "description": "OPF-in-the-loop calibration controls.",
       "properties": {
         "allow_load_scale": {
@@ -517,6 +518,7 @@
       "type": "object"
     },
     "CalibrationTargets": {
+      "additionalProperties": false,
       "description": "Reference ranges the calibration objective measures against. Each range is\n`[low, high]` of the published or measured statistic.",
       "properties": {
         "avg_degree": {
@@ -866,6 +868,7 @@
       "description": "Peak demand of the region.",
       "oneOf": [
         {
+          "additionalProperties": false,
           "description": "Peak MW from the population of the places inside the region. Each place\ndraws its country's average load per head of the places table (the\nnational demand table, [`crate::demand::NationalDemand`]) times\n`peak_factor`, so a whole country reproduces its national peak; a place\nwhose country has no entry draws the world average per person. With\n`per_capita_kw`, every person of every place draws that average load\ninstead.",
           "properties": {
             "kind": {
@@ -891,6 +894,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "description": "A stated peak demand in MW.",
           "properties": {
             "kind": {
@@ -1056,6 +1060,7 @@
       "type": "object"
     },
     "FallbackFrom": {
+      "additionalProperties": false,
       "description": "Why a caller reran an OSM request as a synthetic one. Written by the\ncaller, never read by the generator, excluded from the request hash, and\nechoed in the report's provenance.",
       "properties": {
         "branches": {
@@ -1285,6 +1290,7 @@
       "type": "object"
     },
     "IslandOptions": {
+      "additionalProperties": false,
       "description": "Island handling for synthetic generation.",
       "properties": {
         "beyond": {
@@ -1348,21 +1354,24 @@
       "type": "object"
     },
     "Limits": {
+      "additionalProperties": false,
       "description": "Caps that keep a request inside what a browser session can afford.",
       "properties": {
         "max_area_km2": {
           "default": 40000000.0,
-          "description": "Spherical area cap of the region, km².",
+          "description": "Spherical area cap of the region, km²; positive and finite.",
           "format": "double",
           "type": "number"
         },
         "max_branch_factor": {
           "default": 4.0,
+          "description": "Upper bound of `branch_factor`; finite and at least 1.",
           "format": "double",
           "type": "number"
         },
         "max_bus_count": {
           "default": 3000,
+          "description": "Bus cap. A synthetic grid's count is held at it (`bus_count_capped`);\nan OpenStreetMap grid drops its lowest voltage levels until it fits\n(`osm_bus_count_capped`) and is refused when its highest level alone\nexceeds it.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -1418,6 +1427,7 @@
       ]
     },
     "OsmOptions": {
+      "additionalProperties": false,
       "description": "Thresholds for mapping an Overpass document onto a grid.",
       "properties": {
         "clip_buffer_km": {
@@ -1514,6 +1524,7 @@
       "type": "object"
     },
     "PlacesProvenance": {
+      "description": "The populated places table behind the run.",
       "properties": {
         "count": {
           "format": "uint",
@@ -1521,7 +1532,22 @@
           "type": "integer"
         },
         "sha256": {
+          "description": "SHA-256 of the table as loaded.",
           "type": "string"
+        },
+        "source": {
+          "description": "The dataset the table was derived from (the bundled table names\nNatural Earth's release); absent for a bare array of rows.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_sha256": {
+          "description": "SHA-256 of that dataset.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -1948,6 +1974,7 @@
       "type": "object"
     },
     "Region": {
+      "additionalProperties": false,
       "description": "A region to generate in: a GeoJSON `Polygon` or `MultiPolygon` geometry\n(longitude, latitude pairs; the first ring of each polygon is the outer\nring, later rings are holes) and a label for reports and bus names.",
       "properties": {
         "geometry": {
@@ -2272,7 +2299,7 @@
     },
     "SynthRequest": {
       "additionalProperties": false,
-      "description": "The one generation request.",
+      "description": "The one generation request. Unknown keys are refused here and in every\nnested option, so a misspelt option fails instead of taking its default.",
       "properties": {
         "branch_factor": {
           "default": null,
@@ -2631,6 +2658,7 @@
       "type": "object"
     },
     "ValidationOptions": {
+      "additionalProperties": false,
       "description": "Validation controls.",
       "properties": {
         "emergency_band": {
@@ -2757,5 +2785,5 @@
   ],
   "title": "SynthSchema",
   "type": "object",
-  "x-rust-source-sha256": "b2d354010a3f758877a42e749b8a52cbf3dd40aada9e9c51a6583f794e2a0068"
+  "x-rust-source-sha256": "4d012c8adfdfccf207affed59b5cc0ae52390c38b3da4f60f1039ddda55c01ca"
 }
