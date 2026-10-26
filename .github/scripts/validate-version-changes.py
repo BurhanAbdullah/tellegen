@@ -10,6 +10,16 @@ import stat
 import subprocess
 import sys
 
+from sync_python_version import (
+    ENGINE_MANIFEST,
+    LOCKFILE,
+    PYTHON_MANIFEST,
+    check_lock_versions,
+    package_version,
+    read_regular,
+    replace_manifest_version,
+)
+
 
 PRE_STATE = ".changeset/pre.json"
 CHANGESET = re.compile(r"\.changeset/([A-Za-z0-9_-]+)\.md")
@@ -166,19 +176,45 @@ def validate_npm(entries: list[tuple[str, str]]) -> None:
 
 def validate_crate(entries: list[tuple[str, str]]) -> None:
     changelog = {"crates/tellegen/CHANGELOG.md"}
-    bump = changelog | {"Cargo.lock", "crates/tellegen/Cargo.toml"}
+    bump = changelog | {str(LOCKFILE), str(ENGINE_MANIFEST)}
+    # After release-plz bumps the engine, sync_python_version.py moves the
+    # wheel onto the same version, unless the wheel already carries it.
+    synchronized = bump | {str(PYTHON_MANIFEST)}
     actual = {path for _, path in entries}
     # A version already raised by hand on main (above the crates.io release)
     # leaves release-plz only the changelog to write.
-    if actual not in (changelog, bump):
+    if actual not in (changelog, bump, synchronized):
         fail(
             "crate versioning changed the wrong paths: "
-            f"expected {sorted(bump)!r} or only the changelog, got {sorted(actual)!r}"
+            f"expected {sorted(bump)!r}, optionally {str(PYTHON_MANIFEST)!r}, "
+            f"or only the changelog; got {sorted(actual)!r}"
         )
     for status, path in entries:
         if status not in {" M", "M "}:
             fail(f"unexpected status for generated file {path}: {status!r}")
         require_regular_nonexecutable(path)
+
+    # Whichever paths changed, both manifests and both lock entries end on
+    # the engine's version.
+    engine_version = package_version(read_regular(ENGINE_MANIFEST), "tellegen")
+    wheel = read_regular(PYTHON_MANIFEST)
+    if package_version(wheel, "tellegen-py") != engine_version:
+        fail("the wheel version does not match the engine")
+    check_lock_versions(read_regular(LOCKFILE), engine_version)
+    if str(PYTHON_MANIFEST) in actual:
+        # A fourth path is not permission to change Python dependencies, build
+        # settings, or comments. Check the exact version-only edit against the
+        # checkout base, both before sealing and after applying the staged patch.
+        original = committed(str(PYTHON_MANIFEST))
+        if original is None:
+            fail(f"{PYTHON_MANIFEST} is not in the checkout base")
+        try:
+            original_text = original.decode("utf-8")
+        except UnicodeError as error:
+            fail(f"cannot read the committed {PYTHON_MANIFEST}: {error}")
+        package_version(original_text, "tellegen-py")
+        if wheel != replace_manifest_version(original_text, engine_version):
+            fail("crate versioning may only synchronize the Python package version")
 
 
 def main() -> None:
