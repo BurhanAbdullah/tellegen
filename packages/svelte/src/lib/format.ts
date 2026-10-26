@@ -1,6 +1,5 @@
-import type { SolveIteration } from './api.js';
 import type { RGBA } from './colors.js';
-import type { DisplayMode, SolveBackend } from './state.svelte.js';
+import type { DisplayMode } from './state.svelte.js';
 import { FORMULATIONS, type Formulation } from '@tellegen/engine';
 
 // errorText is defined once in wasm.ts (its first consumer) and surfaced here so UI
@@ -16,29 +15,9 @@ export function formulationHint(id: Formulation): string {
 	return FORMULATIONS.find((f) => f.id === id)?.hint ?? id;
 }
 
-export function priceCopy(id: Formulation): string {
-	const definition =
-		'Locational marginal price (LMP): the change in the OPF objective for an additional MW at a bus, in objective units/MW.';
-	return id === 'socwr'
-		? `${definition} Prices come from the SOCWR relaxation. Select a bus to see their sensitivity.`
-		: `${definition} Select a bus to see its demand sensitivity.`;
-}
-
 export function splitName(name: string): [string, string] {
 	const m = name.match(/^(.*?)\s*\((.*)\)$/);
 	return m ? [m[1], m[2]] : [name, ''];
-}
-
-/** Structural shape `solveMetaLabel` needs, satisfied by `CaseState` and `LocalCase`. */
-type SolveMeta = {
-	iterations?: SolveIteration[];
-	solveBackend: SolveBackend | null;
-};
-
-export function solveMetaLabel(c: SolveMeta): string {
-	if ((c.iterations ?? []).length > 1) return `${c.iterations?.length} iterations`;
-	if (c.solveBackend === 'clarabel-wasm-server-sensitivity') return 'server price sensitivity';
-	return c.solveBackend === 'rust-server' ? 'server solve' : 'browser solve';
 }
 
 export const INFEASIBLE_DISPATCH =

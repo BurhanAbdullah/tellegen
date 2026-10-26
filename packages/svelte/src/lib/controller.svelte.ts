@@ -110,12 +110,11 @@ type JsonDropRoute =
 
 /** Terminal copy when nothing can solve. Two facts decide the wording: whether
  * this browser's engine failure is known permanent, and that the server
- * declines compute. Server compute exists in the codebase but ships disabled;
- * interest routes to email until it is offered. */
+ * declines compute. */
 const WASM_REQUIRED_NOTICE =
-	'this browser cannot run the WebAssembly engine that solves locally, and server side compute is disabled in this demo. it may be offered later; to express interest, email Samuel Talkington at talks@umich.edu';
+	'This browser cannot run the WebAssembly engine, and server compute is disabled';
 const COMPUTE_OFF_NOTICE =
-	'solving in this browser did not complete, and server side compute is disabled in this demo. retry to run the browser engine again, or email Samuel Talkington at talks@umich.edu to express interest in server compute';
+	'The browser solve did not complete, and server compute is disabled. Retry to run it again';
 
 /** Upper bound on waiting for a camera fly-to before the sensitivity solve
  * starts anyway: a missing map or a cue that never appears must not stall the

@@ -33,7 +33,7 @@
 		</svg>
 		<h1>tellegen</h1>
 	</div>
-	<nav class="cases" aria-label="networks">
+	<nav class="cases" aria-label="Networks">
 		{#each app.cases as c (c.id)}
 			{@const [cname, cregion] = splitName(c.name)}
 			<div class="case-chip" class:active={app.activeCaseId === c.id}>
@@ -44,14 +44,14 @@
 					onclick={() => ctrl.activateCase(c.id)}
 				>
 					<span class="cname"
-						>{cname}{#if c.perturbed}<i class="mark" title="demand perturbed"></i>{/if}</span
+						>{cname}{#if c.perturbed}<i class="mark" title="Demand changed"></i>{/if}</span
 					>
 					<span class="cregion mono">{c.unavailableReason ? 'Unavailable' : cregion}</span>
 				</button>
 				<button
 					class="case-remove mono"
-					aria-label="remove {c.name} from this browser"
-					title="remove {c.name} from this browser"
+					aria-label="Remove {c.name}"
+					title="Remove {c.name}"
 					onclick={(e) => ctrl.removeBackendCase(c, e)}>&#10005;</button
 				>
 			</div>
@@ -60,12 +60,12 @@
 			<div class="case-chip local" class:active={app.activeLocalId === c.id}>
 				<button class="case-activate" onclick={() => ctrl.activateLocal(c)}>
 					<span class="cname">{c.label}</span>
-					<span class="cregion mono">local</span>
+					<span class="cregion mono">Local</span>
 				</button>
 				<button
 					class="case-remove mono"
-					aria-label="remove {c.label}"
-					title="remove {c.label}"
+					aria-label="Remove {c.label}"
+					title="Remove {c.label}"
 					onclick={(e) => ctrl.removeLocalCase(c, e)}>&#10005;</button
 				>
 			</div>
@@ -74,33 +74,29 @@
 			<div class="case-chip local" class:active={app.activeMultiId === c.id}>
 				<button class="case-activate" onclick={() => ctrl.activateMulti(c)}>
 					<span class="cname">{c.label}</span>
-					<span class="cregion mono">multiconductor</span>
+					<span class="cregion mono">Multiconductor</span>
 				</button>
 				<button
 					class="case-remove mono"
-					aria-label="remove {c.label}"
-					title="remove {c.label}"
+					aria-label="Remove {c.label}"
+					title="Remove {c.label}"
 					onclick={(e) => ctrl.removeMultiCase(c, e)}>&#10005;</button
 				>
 			</div>
 		{/each}
-		<button
-			class="ghost filedrop-ui"
-			title="parsed in your browser; the file never uploads"
-			onclick={() => fileInput?.click()}
-		>
+		<button class="ghost filedrop-ui" onclick={() => fileInput?.click()}>
 			<span class="cname"
 				><span class="arrow">&#8675;</span>{ctrl.showFileDropUi
-					? 'drop a case file'
-					: 'open a case file'}</span
+					? 'Drop a case file'
+					: 'Open a case file'}</span
 			>
-			<span class="cregion mono">case + geo files</span>
+			<span class="cregion mono">Case or geo files</span>
 		</button>
 	</nav>
 	<span class="kicker mono">
 		<a href={config.orgHref} target="_blank" rel="noreferrer">{config.orgLabel}</a>
 		<i class="sep"></i>
-		<a href={config.docsHref} target="_blank" rel="noreferrer">docs</a>
+		<a href={config.docsHref} target="_blank" rel="noreferrer">Docs</a>
 	</span>
 	<input
 		type="file"

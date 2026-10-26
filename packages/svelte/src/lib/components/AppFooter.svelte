@@ -7,14 +7,14 @@
 	let { inline = false }: { inline?: boolean } = $props();
 </script>
 
-<footer class="mono" class:inline>
-	<a href="/credits/">credits</a>
+<footer class:inline>
+	<a href="/credits/">Credits</a>
 	<i class="sep"></i>
-	<a href="/privacy/">privacy</a>
+	<a href="/privacy/">Privacy</a>
 	{#if ctrl.showFileDropUi}
 		<i class="sep filedrop-ui"></i>
 		<span class="drophint filedrop-ui"
-			><span class="arrow">&#8675;</span> drop a case or geographic file anywhere</span
+			><span class="arrow">&#8675;</span> Drop a case or geographic file anywhere</span
 		>
 	{/if}
 </footer>
