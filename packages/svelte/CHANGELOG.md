@@ -1,5 +1,15 @@
 # @tellegen/svelte
 
+## 0.4.3
+
+### Patch Changes
+
+- [#219](https://github.com/eigenergy/tellegen/pull/219) [`5ebcad8`](https://github.com/eigenergy/tellegen/commit/5ebcad80c08495ec01d80dc06a885a2817585e40) Thanks [@samtalki](https://github.com/samtalki)! - The demand slider's Nearby and Full range buttons are named by their visible
+  text again. 0.4.2 labelled them "Nearby demand range" and "Full demand range",
+  which do not contain the visible "Full range", so speech input could not reach
+  the button by what it shows (WCAG 2.5.3, axe `label-content-name-mismatch`).
+  The "Demand range" group still names the pair.
+
 ## 0.4.2
 
 ### Patch Changes
