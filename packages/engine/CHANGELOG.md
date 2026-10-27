@@ -1,5 +1,13 @@
 # @tellegen/engine
 
+## 0.4.2
+
+### Patch Changes
+
+- [#223](https://github.com/eigenergy/tellegen/pull/223) [`880f6f3`](https://github.com/eigenergy/tellegen/commit/880f6f36be4039674660f84508c1565749117e46) Thanks [@samtalki](https://github.com/samtalki)! - The OpenStreetMap provenance block records the Overpass answer's licence notice (`osm3s.copyright`) as `copyright`.
+
+- [#222](https://github.com/eigenergy/tellegen/pull/222) [`869302d`](https://github.com/eigenergy/tellegen/commit/869302d90c96546b200b2350e78851331656f374) Thanks [@samtalki](https://github.com/samtalki)! - OpenStreetMap grids no longer inflate their generation. A plant and its mapped units count once (the larger of the plant's tag and the units' sum), and a generator with no output tag, mostly rooftop solar, adds nothing instead of an estimated 20 to 200 MW. The Overpass query fetches only generators rated in MW or GW, which shrinks answers (Luxembourg: 1.4 MB to 0.9 MB).
+
 ## 0.4.1
 
 ### Patch Changes
