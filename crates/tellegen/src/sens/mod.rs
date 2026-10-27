@@ -36,7 +36,6 @@ pub use interface::{
     SensitivityMatrix, SolveSpec, TapKind, VoltageKind, GB,
 };
 
-pub(crate) use dc::LINEAR_CONSTRAINT_SENSITIVITY_UNSUPPORTED;
 pub(crate) use interface::{served_unit_scale, served_units_label};
 
 /// Which linear systems the engine factorizes. [`Forward`](Mode::Forward) and

@@ -1,5 +1,5 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: 724140c260e924a31cdfc209f14fff173df66201fba0804d1f6472c70117ae17
+// Source SHA256: fadb0c03fbec90c0a66bdc52c8b952dcba715f0c8e6da645ad6ed1735dc27e0f
 
 export type AcOpfResiduals = { "active_balance_mw": number; "active_generation_bounds_mw": number; "angle_limits_rad": number; "objective_relative_error": number; "piecewise_epigraph_cost": number; "reactive_balance_mvar": number; "reactive_generation_bounds_mvar": number; "reference_angles_rad": number; "thermal_limits_mva": number; "voltage_bounds_pu": number; };
 
@@ -51,7 +51,7 @@ export type DiagramCamera = { "center": Array<number>; "scale": number; };
 
 export type DisplayContext = { "camera"?: (Camera) | (null); "case_id": string; "diagram_camera"?: (DiagramCamera) | (null); "geography": string; "layers"?: Array<string>; };
 
-export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; });
+export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; }) | ({ "Constraint": number; });
 
 export type ElementKey = (number) | (string);
 
@@ -81,7 +81,7 @@ export type ObservableWeight = { "element": ElementKey; "weight": number; };
 
 export type Operand = ({ "Price": Power; }) | ({ "Dispatch": Power; }) | ({ "Flow": { "end": End; "power": Power; }; }) | ({ "Voltage": VoltageKind; });
 
-export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching");
+export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching") | ("ConstraintLimit");
 
 export type Power = "Active" | "Reactive";
 

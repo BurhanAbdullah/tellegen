@@ -70,9 +70,14 @@ export type Parameter =
 \t| { VoltageBound: Bound }
 \t| { GenBound: { power: Power; bound: Bound } }
 \t| { Transformer: TapKind }
-\t| 'Switching';
+\t| 'Switching'
+\t| 'ConstraintLimit';
 
-export type ElementId = { Bus: number } | { Branch: number } | { Generator: number };
+export type ElementId =
+\t| { Bus: number }
+\t| { Branch: number }
+\t| { Generator: number }
+\t| { Constraint: number };
 
 export interface SensRequest {
 \toperand: Operand;
@@ -114,7 +119,7 @@ export interface SolveRequest {
 \tedits?: Edits;
 \t/** \`acpf\` only; other formulations refuse \`'case'\`. Defaults to \`'flat'\`. */
 \tstart?: PowerFlowStart;
-\t/** Linear constraints, accepted by \`dcopf\` only and not combined with sensitivities. */
+\t/** Linear constraints, accepted by \`dcopf\` only. */
 \tconstraints?: LinearConstraint[];
 \tsensitivities?: SensRequest[];
 }
