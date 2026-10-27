@@ -95,8 +95,10 @@ fn the_fixture_maps_to_a_grid_that_solves() {
     assert_eq!(hvdc.len(), 1);
     assert_eq!((hvdc[0].circuits, hvdc[0].circuit_index), (1, 1));
 
-    // Mapped plants: 2x600 MW coal at A, 300 MW wind at B, an untagged solar
-    // generator at E (estimated); makeup covers the rest of the reserve margin.
+    // Mapped plants: 2x600 MW coal at A (its two mapped 600 MW units are the
+    // same capacity), 300 MW wind at B, and an untagged solar plant at E
+    // (estimated) with an untagged solar generator beside it (left out); makeup
+    // covers the rest of the reserve margin.
     assert_eq!(count(&report, "plants_snapped"), 3);
     assert_eq!(count(&report, "plants_estimated"), 1);
     let coal: f64 = elements
