@@ -670,12 +670,13 @@ export function glyphPath(glyph: Glyph, scale: number, dx = 0, dy = 0): string {
 
 /** Power-flow chevrons: one per closed branch with a result, just upstream of its symbol or marks
  * on the same segment, pointing the way active power flows (from the `from` end when the power
- * into the branch there is positive). Branches carrying under `minWatts` get none. */
+ * into the branch there is positive). Branches carrying under `minPower` (in the units of `p`)
+ * get none. */
 export function flowArrows(
 	symbols: EquipmentSymbols,
 	ends: ({ p: number } | null)[][],
 	closed: boolean[],
-	minWatts = 1
+	minPower = 1
 ): { sources: Float32Array; targets: Float32Array; edge: Int32Array } {
 	const src: number[] = [];
 	const dst: number[] = [];
@@ -690,7 +691,7 @@ export function flowArrows(
 		const ax = symbols.anchors[k * 2];
 		if (!closed[k] || !Number.isFinite(ax)) return;
 		const p = a ? a.p : b ? -b.p : null;
-		if (p === null || !(Math.abs(p) >= minWatts)) return;
+		if (p === null || !(Math.abs(p) >= minPower)) return;
 		const sign = p > 0 ? 1 : -1;
 		const cos = symbols.flowDir[k * 2] * sign;
 		const sin = symbols.flowDir[k * 2 + 1] * sign;
@@ -713,11 +714,19 @@ export function flowArrows(
 	};
 }
 
+/** Port kinds of branches, which are not attachments. */
+const BRANCH_PORT_KINDS = new Set(['line', 'switch', 'transformer']);
+
 /** Complex power into each element (loads, generators, IBRs, shunts) by element id, and for
  * sources the power they draw (the negative of what they inject), so every attachment reads with
- * the same convention: positive is consumption. */
+ * the same convention: positive is consumption. Branch ports are left out: names are unique only
+ * within a family, and a line sharing a load's name must not add to it. */
 export function elementPowers(result: {
-	element_ports: { element: string; power_into_element: { re: number; im: number } }[];
+	element_ports: {
+		element: string;
+		kind?: string;
+		power_into_element: { re: number; im: number };
+	}[];
 	source_reactions: { source: string; power_into_network: { re: number; im: number } }[];
 }): Map<string, { p: number; q: number }> {
 	const out = new Map<string, { p: number; q: number }>();
@@ -728,7 +737,8 @@ export function elementPowers(result: {
 		out.set(id, row);
 	};
 	for (const port of result.element_ports)
-		add(port.element, port.power_into_element.re, port.power_into_element.im);
+		if (port.kind === undefined || !BRANCH_PORT_KINDS.has(port.kind))
+			add(port.element, port.power_into_element.re, port.power_into_element.im);
 	for (const r of result.source_reactions)
 		add(r.source, -r.power_into_network.re, -r.power_into_network.im);
 	return out;

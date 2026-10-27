@@ -37,7 +37,8 @@ export function graphInputs(graph: DistGraph): GraphInputs {
 	const buses = graph.buses.map((b): SnapshotBus => ({
 		id: b.id,
 		terminals: b.terminals,
-		neutral: b.neutral_terminal ?? null,
+		// Kept as given: `null` declares no neutral, absent leaves the aliases to decide.
+		neutral: b.neutral_terminal,
 		limits: busLimits(b)
 	}));
 	const branches = graph.edges.map((e): SnapshotBranch => ({
@@ -71,13 +72,25 @@ export function graphInputs(graph: DistGraph): GraphInputs {
 				family: 'bus',
 				qualified: b.id
 			})),
-			...graph.edges.map((e, i): SearchEntity => ({
-				kind: 'branch',
-				index: i,
-				id: e.id,
-				family: e.kind,
-				qualified: e.id
-			}))
+			// One entry per piece of equipment: a multi-winding transformer projects to one edge per
+			// winding pair, all sharing its id, and is found once, at its first edge.
+			...firstEdges(graph).map((i): SearchEntity => {
+				const e = graph.edges[i];
+				return { kind: 'branch', index: i, id: e.id, family: e.kind, qualified: e.id };
+			})
 		]
 	};
+}
+
+/** Index of the first edge of each kind and id, in graph order. */
+function firstEdges(graph: DistGraph): number[] {
+	const seen = new Set<string>();
+	const out: number[] = [];
+	graph.edges.forEach((e, i) => {
+		const key = `${e.kind}\u0000${e.id}`;
+		if (seen.has(key)) return;
+		seen.add(key);
+		out.push(i);
+	});
+	return out;
 }

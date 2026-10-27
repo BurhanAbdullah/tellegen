@@ -317,7 +317,8 @@
 			const kinds = new Set(
 				Object.values(b.terminal_attachments ?? {}).flatMap((list) => list.map((a) => a.kind))
 			);
-			return kinds.size * gap;
+			// The engine reserves one more slot for a bus's solid earth (perfectly grounded terminals).
+			return (kinds.size + (b.grounded?.length ? 1 : 0)) * gap;
 		});
 		if (!(dx > 0)) return [];
 		return zones.zones.flatMap((zone, z) => {
@@ -424,7 +425,9 @@
 			? flowArrows(
 					equipment,
 					snapshot.branches.map((b) => b.ends),
-					graph.edges.map((e) => e.closed)
+					graph.edges.map((e) => e.closed),
+					// Snapshot ends are in kW: an arrow from 1 W, not from 1 kW.
+					1e-3
 				)
 			: null
 	);

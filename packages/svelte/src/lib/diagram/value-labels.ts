@@ -74,10 +74,15 @@ export function busLabel(
 ): Omit<LabelCandidate, 'screen'> | null {
 	const pairs = result.buses[bus].pairs;
 	if (!pairs.length) return null;
+	// Distance from mid-band; −1 without declared limits, so those pairs and buses rank last.
+	const rank = (p: (typeof pairs)[number]) => {
+		const band = bandPosition(p);
+		return band === null ? -1 : Math.abs(band);
+	};
 	let pick = pairs[0];
-	let t = Math.abs(bandPosition(pick) ?? -1);
+	let t = rank(pick);
 	for (const p of pairs) {
-		const pt = Math.abs(bandPosition(p) ?? -1);
+		const pt = rank(p);
 		if (pt > t) [pick, t] = [p, pt];
 	}
 	return { text: `${short(pick.volts)} V`, state: t > 1 ? 'violation' : 'normal', priority: t };

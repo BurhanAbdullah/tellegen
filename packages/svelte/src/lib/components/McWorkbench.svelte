@@ -23,6 +23,7 @@
 		type SearchMatch,
 		type TableKind
 	} from '../diagram/index.js';
+	import { neutralTerminal } from '../multiconductor.js';
 
 	let {
 		result,
@@ -73,7 +74,15 @@
 		inputs.buses.some((b) => b.limits) || inputs.branches.some((b) => b.rating)
 	);
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
-	const edgeIndex = $derived(new Map(graph.edges.map((e, i) => [e.id, i])));
+	/** The first edge of each id: a multi-winding transformer's winding-pair edges share its id, and
+	 * the selection, tables and conductor panel show its first (primary) edge. */
+	const edgeIndex = $derived.by(() => {
+		const index = new Map<string, number>();
+		graph.edges.forEach((e, i) => {
+			if (!index.has(e.id)) index.set(e.id, i);
+		});
+		return index;
+	});
 	// Network-only structures are rebuilt when the case changes, not after every solve.
 	const searchIndex = $derived(buildSearchIndex(inputs.entities));
 	let tableKind = $state<TableKind>('bus');
@@ -177,11 +186,14 @@
 			? multiWireBranch(graph, edgeIndex.get(selectedEdge) as number, snapshot)
 			: null
 	);
-	const edgeSelection = $derived(
-		snapshot && selectedEdge !== null && edgeIndex.has(selectedEdge)
-			? conductorBars(snapshot.branches[edgeIndex.get(selectedEdge) as number].ends)
-			: null
-	);
+	const edgeSelection = $derived.by(() => {
+		if (!snapshot || selectedEdge === null || !edgeIndex.has(selectedEdge)) return null;
+		const k = edgeIndex.get(selectedEdge) as number;
+		// The neutral as the from bus declares it, whatever it is named (PMD numbers it 4).
+		const from = graph.buses[busIndex.get(graph.edges[k].from) ?? -1];
+		const neutral = from ? neutralTerminal(from.terminals, from.neutral_terminal) : null;
+		return conductorBars(snapshot.branches[k].ends, neutral ?? '');
+	});
 
 	function exportCsv(kind: TableKind) {
 		if (!snapshot) return;
@@ -295,7 +307,8 @@
 		<h4>Issues <span class="count">{issues.length.toLocaleString()}</span></h4>
 		{#if !limitsDeclared}
 			<p class="hint">
-				This case declares no voltage limits or ratings, so nothing is ranked against them.
+				This case declares no phase–neutral or phase–phase voltage limits and no ratings, so nothing
+				is ranked against them.
 			</p>
 		{:else if !issues.length}
 			<p class="hint ok">No limit violations or loading warnings.</p>

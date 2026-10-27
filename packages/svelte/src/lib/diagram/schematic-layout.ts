@@ -204,17 +204,27 @@ export function sourceLayout(
 					? 0
 					: 1;
 	});
+	// Routes by id, so each edge looks only at its namesakes: a scan of every route per edge made
+	// this quadratic in the network size.
+	const routesById = new Map<string, typeof routes>();
+	for (const r of routes) {
+		const key = r.id.toLowerCase();
+		const list = routesById.get(key);
+		if (list) list.push(r);
+		else routesById.set(key, [r]);
+	}
 	return {
 		positions,
 		...segments(graph, positions, index, (k) => {
 			// A route belongs to one edge by id and endpoints; parallel edges keep their own paths.
 			const e = graph.edges[k];
 			const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-			const route = routes.find(
-				(r) =>
-					same(r.id, e.id) &&
-					((same(r.from, e.from) && same(r.to, e.to)) || (same(r.from, e.to) && same(r.to, e.from)))
-			);
+			const route = routesById
+				.get(e.id.toLowerCase())
+				?.find(
+					(r) =>
+						(same(r.from, e.from) && same(r.to, e.to)) || (same(r.from, e.to) && same(r.to, e.from))
+				);
 			if (!route || route.path.length < 2) return null;
 			return route.path.map(([lon, lat]) => {
 				const [x, y] = project(lon, lat);

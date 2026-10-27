@@ -1,6 +1,6 @@
 ---
-"@tellegen/engine": minor
-"@tellegen/svelte": minor
+"@tellegen/engine": patch
+"@tellegen/svelte": patch
 ---
 
 Multiconductor graphs carry declared voltage limits and ratings, and the Studies

@@ -1,4 +1,5 @@
 import type { McComplex, McPfResult } from '@tellegen/engine';
+import { neutralTerminal } from '../multiconductor.js';
 
 /** Which reference a pair voltage is measured against. */
 export type PairZone = 'phase–neutral' | 'phase–phase';
@@ -67,6 +68,8 @@ export type BusLimits =
 export interface SnapshotBus {
 	id: string;
 	terminals: string[];
+	/** The declared neutral; `null` when the model declares there is none, absent when it is silent
+	 * (the familiar aliases then apply). */
 	neutral?: string | null;
 	limits?: BusLimits | null;
 }
@@ -107,7 +110,8 @@ export function sequenceUnbalance(a: McComplex, b: McComplex, c: McComplex): num
 }
 
 function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex | undefined) {
-	const neutral = bus.neutral ?? (bus.terminals.includes('n') ? 'n' : null);
+	// A declared neutral (or a declared absence of one) wins; aliases only when nothing is declared.
+	const neutral = neutralTerminal(bus.terminals, bus.neutral);
 	const phases = bus.terminals.filter((t) => t !== neutral);
 	const pairs: PairVoltage[] = [];
 	const phasors: McComplex[] = [];
@@ -179,10 +183,12 @@ export function snapshotFromMcPf(
 		if (rows) rows.push(p);
 		else element.set(p.bus, [p]);
 	}
-	/** The element's port rows, of its own kind when a line and a switch share a name. */
+	/** The element's port rows, of its own kind when a line and a switch share a name. A closed
+	 * switch has no ports of its own (the solver merges its buses), so it must not borrow another
+	 * element's rows. */
 	const elementPorts = (branch: SnapshotBranch, bus: string): Port[] | undefined => {
 		const all = ports.get(branch.id)?.get(bus);
-		if (!all?.some((r) => r.kind === branch.kind)) return all;
+		if (!all || branch.kind === undefined) return all;
 		return all.filter((r) => r.kind === branch.kind);
 	};
 	const seen = new Set<string>();

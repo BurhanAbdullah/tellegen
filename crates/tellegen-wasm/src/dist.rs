@@ -365,7 +365,8 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
 /// Add the declared rated voltage at each bus a transformer winding or a source connects to, so
 /// the frontend can tell voltage levels apart before any solve. A polyphase winding states its
 /// line-to-line rating, a single-phase winding its own; a source with two or more energised
-/// terminals counts as line-to-line from its phase magnitudes (times the square root of three).
+/// terminals counts as line-to-line from its phasors (the largest difference between terminals,
+/// or √3 times the largest magnitude when the angles do not give one).
 /// A level for display and grouping, not a base for calculation; the largest value at a bus wins.
 fn add_nominal_voltages(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
     use serde_json::{json, Value};
@@ -382,19 +383,31 @@ fn add_nominal_voltages(net: &MulticonductorNetwork, graph: &mut serde_json::Val
         }
     }
     for vs in net.sources() {
-        let energised: Vec<f64> = vs
+        // (magnitude, angle) of each energised terminal; NaN where the source states no angle.
+        let energised: Vec<(f64, f64)> = vs
             .v_magnitude
             .iter()
-            .copied()
-            .filter(|&v| v > 0.0)
+            .enumerate()
+            .filter(|&(_, &v)| v > 0.0)
+            .map(|(i, &v)| (v, vs.v_angle.get(i).copied().unwrap_or(f64::NAN)))
             .collect();
-        let largest = energised.iter().copied().fold(0.0, f64::max);
+        let largest = energised.iter().map(|&(v, _)| v).fold(0.0, f64::max);
+        // Line to line is the largest phasor difference between energised terminals: √3 times the
+        // phase magnitude for three-phase, twice it for a split-phase (180°) source.
+        let mut between = 0.0f64;
+        for (i, &(vi, ai)) in energised.iter().enumerate() {
+            for &(vj, aj) in &energised[i + 1..] {
+                between = between.max((vi * vi + vj * vj - 2.0 * vi * vj * (ai - aj).cos()).sqrt());
+            }
+        }
         note(
             &vs.bus,
-            if energised.len() >= 2 {
-                largest * 3f64.sqrt()
-            } else {
+            if energised.len() < 2 {
                 largest
+            } else if between.is_finite() && between > 0.0 {
+                between
+            } else {
+                largest * 3f64.sqrt()
             },
         );
     }
@@ -464,6 +477,15 @@ fn add_connections(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
         add(
             &sh.bus,
             json!({ "kind": "shunt", "id": sh.name, "terminals": sh.terminal_map }),
+        );
+    }
+    // PowerIO's graph projects a rated capacitor bank as a shunt attachment, so it is listed here
+    // too: the frontend draws from this list whenever a bus has one, and would otherwise drop it.
+    for c in net.capacitors() {
+        add(
+            &c.bus,
+            json!({ "kind": "shunt", "id": c.name, "terminals": c.terminal_map,
+                    "connection": configuration(&c.configuration) }),
         );
     }
     for vs in net.sources() {
