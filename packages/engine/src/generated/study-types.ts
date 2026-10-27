@@ -1,5 +1,5 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: f0ac6b8f160222977f12cca5471e6fe65577df83bb7cf018cdbaddf469bff9a2
+// Source SHA256: 9b9cbc320dee5bc21aa9607fbbe724d18ab7bfda0ac4dc57a1e0e068dc46ace7
 
 export type AcOpfResiduals = { "active_balance_mw": number; "active_generation_bounds_mw": number; "angle_limits_rad": number; "objective_relative_error": number; "piecewise_epigraph_cost": number; "reactive_balance_mvar": number; "reactive_generation_bounds_mvar": number; "reference_angles_rad": number; "thermal_limits_mva": number; "voltage_bounds_pu": number; };
 
@@ -91,9 +91,11 @@ export type SearchOptions = { "beam_width": number; "max_iterations": number; "m
 
 export type SensitivityMatrix = { "cols": Array<ColMeta>; "rows": Array<RowMeta>; "units": string; "values": Array<Array<number>>; };
 
+export type SolveDiagnostic = { "buses": Array<number>; "code": string; "message": string; };
+
 export type SolveIteration = { "inf_du": number; "inf_pr": number; "iter": number; "objective": number; };
 
-export type SolveResponse = { "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
+export type SolveResponse = { "diagnostics"?: Array<SolveDiagnostic>; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
 
 export type SolveStatus = ("optimal") | ("feasible");
 

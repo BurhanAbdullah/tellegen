@@ -15,12 +15,14 @@ use powerio_matrix::PreparedObjective;
 use powerio_matrix::{build_ac_opf_preparation, AcOpfAssemblyOptions, Units};
 use powerio_prob::{AcBusSpecification, AcOpfInstance, AcPfInstance};
 
+use super::islands::{dense_islands, energize, ReferencePolicy};
 #[cfg(feature = "conic")]
 use super::{
     normalize_angle_bounds, reject_unsupported_active_elements, stable_source_ids,
     uids_for_source_rows, validate_canonical_identity, PiecewiseCost,
 };
 use super::{normalize_for_model, reconstruct_ids, Ids};
+use crate::api::SolveDiagnostic;
 
 const NEAR_ZERO_IMPEDANCE_SQUARED: f64 = 1.0e-10;
 
@@ -114,20 +116,23 @@ pub(crate) struct AcNetwork {
     #[cfg(feature = "conic")]
     pub vm_max: Vec<f64>,
     pub vm_set: Vec<f64>,
-    /// Reference (slack) bus, dense index.
-    pub slack: usize,
-    /// Reference angle (radians). The AC power flow holds the slack bus at this
-    /// angle and reports every other angle against it. Zero unless an AC power
-    /// flow instance states another reference angle.
-    pub(crate) va_slack: f64,
+    /// Slack buses, dense indices, one per island in order of each island's
+    /// first bus. Each holds its island's angle reference and absorbs its
+    /// island's power balance.
+    pub slacks: Vec<usize>,
+    /// Reference angle (radians) of each slack, in `slacks` order. The AC power
+    /// flow holds each slack at its angle and reports the other angles of its
+    /// island against it. Zero unless an AC power flow instance states another
+    /// reference angle at that slack.
+    pub(crate) va_slacks: Vec<f64>,
     /// Stored bus voltage state in dense order, magnitude (per unit) and angle
     /// (radians): the case's bus values, star buses included where the lowering
     /// carries them, overridden by an instance's initial point. The AC power flow
     /// can start here instead of from a flat start.
     pub(crate) vm_case: Vec<f64>,
     pub(crate) va_case: Vec<f64>,
-    /// Buses whose AC power flow magnitude is prescribed. The reference is
-    /// represented separately by `slack`.
+    /// Buses whose AC power flow magnitude is prescribed. The references are
+    /// represented separately by `slacks`.
     pub(crate) pf_pv: Vec<bool>,
     /// Dense index -> original source id, as in [`DcNetwork`](super::DcNetwork).
     pub bus_ids: Vec<usize>,
@@ -155,6 +160,44 @@ pub(crate) struct AcNetwork {
     /// An active generator names a different regulated bus. The SOCWR model
     /// ignores voltage-control actions; ACPF rejects this explicitly.
     pub has_remote_voltage_control: bool,
+    /// How the model treated the network's islands, reported with the solve.
+    pub(crate) diagnostics: Vec<SolveDiagnostic>,
+}
+
+/// One slack per island: the first of `references` in each island, in order of
+/// each island's first bus. Every island holds a reference (PowerIO's
+/// preparation refuses an ungrounded one). Later references in an island are
+/// returned separately; the power flow types them by their generators.
+fn island_slacks(
+    n: usize,
+    br_from: &[usize],
+    br_to: &[usize],
+    references: impl IntoIterator<Item = usize>,
+) -> (Vec<usize>, Vec<usize>) {
+    let island = dense_islands(n, br_from, br_to);
+    let count = island.iter().max().map_or(0, |&last| last + 1);
+    let mut slack_of: Vec<Option<usize>> = vec![None; count];
+    let mut extra = Vec::new();
+    for bus in references {
+        match &mut slack_of[island[bus]] {
+            Some(_) => extra.push(bus),
+            slot @ None => *slot = Some(bus),
+        }
+    }
+    (slack_of.into_iter().flatten().collect(), extra)
+}
+
+/// Report the references beyond the first in their islands.
+fn extra_reference_diagnostic(bus_ids: &[usize], extra: &[usize]) -> Option<SolveDiagnostic> {
+    (!extra.is_empty()).then(|| SolveDiagnostic {
+        code: "island_extra_reference".to_owned(),
+        message: format!(
+            "{} reference bus(es) share an island with an earlier reference; the AC power \
+             flow keeps one slack per island and holds these at their voltage magnitude",
+            extra.len()
+        ),
+        buses: extra.iter().map(|&bus| bus_ids[bus]).collect(),
+    })
 }
 
 impl AcNetwork {
@@ -163,6 +206,9 @@ impl AcNetwork {
     /// determine the PQ, PV, and reference equations.
     pub fn from_pf_instance(instance: &AcPfInstance) -> Result<AcNetwork, String> {
         let mut model = Self::from_network(instance.network())?;
+        model
+            .diagnostics
+            .retain(|d| d.code != "island_extra_reference");
         if instance.specifications().len() != instance.network().buses().len() {
             return Err(format!(
                 "AC power flow instance has {} bus specifications for {} buses",
@@ -172,7 +218,8 @@ impl AcNetwork {
         }
 
         model.pf_pv.fill(false);
-        let mut reference = None;
+        let mut references = Vec::new();
+        let mut stated_va = vec![0.0; model.n];
         for (dense, &source_id) in model.bus_ids.iter().enumerate() {
             let source_row = model.bus_source_rows[dense].ok_or_else(|| {
                 format!(
@@ -205,14 +252,10 @@ impl AcNetwork {
                             "AC power flow reference bus {source_id} states a non-finite angle"
                         ));
                     }
-                    if reference.replace(dense).is_some() {
-                        return Err(
-                            "AC power flow instance states more than one reference bus".to_owned()
-                        );
-                    }
+                    references.push(dense);
                     model.vm_set[dense] = vm;
                     // The specification carries the network's own angle unit.
-                    model.va_slack = if instance.network().is_normalized() {
+                    stated_va[dense] = if instance.network().is_normalized() {
                         va
                     } else {
                         va.to_radians()
@@ -230,8 +273,43 @@ impl AcNetwork {
                 }
             }
         }
-        model.slack = reference.ok_or("AC power flow instance has no reference bus")?;
-        model.pf_pv[model.slack] = false;
+        // The instance's reference specifications choose each island's slack. An
+        // island whose stated references the preparation could not use keeps the
+        // reference the model designated for it.
+        let designated = std::mem::take(&mut model.slacks);
+        let (stated, extra) = island_slacks(
+            model.n,
+            &model.br_from,
+            &model.br_to,
+            references.iter().copied(),
+        );
+        let (slacks, _) = island_slacks(
+            model.n,
+            &model.br_from,
+            &model.br_to,
+            stated.into_iter().chain(designated),
+        );
+        for &bus in &extra {
+            // A further reference in an island holds its stated magnitude when a
+            // generator there can supply the reactive power to do so.
+            model.pf_pv[bus] = model.gen_bus.contains(&bus);
+        }
+        for &bus in &slacks {
+            model.pf_pv[bus] = false;
+        }
+        // A designation the instance's own references made moot is not reported.
+        model.diagnostics.retain(|d| {
+            d.code != "island_reference_designated"
+                || d.buses
+                    .iter()
+                    .all(|id| slacks.iter().any(|&bus| model.bus_ids[bus] == *id))
+        });
+        model
+            .diagnostics
+            .extend(extra_reference_diagnostic(&model.bus_ids, &extra));
+        // Each slack holds its stated reference angle; a designated one holds zero.
+        model.va_slacks = slacks.iter().map(|&bus| stated_va[bus]).collect();
+        model.slacks = slacks;
         Ok(model)
     }
 
@@ -239,8 +317,16 @@ impl AcNetwork {
     /// instance, preserving its declared objective and constraint selections.
     #[cfg(feature = "conic")]
     pub fn from_instance(instance: &AcOpfInstance) -> Result<AcNetwork, String> {
+        validate_canonical_identity(instance.network())?;
+        let energized = energize(instance.network(), ReferencePolicy::Stated);
+        let diagnostics = energized.diagnostics.clone();
+        let adjusted = energized
+            .into_network()
+            .map(|network| instance.clone().with_network(network))
+            .transpose()
+            .map_err(|e| e.to_string())?;
+        let instance = adjusted.as_ref().unwrap_or(instance);
         let raw = instance.network();
-        validate_canonical_identity(raw)?;
         reject_unsupported_active_elements(raw)?;
         let voltage_dependent_loads = raw
             .loads()
@@ -304,7 +390,13 @@ impl AcNetwork {
             raw.generators().len(),
             "generator",
         )?;
-        let slack = prep.reference_buses.single().map_err(|e| e.to_string())?;
+        // SOCWR has no slack; the field keeps the power flow typing well formed.
+        let (slacks, _) = island_slacks(
+            n,
+            &prep.branches.from_bus,
+            &prep.branches.to_bus,
+            prep.reference_buses.iter().copied(),
+        );
         let mut vm_set = prep.calc_vm_setpoints();
         let mut pg = vec![0.0; n];
         let mut qg = vec![0.0; n];
@@ -324,7 +416,9 @@ impl AcNetwork {
                 };
             }
         }
-        pf_pv[slack] = false;
+        for &slack in &slacks {
+            pf_pv[slack] = false;
+        }
         let has_remote_voltage_control = raw.generators().iter().any(|generator| {
             generator.in_service
                 && generator
@@ -375,8 +469,8 @@ impl AcNetwork {
             vm_min: prep.buses.vm_min.clone(),
             vm_max: prep.buses.vm_max.clone(),
             vm_set,
-            slack,
-            va_slack: 0.0,
+            va_slacks: vec![0.0; slacks.len()],
+            slacks,
             vm_case: prep.buses.initial_vm.clone(),
             va_case: prep.buses.initial_va.clone(),
             pf_pv,
@@ -393,6 +487,7 @@ impl AcNetwork {
             thermal_limit_active: prep.branches.thermal_limit_active.clone(),
             angle_bound_active: prep.branches.angle_bound_active.clone(),
             has_remote_voltage_control,
+            diagnostics,
         })
     }
 
@@ -425,6 +520,16 @@ impl AcNetwork {
     /// 3-winding star lowering. Tellegen layers only its `rate_a == 0` cone
     /// sentinel and angle-bound policy on top.
     pub fn from_network(raw: &BalancedNetwork) -> Result<AcNetwork, String> {
+        // This path normalizes first, which keeps only generator-hosted references.
+        let energized = energize(raw, ReferencePolicy::GeneratorHosted);
+        let mut model = Self::build(energized.network(raw))?;
+        let mut diagnostics = energized.diagnostics;
+        diagnostics.append(&mut model.diagnostics);
+        model.diagnostics = diagnostics;
+        Ok(model)
+    }
+
+    fn build(raw: &BalancedNetwork) -> Result<AcNetwork, String> {
         let voltage_dependent_loads = raw
             .loads()
             .iter()
@@ -479,7 +584,15 @@ impl AcNetwork {
         )?;
 
         let mut vm_set = prep.calc_vm_setpoints();
-        let slack = prep.reference_buses.single().map_err(|e| e.to_string())?;
+        let (slacks, extra) = island_slacks(
+            n,
+            &prep.branches.from_bus,
+            &prep.branches.to_bus,
+            prep.reference_buses.iter().copied(),
+        );
+        let diagnostics: Vec<SolveDiagnostic> = extra_reference_diagnostic(&bus_ids, &extra)
+            .into_iter()
+            .collect();
 
         // Move the complete PowerIO problem columns out of the one-shot
         // preparation. Its bus shunts already include folded self-loop pi
@@ -650,8 +763,8 @@ impl AcNetwork {
             #[cfg(feature = "conic")]
             vm_max,
             vm_set,
-            slack,
-            va_slack: 0.0,
+            va_slacks: vec![0.0; slacks.len()],
+            slacks,
             vm_case,
             va_case,
             pf_pv,
@@ -674,6 +787,7 @@ impl AcNetwork {
             #[cfg(feature = "conic")]
             angle_bound_active,
             has_remote_voltage_control,
+            diagnostics,
         })
     }
 

@@ -1630,6 +1630,32 @@
       ],
       "type": "object"
     },
+    "SolveDiagnostic": {
+      "description": "A finding about how the solve treated the network, such as an island left out\nbecause nothing supplies it. `code` is stable for programs; `message` is for\npeople. `buses` names the original ids of the buses concerned.",
+      "properties": {
+        "buses": {
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "code": {
+          "description": "`island_deenergized`: an island with no in-service generator was left\nout of the solve; its buses carry no results and its load is unserved.\n`island_reference_designated`: a supplied island stated no reference bus,\nso the bus of its largest generator became the island's reference.\n`island_extra_reference`: the AC power flow found several reference\nbuses in one island and kept the first as its slack; the others hold\ntheir voltage magnitude as PV (or PQ) buses.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "buses"
+      ],
+      "type": "object"
+    },
     "SolveIteration": {
       "description": "One interior-point iterate: the iteration index, the primal objective, and\nthe primal and dual residuals. Collected once per Clarabel iteration to draw\nthe convergence plot. Shape matches the frontend `SolveIteration`.",
       "properties": {
@@ -1662,6 +1688,13 @@
     "SolveResponse": {
       "description": "The formulation-agnostic solve result. A superset: every block is optional, and\neach formulation fills what it produces. Powers are MW/MVAr, nodal values are\nin objective units per selected power unit, angles radians, `vm` per unit, and\n`w = |V|^2` per unit squared. Element ids\nare the original bus/branch/generator ids, so the frontend joins straight onto\nits case.",
       "properties": {
+        "diagnostics": {
+          "description": "How the solve treated the network's islands. Empty, and omitted, when\nevery island is supplied and referenced as stated.",
+          "items": {
+            "$ref": "#/$defs/SolveDiagnostic"
+          },
+          "type": "array"
+        },
         "dispatch": {
           "items": {
             "$ref": "#/$defs/GenDispatch"
@@ -2626,5 +2659,5 @@
   ],
   "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "f0ac6b8f160222977f12cca5471e6fe65577df83bb7cf018cdbaddf469bff9a2"
+  "x-rust-source-sha256": "9b9cbc320dee5bc21aa9607fbbe724d18ab7bfda0ac4dc57a1e0e068dc46ace7"
 }
