@@ -114,6 +114,21 @@ export interface LinearConstraint {
 \tupper?: number;
 }
 
+/** Which thermal limits a DC OPF may enforce. Branch keys are element ids or uids. */
+export type ThermalLimits = 'all' | 'rated' | { branches: (number | string)[] };
+
+export interface LazyLimits {
+\tmax_rounds?: number;
+\tnear_binding?: number;
+}
+
+/** Which limits the DC OPF program carries, and whether thermal limits are found lazily. */
+export interface LimitOptions {
+\tangle_difference?: boolean;
+\tthermal?: ThermalLimits;
+\tlazy?: LazyLimits;
+}
+
 export interface SolveRequest {
 \tformulation?: FormulationId;
 \tedits?: Edits;
@@ -121,6 +136,8 @@ export interface SolveRequest {
 \tstart?: PowerFlowStart;
 \t/** Linear constraints, accepted by \`dcopf\` only. */
 \tconstraints?: LinearConstraint[];
+\t/** DC OPF only. */
+\tlimits?: LimitOptions;
 \tsensitivities?: SensRequest[];
 }
 
@@ -185,6 +202,17 @@ export interface SensitivityMatrix {
 \tunits: string;
 }
 
+/** One DC OPF solve run under LimitOptions. */
+export interface LimitRound {
+\tenforced: number;
+\tviolated: number;
+\tadded: number;
+\tmax_loading: number;
+\tvariables: number;
+\trows: number;
+\tipm_iterations: number;
+}
+
 /** The solved state of one LinearConstraint. \`shadow_price\` is
  * \`-d objective / d limit\` in objective units per MW: positive when the upper
  * limit binds, negative when the lower limit binds. */
@@ -221,6 +249,7 @@ export interface SolveResponse {
 \tdispatch?: GenDispatch[];
 \tconstraints?: ConstraintResult[];
 \tdiagnostics?: SolveDiagnostic[];
+\tlimit_rounds?: LimitRound[];
 \tsensitivities?: SensitivityMatrix[];
 }
 

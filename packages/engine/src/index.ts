@@ -51,6 +51,9 @@ export type {
   ConstraintTerm,
   ConstraintTermKind,
   DemandDeltas,
+  LazyLimits,
+  LimitOptions,
+  LimitRound,
   LinearConstraint,
   Network,
   NetworkBranch,
@@ -65,6 +68,7 @@ export type {
   SolveIteration,
   SolveRequest,
   SolveResponse,
+  ThermalLimits,
 } from "./generated/api-types.js";
 
 /** One structured PowerIO finding. */

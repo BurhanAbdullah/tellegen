@@ -104,6 +104,51 @@ On the command line, the default command takes the request as its argument,
 tellegen '{"constraints":[{"id":"north-south","upper":400,"terms":[{"kind":"branch_flow","element":3,"coefficient":1}]}]}' < case.pio.json
 ```
 
+### Limits at scale
+
+The program has no row for a limit it does not enforce, and no shedding
+variable for a bus that cannot shed. A portable solve never sheds, so that
+removes a column and a row pair per bus. These pinned pairs have no interior,
+and on PGLib's 78,484-bus case they kept the interior point solve from
+converging at all.
+
+A DC OPF request may also choose which limits the program carries:
+
+```json
+{ "formulation": "dcopf",
+  "limits": { "angle_difference": false, "thermal": "rated", "lazy": {} } }
+```
+
+- `angle_difference: false` drops the angle-difference rows, two per branch.
+- `thermal` keeps `all` declared thermal limits (the default), only the `rated`
+  ones (an unrated branch's synthesized limit is dropped), or the limits of a
+  list of `branches`.
+- `lazy` solves with no thermal limit enforced, adds every enforceable limit
+  the flows violate or meet together with those loaded at or above
+  `near_binding` (default 0.98), and solves again until every limit left out
+  is strictly slack, for at most `max_rounds` (default 20) solves. A solution
+  that violates none of the limits it was not held to is optimal for the
+  program with all of them, so prices and dispatch match the full solve.
+
+With `limits`, the response's `limit_rounds` reports each solve: the limits it
+enforced, the violations it found, the limits it added, its program size, and
+its interior point iterations. Keep the angle-difference rows with `lazy` when
+every generator cost is linear. Without them, the first round bounds no angle
+or flow, which can stall the interior point method on a degenerate linear
+program. The `dcopf-scale-bench` binary in `crates/benchmarks` measures each
+option on PGLib's `case78484` and on a synthetic 100k-bus mesh.
+
+Limit options combine with linear constraints and with several islands: every
+round carries the request's constraint rows and one reference row per island.
+Sensitivity cells differentiate the program the last round solved, in which a
+limit left out holds a zero multiplier. With `lazy` that is the full program's
+derivative: the last round leaves out only limits with slack, which the full
+program would also hold at a zero multiplier, and a limit the flows meet exactly
+joins another round rather than being left out at its bound. With `thermal`
+set to `rated` or a list of `branches`, or with `angle_difference: false`, it
+is the derivative of the reduced program the request asked for: a dropped limit
+stays dropped when the parameters move, even if the flows would then cross it.
+
 Branch angle-difference bounds are enforced in radians after normalization.
 MATPOWER's unconstrained `-360`/`360` spelling and an unset `0`/`0` pair become
 exactly -60/+60 degrees. When a branch has no thermal rating, Tellegen
