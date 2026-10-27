@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalCaseDetails from '../src/lib/components/LocalCaseDetails.svelte';
 import type { LocalCase } from '../src/lib/state.svelte.js';
 
-const state = vi.hoisted(() => ({ app: { activeLocal: null as unknown } }));
+const state = vi.hoisted(() => ({
+	app: { activeLocal: null as unknown },
+	exportUnavailable: null as string | null
+}));
 
 vi.mock('../src/lib/context.svelte.js', () => ({
 	getAppState: () => state.app,
-	getController: () => ({})
+	getController: () => ({ caseExportUnavailableReason: () => state.exportUnavailable })
 }));
 
 function localCase(overrides: Record<string, unknown> = {}) {
@@ -37,6 +40,7 @@ function localCase(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
 	state.app.activeLocal = localCase();
+	state.exportUnavailable = null;
 });
 
 describe('local case details', () => {
@@ -58,6 +62,14 @@ describe('local case details', () => {
 		expect(render(LocalCaseDetails).body).toMatch(
 			/Coordinates<\/dt> <dd[^>]*>From buses\.csv<\/dd>/
 		);
+	});
+
+	it('disables saving and exporting with the controller reason', () => {
+		state.exportUnavailable = 'Saving and exporting AC OPF cases is not supported yet.';
+		const { body } = render(LocalCaseDetails);
+		expect(body).toMatch(/<button[^>]*disabled[^>]*>Save case<\/button>/);
+		expect(body).toMatch(/<button[^>]*disabled[^>]*>\s*Export as\s*<\/button>/);
+		expect(body).toContain('Saving and exporting AC OPF cases is not supported yet.');
 	});
 
 	it('renders a host note with the case', () => {

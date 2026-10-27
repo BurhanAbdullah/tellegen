@@ -28,6 +28,24 @@ The repository does not modify or vendor those dependency sources. License and
 notice files from dependencies are distributed through their normal package
 archives.
 
+### Optional POUNCE backend
+
+The non-default native `tellegen/acopf` feature depends on
+[POUNCE](https://github.com/jkitchin/pounce), a pure-Rust nonlinear solver
+licensed under EPL-2.0. It is pinned to revision
+`925e75fbd036de309929e398159f946d42d0d94b`. The default engine and the
+published WASM, server, CLI, and Python adapters do not enable this feature.
+`scripts/epl-guard.sh` checks that boundary from Cargo's resolved dependency
+trees. The unpublished `tellegen-acopf-wasi` development adapter deliberately
+does enable it; its generated asset is gitignored and ordinary builds and
+deployments do not copy it.
+
+Before any binary containing POUNCE is distributed, the release owner must
+approve the EPL-2.0 obligations, ship the POUNCE license and notices, and state
+where the corresponding POUNCE source can be obtained. This repository does
+not modify POUNCE. The current dependency exception records a review boundary;
+it is not release approval.
+
 ## Populated Places
 
 The synthetic grid generator ships `crates/tellegen-synth/data/populated_places.json`

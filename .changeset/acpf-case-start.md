@@ -1,5 +1,5 @@
 ---
-"@tellegen/engine": minor
+"@tellegen/engine": patch
 ---
 
 `SolveRequest` accepts `start: "flat" | "case"` (`PowerFlowStart`). With

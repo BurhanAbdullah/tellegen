@@ -1,5 +1,5 @@
 ---
-"@tellegen/engine": minor
+"@tellegen/engine": patch
 ---
 
 Solves accept networks with several islands. Every formulation solves each

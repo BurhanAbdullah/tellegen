@@ -39,6 +39,7 @@ remain in the browser on this path.
 `TellegenViewer` accepts:
 
 - `apiBase`, default `/api`
+- `acOpfWasmUrl`, default `null` (optional experimental AC OPF asset)
 - `loadDefaultCases`, default `true`
 - `docsHref`
 - `orgHref`
@@ -67,6 +68,20 @@ The provider owns the controller and its cases. Unmounting it disposes the
 controller, which frees every case's browser Study and multiconductor session
 in the engine worker, so a provider that should keep its cases across pages
 belongs in a layout that stays mounted.
+
+## Experimental AC OPF
+
+A development host can pass `acOpfWasmUrl="/experimental-acopf/tellegen_acopf_wasi.wasm"`
+to `TellegenViewer` or `TellegenProvider`. The asset must be built and served
+separately; the selector enables AC OPF only after a worker probe succeeds.
+See the [local setup and release gates](../../docs/src/acopf-pounce-decision.md#experimental-browser-abi).
+
+Balanced networks and stored canonical AC OPF instances are supported at the
+base operating point. Imported instances retain their objective and constraints.
+Demand/rating editing, LMPs, sensitivities, and saving/exporting the AC OPF case
+are unavailable. Geographic sidecars and layout downloads remain available.
+Without the optional worker, imported AC OPF instances remain viewable but
+cannot be solved. No server solve is substituted for AC OPF.
 
 ## Panel layout
 
@@ -365,6 +380,11 @@ release. The package ships only `dist`, the README, the MIT license text, and
 package metadata. The packed smoke test installs the generated tarballs into a
 temporary Svelte consumer and builds it so missing exports, styles, or wasm
 assets fail before publish.
+
+Unmounting `TellegenProvider` (including through `TellegenViewer`) disposes its
+controller and terminates pending AC OPF probes and solves, including background
+cases. Custom hosts that construct a `Controller` directly must call
+`controller.dispose()` when their owning view is destroyed.
 
 ## Citing
 

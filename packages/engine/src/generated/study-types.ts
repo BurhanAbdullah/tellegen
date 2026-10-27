@@ -1,5 +1,7 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: 39c1cb69a30a8f06d86a200e283cf346c2636f32e95188cda77a67689b2ee021
+// Source SHA256: 0f183bfc85f4fefb746b2630bdc4c12e5a9f2f285c5a8047b4668fa378e1b83e
+
+export type AcOpfResiduals = { "active_balance_mw": number; "active_generation_bounds_mw": number; "angle_limits_rad": number; "objective_relative_error": number; "piecewise_epigraph_cost": number; "reactive_balance_mvar": number; "reactive_generation_bounds_mvar": number; "reference_angles_rad": number; "thermal_limits_mva": number; "voltage_bounds_pu": number; };
 
 export type ArtifactKind = "powerio_ir" | "geo_layer" | "evidence";
 
@@ -18,6 +20,8 @@ export type Camera = { "bearing": number; "center": Array<number>; "pitch": numb
 export type ColMeta = { "element": ElementId; "index": number; "parameter": Parameter; };
 
 export type Comparison = { "goal"?: string | null; "improvement"?: number | null; "left": string; "left_value"?: number | null; "left_view"?: (SolveResponse) | (null); "right": string; "right_value"?: number | null; "right_view"?: (SolveResponse) | (null); };
+
+export type ConstraintResult = { "binding": boolean; "id": string; "lower"?: number | null; "shadow_price"?: number | null; "upper"?: number | null; "value": number; };
 
 export type CostApproximation = { "bus": number; "generator": number; "max_breakpoint_error": number; "model_cost": GenCost; "rms_breakpoint_error": number; "source_cost": GenCost; };
 
@@ -47,7 +51,7 @@ export type DiagramCamera = { "center": Array<number>; "scale": number; };
 
 export type DisplayContext = { "camera"?: (Camera) | (null); "case_id": string; "diagram_camera"?: (DiagramCamera) | (null); "geography": string; "layers"?: Array<string>; };
 
-export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; });
+export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; }) | ({ "Constraint": number; });
 
 export type ElementKey = (number) | (string);
 
@@ -69,7 +73,9 @@ export type GoalRevision = { "anchor_state": string; "decisions": DecisionSpace;
 
 export type Intervention = "branch_rating" | "active_demand";
 
-export type Iterations = (Array<SolveIteration>) | ({ "count": number; "residual": number; });
+export type Iterations = (Array<SolveIteration>) | ({ "count": number; "residual": number; }) | ({ "base_restoration_calls"?: number | null; "base_solver_status"?: string | null; "model_fingerprint": string; "nlp_iterations": number; "primal_residual": number; "recovered_by"?: string | null; "recovery_attempts"?: Array<string>; "residuals"?: (AcOpfResiduals) | (null); "restoration_calls"?: number | null; "solver_constraint_violation": number; "solver_kkt_error": number; "solver_status": string; "total_nlp_iterations"?: number | null; });
+
+export type LimitRound = { "added": number; "enforced": number; "ipm_iterations": number; "max_loading": number; "rows": number; "variables": number; "violated": number; };
 
 export type ModelDetails = { "approximations": Array<CostApproximation>; "method": CostPreparation; "model": string; "quantity": string; "source": string; "units": string; };
 
@@ -77,7 +83,7 @@ export type ObservableWeight = { "element": ElementKey; "weight": number; };
 
 export type Operand = ({ "Price": Power; }) | ({ "Dispatch": Power; }) | ({ "Flow": { "end": End; "power": Power; }; }) | ({ "Voltage": VoltageKind; });
 
-export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching");
+export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching") | ("ConstraintLimit");
 
 export type Power = "Active" | "Reactive";
 
@@ -93,7 +99,7 @@ export type SolveDiagnostic = { "buses": Array<number>; "code": string; "message
 
 export type SolveIteration = { "inf_du": number; "inf_pr": number; "iter": number; "objective": number; };
 
-export type SolveResponse = { "diagnostics"?: Array<SolveDiagnostic>; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
+export type SolveResponse = { "constraints"?: Array<ConstraintResult> | null; "diagnostics"?: Array<SolveDiagnostic>; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "limit_rounds"?: Array<LimitRound> | null; "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
 
 export type SolveStatus = ("optimal") | ("feasible");
 

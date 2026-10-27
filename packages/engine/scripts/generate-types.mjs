@@ -70,9 +70,14 @@ export type Parameter =
 \t| { VoltageBound: Bound }
 \t| { GenBound: { power: Power; bound: Bound } }
 \t| { Transformer: TapKind }
-\t| 'Switching';
+\t| 'Switching'
+\t| 'ConstraintLimit';
 
-export type ElementId = { Bus: number } | { Branch: number } | { Generator: number };
+export type ElementId =
+\t| { Bus: number }
+\t| { Branch: number }
+\t| { Generator: number }
+\t| { Constraint: number };
 
 export interface SensRequest {
 \toperand: Operand;
@@ -89,11 +94,50 @@ export interface Edits {
 /** Where the AC power flow starts: the setpoint flat start, or the case's stored bus voltages. */
 export type PowerFlowStart = 'flat' | 'case';
 
+export type ConstraintTermKind = 'branch_flow' | 'bus_injection' | 'generator';
+
+/** \`coefficient\` times the MW quantity \`kind\` names at \`element\` (an element id
+ * or PowerIO row uid). */
+export interface ConstraintTerm {
+\tkind: ConstraintTermKind;
+\telement: number | string;
+\tcoefficient: number;
+}
+
+/** A DC OPF linear constraint, such as an interface or transfer limit:
+ * \`lower <= sum(coefficient * quantity) <= upper\` in MW. Either limit may be
+ * omitted, not both; equal limits state an equality. */
+export interface LinearConstraint {
+\tid: string;
+\tterms: ConstraintTerm[];
+\tlower?: number;
+\tupper?: number;
+}
+
+/** Which thermal limits a DC OPF may enforce. Branch keys are element ids or uids. */
+export type ThermalLimits = 'all' | 'rated' | { branches: (number | string)[] };
+
+export interface LazyLimits {
+\tmax_rounds?: number;
+\tnear_binding?: number;
+}
+
+/** Which limits the DC OPF program carries, and whether thermal limits are found lazily. */
+export interface LimitOptions {
+\tangle_difference?: boolean;
+\tthermal?: ThermalLimits;
+\tlazy?: LazyLimits;
+}
+
 export interface SolveRequest {
 \tformulation?: FormulationId;
 \tedits?: Edits;
 \t/** \`acpf\` only; other formulations refuse \`'case'\`. Defaults to \`'flat'\`. */
 \tstart?: PowerFlowStart;
+\t/** Linear constraints, accepted by \`dcopf\` only. */
+\tconstraints?: LinearConstraint[];
+\t/** DC OPF only. */
+\tlimits?: LimitOptions;
 \tsensitivities?: SensRequest[];
 }
 
@@ -105,7 +149,38 @@ export interface SolveIteration {
 }
 
 export type NewtonIterations = { count: number; residual: number };
-export type Iterations = SolveIteration[] | NewtonIterations;
+export interface AcOpfResiduals {
+\tactive_balance_mw: number;
+\treactive_balance_mvar: number;
+\tvoltage_bounds_pu: number;
+\tactive_generation_bounds_mw: number;
+\treactive_generation_bounds_mvar: number;
+\treference_angles_rad: number;
+\tangle_limits_rad: number;
+\tthermal_limits_mva: number;
+\tpiecewise_epigraph_cost: number;
+\tobjective_relative_error: number;
+}
+export interface NlpIterations {
+\tnlp_iterations: number;
+\t/** Maximum independent P/Q mismatch in MW/MVAr. */
+\tprimal_residual: number;
+\tresiduals?: AcOpfResiduals;
+\tsolver_status: string;
+\tsolver_constraint_violation: number;
+\tsolver_kkt_error: number;
+\tmodel_fingerprint: string;
+\t/** Base verdict and work across all attempts (older assets omit these). */
+\tbase_solver_status?: string;
+\ttotal_nlp_iterations?: number;
+\t/** Restoration entries in the selected solve. */
+\trestoration_calls?: number;
+\t/** Restoration entries in the original solve. */
+\tbase_restoration_calls?: number;
+\trecovery_attempts?: string[];
+\trecovered_by?: string;
+}
+export type Iterations = SolveIteration[] | NewtonIterations | NlpIterations;
 
 export interface BusScalar {
 \tbus: number;
@@ -158,6 +233,29 @@ export interface SensitivityMatrix {
 \tunits: string;
 }
 
+/** One DC OPF solve run under LimitOptions. */
+export interface LimitRound {
+\tenforced: number;
+\tviolated: number;
+\tadded: number;
+\tmax_loading: number;
+\tvariables: number;
+\trows: number;
+\tipm_iterations: number;
+}
+
+/** The solved state of one LinearConstraint. \`shadow_price\` is
+ * \`-d objective / d limit\` in objective units per MW: positive when the upper
+ * limit binds, negative when the lower limit binds. */
+export interface ConstraintResult {
+\tid: string;
+\tvalue: number;
+\tlower?: number;
+\tupper?: number;
+\tshadow_price?: number;
+\tbinding: boolean;
+}
+
 /** How a solve treated the network's islands. \`code\` is
  * 'island_deenergized', 'island_reference_designated', or
  * 'island_extra_reference'; \`buses\` are original bus ids. */
@@ -180,7 +278,9 @@ export interface SolveResponse {
 \tinjections?: BusInjection[];
 \tflows?: BranchFlow[];
 \tdispatch?: GenDispatch[];
+\tconstraints?: ConstraintResult[];
 \tdiagnostics?: SolveDiagnostic[];
+\tlimit_rounds?: LimitRound[];
 \tsensitivities?: SensitivityMatrix[];
 }
 
@@ -188,6 +288,8 @@ export interface ProblemCaps {
 \tformulation: FormulationId;
 \tavailable: boolean;
 \tblocks: string[];
+\t/** Term kinds accepted in SolveRequest.constraints; empty when refused. */
+\tconstraints?: ConstraintTermKind[];
 \toperands?: Operand[];
 \tparameters?: Parameter[];
 }

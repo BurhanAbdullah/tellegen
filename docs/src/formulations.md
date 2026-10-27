@@ -30,6 +30,125 @@ value or its derivative need not be unique; the sensitivity API reports the
 local KKT linearization and numerical checks identify stencils that cross a
 different active set.
 
+### Linear constraints
+
+A DC OPF request may add linear constraints over branch flows, bus net
+injections, and generator outputs. This is the usual way to state an interface
+or transfer limit: a bound on a weighted sum of flows across a cut of the
+network.
+
+```json
+{
+  "formulation": "dcopf",
+  "constraints": [
+    {
+      "id": "north-south",
+      "terms": [
+        { "kind": "branch_flow", "element": 3, "coefficient": 1.0 },
+        { "kind": "branch_flow", "element": "branches:7", "coefficient": 1.0 }
+      ],
+      "upper": 400.0
+    }
+  ]
+}
+```
+
+Each constraint states $l \le \sum_t c_t\,q_t \le u$ in MW. Either limit may be
+omitted, but not both; equal limits state an equality. A term's `kind` selects
+its quantity $q_t$:
+
+| `kind`          | quantity                                              | `element`                       |
+| --------------- | ----------------------------------------------------- | ------------------------------- |
+| `branch_flow`   | from-end active flow, positive from `from` to `to`    | 1-based branch position or uid  |
+| `bus_injection` | net injection: generation minus demand and shunt withdrawal | bus id or uid             |
+| `generator`     | active output                                         | 1-based generator position or uid |
+
+Terms naming the same quantity add. An element that is unknown, out of
+service, on a de-energized island, or synthesized while lowering a
+three-winding transformer is refused by name. A bus injection enters the program as the flow leaving the bus on its
+branches, which equals the net injection by power balance. The constraint rows
+therefore never depend on demand, and the reported LMP stays the marginal cost
+of demand at each bus.
+
+The response adds a `constraints` block in request order with each row's
+`value`, `lower`, `upper`, `binding`, and `shadow_price`. The shadow price is
+$\mu = -\partial(\text{objective})/\partial(\text{limit})$ in the LMP's units:
+positive when the upper limit binds, negative when the lower limit binds, and
+zero when neither does. Prices then decompose against any reference bus $r$
+in the bus's island:
+
+$$ \lambda_i = \lambda_r - \sum_\ell \mu_\ell \, s_{\ell i}, $$
+
+where $s_{\ell i}$ is the change in constraint $\ell$'s value per MW injected at
+bus $i$ and withdrawn at $r$, and the sum also runs over binding line limits.
+The shadow price is omitted, like the LMP, when the declared objective is a
+feasibility objective.
+
+Linear constraints are a DC OPF feature; DC power flow, AC power flow, and
+SOCWR refuse a request that carries them. The DC KKT system carries a
+multiplier for each stated limit, so sensitivity cells differentiate the
+constrained program. The `ConstraintLimit` parameter differentiates with
+respect to a constraint's limits, shifting both by the same MW. Its columns are
+keyed by the constraint's position in the request. A Rust `Study` carries
+constraints through every commit with `Study::set_constraints`. Previews,
+planning, and objective gradients see them. While it has any, it refuses to save
+the problem instance or its solution, since the PowerIO problem instance has no
+place for them.
+
+On the command line, the default command takes the request as its argument,
+`tellegen capabilities` lists the accepted term kinds under each formulation's
+`constraints`, and `tellegen describe` includes the `solve_request` and
+`solve_result` schemas:
+
+```sh
+tellegen '{"constraints":[{"id":"north-south","upper":400,"terms":[{"kind":"branch_flow","element":3,"coefficient":1}]}]}' < case.pio.json
+```
+
+### Limits at scale
+
+The program has no row for a limit it does not enforce, and no shedding
+variable for a bus that cannot shed. A portable solve never sheds, so that
+removes a column and a row pair per bus. These pinned pairs have no interior,
+and on PGLib's 78,484-bus case they kept the interior point solve from
+converging at all.
+
+A DC OPF request may also choose which limits the program carries:
+
+```json
+{ "formulation": "dcopf",
+  "limits": { "angle_difference": false, "thermal": "rated", "lazy": {} } }
+```
+
+- `angle_difference: false` drops the angle-difference rows, two per branch.
+- `thermal` keeps `all` declared thermal limits (the default), only the `rated`
+  ones (an unrated branch's synthesized limit is dropped), or the limits of a
+  list of `branches`.
+- `lazy` solves with no thermal limit enforced, adds every enforceable limit
+  the flows violate or meet together with those loaded at or above
+  `near_binding` (default 0.98), and solves again until every limit left out
+  is strictly slack, for at most `max_rounds` (default 20) solves. A solution
+  that violates none of the limits it was not held to is optimal for the
+  program with all of them, so prices and dispatch match the full solve.
+
+With `limits`, the response's `limit_rounds` reports each solve: the limits it
+enforced, the violations it found, the limits it added, its program size, and
+its interior point iterations. Keep the angle-difference rows with `lazy` when
+every generator cost is linear. Without them, the first round bounds no angle
+or flow, which can stall the interior point method on a degenerate linear
+program. The `dcopf-scale-bench` binary in `crates/benchmarks` measures each
+option on PGLib's `case78484` and on a synthetic 100k-bus mesh.
+
+Limit options combine with linear constraints and with several islands: every
+round carries the request's constraint rows and one reference row per island.
+Sensitivity cells differentiate the program the last round solved, in which a
+limit left out holds a zero multiplier. With `lazy` that is the full program's
+derivative: the last round leaves out only limits with slack, which the full
+program would also hold at a zero multiplier, and a limit the flows meet exactly
+joins another round rather than being left out at its bound. With `thermal`
+set to `rated` or a list of `branches`, or with `angle_difference: false`, it
+is the derivative of the reduced program the request asked for: a dropped limit
+stays dropped when the parameters move, even if the flows would then cross it.
+
 Branch angle-difference bounds are enforced in radians after normalization.
 MATPOWER's unconstrained `-360`/`360` spelling and an unset `0`/`0` pair become
 exactly -60/+60 degrees. When a branch has no thermal rating, Tellegen

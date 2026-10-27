@@ -3,10 +3,16 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from './fixtures/page-errors.js';
 
+// These are local browser/WASM tests. Make startup deterministic and wait for
+// hydration before dispatching file-input events, including under parallel CI.
+test.beforeEach(async ({ page }) => {
+	await page.route('**/api/compute', (route) => route.fulfill({ json: { enabled: false } }));
+	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
+});
+
 /** Open the app and wait until it has hydrated: the prerendered file input exists before hydration
  * attaches its listener, so a file set earlier is lost. The empty-cases panel renders only after load. */
 async function openApp(page: Page) {
-	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
 	await expect(page.getByText('no default cases loaded')).toBeVisible();
 }
