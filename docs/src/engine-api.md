@@ -153,7 +153,7 @@ file.arrayBuffer())` for a browser `File`.
 
 Public types include:
 
-- `SolveRequest`, `SolveResponse`, `ProblemCaps`, `PowerFlowStart`
+- `SolveRequest`, `SolveResponse`, `ProblemCaps`, `PowerFlowStart`, `SolveDiagnostic`
 - `SensRequest`, `SensitivityMatrix`, `SensitivityColumn`
 - `Network`, `NetworkBus`, `NetworkBranch`
 - `Solution`, `SolveIteration`, `DemandDeltas`
