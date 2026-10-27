@@ -23,6 +23,8 @@ struct Document {
 struct Osm3s {
     #[serde(default)]
     timestamp_osm_base: Option<String>,
+    #[serde(default)]
+    copyright: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -99,6 +101,8 @@ pub struct OsmPlant {
     pub fuel: Fuel,
     /// Tagged electrical output, MW; `None` when untagged.
     pub capacity_mw: Option<f64>,
+    /// `power=generator`: one unit, often inside a mapped `power=plant`.
+    pub is_generator: bool,
 }
 
 /// An HVDC converter station.
@@ -137,6 +141,9 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
             timestamp_osm_base: documents
                 .iter()
                 .find_map(|d| d.osm3s.as_ref().and_then(|o| o.timestamp_osm_base.clone())),
+            copyright: documents
+                .iter()
+                .find_map(|d| d.osm3s.as_ref().and_then(|o| o.copyright.clone())),
             document_sha256: Sha256::digest(text.as_bytes())
                 .iter()
                 .map(|b| format!("{b:02x}"))
@@ -188,7 +195,7 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
                     is_dc: el.tag("frequency").trim() == "0",
                 });
             }
-            "plant" | "generator" => {
+            power @ ("plant" | "generator") => {
                 let Some((lon, lat)) = el.point() else {
                     continue;
                 };
@@ -206,6 +213,7 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
                     lat,
                     fuel: parse_fuel(source),
                     capacity_mw: parse_power_mw(output),
+                    is_generator: power == "generator",
                 });
             }
             "converter" => {
@@ -450,7 +458,7 @@ mod tests {
 
     #[test]
     fn documents_and_arrays_of_documents() {
-        let doc = r#"{"osm3s":{"timestamp_osm_base":"2026-10-01T00:00:00Z"},"elements":[
+        let doc = r#"{"osm3s":{"timestamp_osm_base":"2026-10-01T00:00:00Z","copyright":"The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."},"elements":[
             {"type":"node","id":1,"lat":40.0,"lon":1.0,"tags":{"power":"substation","voltage":"220000;110000"}},
             {"type":"way","id":2,"center":{"lat":40.5,"lon":1.5},"tags":{"power":"plant","plant:source":"wind","plant:output:electricity":"2x50 MW"}},
             {"type":"way","id":3,"geometry":[{"lat":40.0,"lon":1.0},null,{"lat":40.5,"lon":1.5}],"tags":{"power":"line","voltage":"220000","circuits":"2"}},
@@ -462,6 +470,11 @@ mod tests {
             parsed.provenance.timestamp_osm_base.as_deref(),
             Some("2026-10-01T00:00:00Z")
         );
+        assert!(parsed
+            .provenance
+            .copyright
+            .as_deref()
+            .is_some_and(|c| c.ends_with("under ODbL.")));
         assert_eq!(parsed.provenance.elements, 5);
         assert_eq!(parsed.substations[0].kvs, vec![220.0, 110.0]);
         assert_eq!(parsed.plants[0].fuel, Fuel::Wind);
