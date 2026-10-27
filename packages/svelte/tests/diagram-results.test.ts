@@ -154,7 +154,7 @@ describe('snapshotFromMcPf', () => {
 		{
 			id: 'A',
 			terminals: ['1', '2', '3'],
-			limits: { phasePhase: { min: 19000, max: 21000 } }
+			limits: { phasePhase: [{ pair: null, min: 19000, max: 21000 }] }
 		},
 		{
 			id: 'B',
@@ -330,7 +330,7 @@ describe('graphInputs and live-session terminals', () => {
 	it('maps declared limits and ratings, and refuses to guess non-uniform phase–phase bounds', () => {
 		const g = graphInputs(graph);
 		expect(g.buses.map((b) => b.limits)).toEqual([
-			{ phasePhase: { min: 19000, max: 21000 } },
+			{ phasePhase: [{ pair: null, min: 19000, max: 21000 }] },
 			{ phaseNeutral: { min: [207, 207, 207], max: [253, 253, 253] } },
 			null
 		]);
@@ -646,5 +646,109 @@ describe('phase–ground limits', () => {
 			Math.min(...neutral.map((p) => p.volts))
 		);
 		expect(Math.min(...neutral.map((p) => p.volts))).toBeGreaterThan(215);
+	});
+});
+
+describe('non-uniform phase–phase limits', () => {
+	const bus = (id: string, voltage_limits: DistGraphBus['voltage_limits']): DistGraphBus => ({
+		id,
+		terminals: ['a', 'b', 'c'],
+		grounded: [],
+		neutral_terminal: null,
+		load_kw: 0,
+		gen_kw: 0,
+		has_source: false,
+		voltage_limits
+	});
+	const bounds = { vpp_min: [390, 395, 400], vpp_max: [410, 415, 420] };
+	const graph = {
+		buses: [
+			// The engine's order (1,2), (2,3), (3,1) of the phase terminals.
+			bus('P', {
+				...bounds,
+				vpp_pairs: [
+					['a', 'b'],
+					['b', 'c'],
+					['c', 'a']
+				]
+			}),
+			// Pairs are matched by their terminals, in either order, not by position.
+			bus('Q', {
+				...bounds,
+				vpp_pairs: [
+					['c', 'b'],
+					['a', 'c'],
+					['b', 'a']
+				]
+			}),
+			// Without named pairs, or with too few, the non-uniform bounds have no place.
+			bus('R', bounds),
+			bus('S', { ...bounds, vpp_pairs: [['a', 'b']] })
+		],
+		edges: []
+	};
+	const terminal = (b: string, t: string, deg: number) => ({
+		bus: b,
+		terminal: t,
+		voltage: polar(230, deg),
+		current_into_network: { re: 0, im: 0 },
+		power_into_network: { re: 0, im: 0 }
+	});
+	const result = {
+		iterations: 2,
+		terminals: ['P', 'Q', 'R', 'S'].flatMap((b) => [
+			terminal(b, 'a', 0),
+			terminal(b, 'b', -120),
+			terminal(b, 'c', 120)
+		]),
+		element_ports: []
+	} as unknown as McPfResult;
+	const inputs = graphInputs(graph);
+	const s = snapshotFromMcPf(result, inputs.buses, inputs.branches);
+	const line = 230 * Math.sqrt(3);
+
+	it('keeps one band per named pair', () => {
+		expect(inputs.buses.map((b) => b.limits)).toEqual([
+			{
+				phasePhase: [
+					{ pair: ['a', 'b'], min: 390, max: 410 },
+					{ pair: ['b', 'c'], min: 395, max: 415 },
+					{ pair: ['c', 'a'], min: 400, max: 420 }
+				]
+			},
+			{
+				phasePhase: [
+					{ pair: ['c', 'b'], min: 390, max: 410 },
+					{ pair: ['a', 'c'], min: 395, max: 415 },
+					{ pair: ['b', 'a'], min: 400, max: 420 }
+				]
+			},
+			null,
+			null
+		]);
+		// A uniform band still applies to every pair without names.
+		expect(busLimits(bus('U', { vpp_min: [390, 390, 390], vpp_max: [410, 410, 410] }))).toEqual({
+			phasePhase: [{ pair: null, min: 390, max: 410 }]
+		});
+	});
+
+	it('ranks each pair against its own band', () => {
+		expect(s.buses[0].pairs.map((p) => [p.pair.join('–'), p.min, p.max])).toEqual([
+			['a–b', 390, 410],
+			['b–c', 395, 415],
+			['c–a', 400, 420]
+		]);
+		expect(s.buses[1].pairs.map((p) => [p.pair.join('–'), p.min, p.max])).toEqual([
+			['a–b', 400, 420],
+			['b–c', 390, 410],
+			['c–a', 395, 415]
+		]);
+		expect(s.buses[2].pairs.every((p) => p.min === null && p.max === null)).toBe(true);
+		// A balanced 230 V set is 398.4 V line to line: below only a 400 V minimum.
+		expect(rankIssues(s).map((i) => [i.target.index, i.pair, i.low, i.limit])).toEqual([
+			[0, ['c', 'a'], true, 400],
+			[1, ['a', 'b'], true, 400]
+		]);
+		expect(s.buses[0].pairs[2].volts).toBeCloseTo(line, 9);
 	});
 });

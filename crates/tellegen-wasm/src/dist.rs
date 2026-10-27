@@ -265,6 +265,11 @@ fn graph_with_neutral_metadata(
 /// terminals PowerIO assigned them to, so the frontend need not repeat that classification. A
 /// vector whose length does not match the phase terminals is left out rather than guessed, and so
 /// is a non-finite entry (no bound on that terminal).
+///
+/// Phase-to-phase bounds (`vpp_min`/`vpp_max`) keep PowerIO's vectors, one entry per ordered pair
+/// (1,2), (2,3), (3,1) of the phase terminals (BMOPF 0.2.0). `vpp_pairs` names those pairs with
+/// the phase terminals PowerIO assigned, for a bus with two or three of them; the schema states no
+/// order for more.
 fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
     use serde_json::{json, Map, Value};
     let buses: std::collections::BTreeMap<_, _> = net
@@ -289,6 +294,22 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
                 .collect();
             (!by_terminal.is_empty()).then_some(Value::Object(by_terminal))
         };
+    let phase_pairs = |bus: &powerio_dist::DistBus| {
+        let phases: Vec<&String> = bus
+            .phase_indices(conventions)
+            .into_iter()
+            .map(|i| &bus.terminals[i])
+            .collect();
+        let order: &[(usize, usize)] = match phases.len() {
+            2 => &[(0, 1)],
+            3 => &[(0, 1), (1, 2), (2, 0)],
+            _ => return None,
+        };
+        Some(json!(order
+            .iter()
+            .map(|&(i, j)| [phases[i], phases[j]])
+            .collect::<Vec<_>>()))
+    };
     if let Some(graph_buses) = graph.get_mut("buses").and_then(Value::as_array_mut) {
         for graph_bus in graph_buses {
             let Some(bus) = graph_bus
@@ -307,6 +328,11 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
             ] {
                 if let Some(values) = value {
                     limits.insert(name.to_owned(), json!(values));
+                }
+            }
+            if bus.vpp_min.is_some() || bus.vpp_max.is_some() {
+                if let Some(pairs) = phase_pairs(bus) {
+                    limits.insert("vpp_pairs".to_owned(), pairs);
                 }
             }
             for (name, scalar, phases) in [
@@ -992,6 +1018,51 @@ mod tests {
         short["bus"]["src"]["v_max"] = serde_json::json!([7500.0, 7600.0]);
         let out = ingest_dist(&short.to_string(), "bmopf").expect("short bounds");
         assert!(bus_limits(&parse(&out), "src").is_null());
+    }
+
+    #[test]
+    fn graph_names_the_phase_pairs_of_non_uniform_phase_to_phase_bounds() {
+        // BMOPF 0.2.0 orders phase-to-phase bounds by the pairs (1,2), (2,3), (3,1) of the phase
+        // terminals; terminal 4 of a numbered four-wire bus is the neutral.
+        let mut raw: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        raw["bus"]["load_bus"]["vpp_min"] = serde_json::json!([11800.0, 11900.0, 12000.0]);
+        raw["bus"]["load_bus"]["vpp_max"] = serde_json::json!([13000.0, 13100.0, 13200.0]);
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("pairs"));
+        let load_bus = bus_limits(&value, "load_bus");
+        assert_eq!(
+            load_bus["vpp_min"],
+            serde_json::json!([11800.0, 11900.0, 12000.0])
+        );
+        assert_eq!(
+            load_bus["vpp_max"],
+            serde_json::json!([13000.0, 13100.0, 13200.0])
+        );
+        assert_eq!(
+            load_bus["vpp_pairs"],
+            serde_json::json!([["1", "2"], ["2", "3"], ["3", "1"]])
+        );
+        assert!(bus_limits(&value, "src").is_null());
+
+        // The pairs follow the declared terminal roles.
+        raw["terminal_conventions"] =
+            serde_json::json!({ "phase": ["2", "3", "4"], "neutral": ["1"], "earth": [] });
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("roles"));
+        assert_eq!(
+            bus_limits(&value, "load_bus")["vpp_pairs"],
+            serde_json::json!([["2", "3"], ["3", "4"], ["4", "2"]])
+        );
+
+        // Two phase terminals have the one pair; the schema orders no more than three.
+        let mut two: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        two["terminal_conventions"] =
+            serde_json::json!({ "phase": ["1", "2"], "neutral": ["3", "4"], "earth": [] });
+        two["bus"]["load_bus"]["vpp_min"] = serde_json::json!([11800.0]);
+        two["bus"]["load_bus"]["vpp_max"] = serde_json::json!([13000.0]);
+        let value = parse(&ingest_dist(&two.to_string(), "bmopf").expect("two phases"));
+        assert_eq!(
+            bus_limits(&value, "load_bus")["vpp_pairs"],
+            serde_json::json!([["1", "2"]])
+        );
     }
 
     #[test]

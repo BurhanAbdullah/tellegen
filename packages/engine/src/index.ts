@@ -237,6 +237,10 @@ export interface DistVoltageLimits {
   vpn_max?: number[];
   vpp_min?: number[];
   vpp_max?: number[];
+  /** The phase-terminal pairs the phase–phase bounds are ordered by: (1,2), (2,3), (3,1) of the
+   * phase terminals (BMOPF 0.2.0). Present with phase–phase bounds on a bus with two or three
+   * phase terminals. */
+  vpp_pairs?: [string, string][];
   /** Phase-to-ground magnitude bounds (PowerIO's `v_min`/`v_max`: BMOPF `v_min`/`v_max`, PMD
    * `vm_lb`/`vm_ub`), keyed by the phase terminal they bound. A terminal without a finite bound is
    * absent. */

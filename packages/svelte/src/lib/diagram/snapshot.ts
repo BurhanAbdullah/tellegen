@@ -66,10 +66,11 @@ export interface ResultSnapshot {
 
 /** Declared limits for one bus, by reference; a bus can declare several. Phase–neutral limits
  * list one band per phase terminal, phase–ground limits one per bounded terminal in terminal
- * order. */
+ * order. A phase–phase band applies to its pair of terminals in either order, or to every pair
+ * when `pair` is null (a uniform band). */
 export interface BusLimits {
 	phaseNeutral?: { min: number[]; max: number[] };
-	phasePhase?: { min: number; max: number };
+	phasePhase?: { pair: [string, string] | null; min: number; max: number }[];
 	phaseGround?: { terminal: string; min: number; max: number }[];
 }
 
@@ -128,10 +129,27 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 	// Each declared reference that applies here gets its pairs. Without one, phase–neutral where
 	// there is a neutral, else phase–phase on three phases.
 	const ground = limits.phaseGround ?? [];
+	// Phase–phase pairs in the order (1,2), (2,3), (3,1), each with its declared band.
+	const triple: [string, string][] =
+		phases.length === 3
+			? [
+					[phases[0], phases[1]],
+					[phases[1], phases[2]],
+					[phases[2], phases[0]]
+				]
+			: [];
+	const declaredBands = limits.phasePhase;
+	const bands = declaredBands
+		? triple.map(
+				([a, b]) =>
+					declaredBands.find(
+						({ pair }) =>
+							!pair || (pair[0] === a && pair[1] === b) || (pair[0] === b && pair[1] === a)
+					) ?? null
+			)
+		: [];
 	const declared =
-		(!!neutral && !!limits.phaseNeutral) ||
-		(phases.length === 3 && !!limits.phasePhase) ||
-		ground.length > 0;
+		(!!neutral && !!limits.phaseNeutral) || bands.some((band) => band) || ground.length > 0;
 	if (neutral && (limits.phaseNeutral || !declared)) {
 		const vn = voltage(neutral) ?? zero;
 		phases.forEach((t, i) => {
@@ -147,23 +165,19 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 			phasors.push(sub(v, vn));
 		});
 	}
-	if (phases.length === 3 && (limits.phasePhase || (!declared && !neutral))) {
-		for (const [i, j] of [
-			[0, 1],
-			[1, 2],
-			[2, 0]
-		]) {
-			const a = voltage(phases[i]);
-			const b = voltage(phases[j]);
-			if (!a || !b) continue;
+	if (triple.length && (bands.some((band) => band) || (!declared && !neutral))) {
+		triple.forEach(([a, b], k) => {
+			const va = voltage(a);
+			const vb = voltage(b);
+			if (!va || !vb) return;
 			pairs.push({
-				pair: [phases[i], phases[j]],
+				pair: [a, b],
 				zone: 'phase–phase',
-				volts: magnitude(sub(a, b)),
-				min: limits.phasePhase?.min ?? null,
-				max: limits.phasePhase?.max ?? null
+				volts: magnitude(sub(va, vb)),
+				min: bands[k]?.min ?? null,
+				max: bands[k]?.max ?? null
 			});
-		}
+		});
 	}
 	// Terminal voltages are to ground, so a phase–ground pair is the terminal's own magnitude.
 	for (const { terminal, min, max } of ground) {

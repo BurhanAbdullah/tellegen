@@ -8,3 +8,6 @@ Multiconductor graphs carry every bus voltage bound PowerIO reads, in volts.
 terminal PowerIO assigns each bound to, and the sequence and neutral-to-ground
 bounds `vpos_min`, `vpos_max`, `vneg_max`, `vzero_max` and `vn_max`. A bound vector
 that does not match the bus's phase terminals, or a non-finite entry, is left out.
+`vpp_pairs` names the phase-terminal pairs that `vpp_min`/`vpp_max` are ordered by,
+(1,2), (2,3), (3,1) of the phase terminals as BMOPF 0.2.0 states, on a bus with two
+or three phase terminals.

@@ -77,7 +77,7 @@
 		inputs.buses.some((b) => b.limits) || inputs.branches.some((b) => b.rating)
 	);
 	/** Declared voltage limits the overview does not rank: sequence or neutral-to-ground bounds, a
-	 * bound without its other side, or non-uniform phase–phase bounds. */
+	 * bound without its other side, or non-uniform phase–phase bounds without named pairs. */
 	const unrankedLimits = $derived(!limitsDeclared && graph.buses.some((b) => b.voltage_limits));
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
 	/** The first edge of each id: a multi-winding transformer's winding-pair edges share its id, and
