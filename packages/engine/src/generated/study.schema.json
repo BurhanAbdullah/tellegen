@@ -1423,7 +1423,7 @@
         },
         {
           "const": "acopf",
-          "description": "Full nonlinear AC OPF. Not available in this build (the dispatch errors\ncleanly); the tag is kept so the JSON contract stays stable.",
+          "description": "Full nonlinear AC OPF. Not available in this build (the dispatch errors\ncleanly); the tag is kept so the JSON format stays stable.",
           "type": "string"
         }
       ]
@@ -2528,7 +2528,7 @@
     "request",
     "response"
   ],
-  "title": "StudyContract",
+  "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "469749babb1a96861bd3d80c76bb7df520ee2195b16bc06226062faf9b43b58e"
+  "x-rust-source-sha256": "9e2e0c8f1a42c171b46f26585a14f48e838ecec2bcc8d8d3cee92562d199cd89"
 }
