@@ -29,7 +29,7 @@ pub(crate) mod islands;
 
 #[cfg(feature = "sensitivity")]
 pub(crate) use ac::AcNetwork;
-pub(crate) use dc::DcNetwork;
+pub(crate) use dc::{DcNetwork, LinearRow};
 
 #[cfg(all(test, feature = "conic"))]
 pub(crate) use cases::parse_case3_ac;

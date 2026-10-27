@@ -260,6 +260,51 @@
       ],
       "type": "object"
     },
+    "ConstraintResult": {
+      "description": "The solved state of one [`LinearConstraint`], in request order. `value`,\n`lower`, and `upper` are MW; `shadow_price` is in objective units per MW, the\nsame units as `lmp`.",
+      "properties": {
+        "binding": {
+          "description": "`value` sits at a limit, within solver tolerance. Always true for an\nequality.",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lower": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shadow_price": {
+          "description": "The objective decrease per MW the binding limit is raised:\n`-d objective / d limit`. Positive when the upper limit binds, negative\nwhen the lower limit binds, zero when neither does. A bus's price then\ndiffers from its island's reference bus's by `-shadow_price` times the\nchange in `value` per MW injected at the bus and withdrawn at that reference.\nAbsent when the declared objective gives prices no economic meaning, as\nfor `lmp`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "upper": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "`sum(coefficient * quantity)` at the solution.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "value",
+        "binding"
+      ],
+      "type": "object"
+    },
     "CostApproximation": {
       "properties": {
         "bus": {
@@ -1537,6 +1582,16 @@
     "SolveResponse": {
       "description": "The formulation-agnostic solve result. A superset: every block is optional, and\neach formulation fills what it produces. Powers are MW/MVAr, nodal values are\nin objective units per selected power unit, angles radians, `vm` per unit, and\n`w = |V|^2` per unit squared. Element ids\nare the original bus/branch/generator ids, so the frontend joins straight onto\nits case.",
       "properties": {
+        "constraints": {
+          "description": "The request's linear constraints, in request order (dcopf). Absent when\nthe request stated none.",
+          "items": {
+            "$ref": "#/$defs/ConstraintResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "diagnostics": {
           "description": "How the solve treated the network's islands. Empty, and omitted, when\nevery island is supplied and referenced as stated.",
           "items": {
@@ -2508,5 +2563,5 @@
   ],
   "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "39c1cb69a30a8f06d86a200e283cf346c2636f32e95188cda77a67689b2ee021"
+  "x-rust-source-sha256": "114d6383513f5484f3f25390d2d83a0f92451aa068a774cf7350312b5d13a1fa"
 }
