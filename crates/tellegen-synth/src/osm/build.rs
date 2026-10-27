@@ -42,6 +42,9 @@ fn estimated_plant_mw(total_load_mw: f64) -> f64 {
     (0.04 * total_load_mw.max(1.0)).clamp(20.0, 200.0)
 }
 
+/// A generator this close to a mapped plant of the same fuel is one of its units, km.
+const PLANT_UNIT_KM: f64 = 3.0;
+
 /// Makeup units spread the shortfall over at least this many buses.
 const MAKEUP_MIN_BUSES: usize = 5;
 
@@ -770,6 +773,47 @@ impl OsmBuild {
         cut
     }
 
+    /// Mapped generation sites as (lon, lat, fuel, MW), `None` MW for a plant
+    /// with neither an output tag nor tagged units (estimated by the caller). A
+    /// generator within [`PLANT_UNIT_KM`] of a plant of the same fuel is a unit
+    /// of that plant, so the two are counted once: the plant's tagged output or
+    /// its units' sum, whichever is larger. Other generators stand alone; one
+    /// with no output tag (mostly rooftop solar) is left out.
+    fn plant_sites(&self) -> Vec<(f64, f64, Fuel, Option<f64>)> {
+        let mut plants: Vec<&OsmPlant> = self.plants.iter().filter(|p| !p.is_generator).collect();
+        plants.sort_by(|a, b| a.lat.total_cmp(&b.lat));
+        let dlat = PLANT_UNIT_KM / 111.0;
+        let mut unit_mw = vec![0.0; plants.len()];
+        let mut sites = Vec::new();
+        for u in self.plants.iter().filter(|p| p.is_generator) {
+            let Some(mw) = u.capacity_mw else {
+                continue;
+            };
+            let from = plants.partition_point(|p| p.lat < u.lat - dlat);
+            let owner = plants[from..]
+                .iter()
+                .take_while(|p| p.lat <= u.lat + dlat)
+                .enumerate()
+                .filter(|(_, p)| p.fuel == u.fuel)
+                .map(|(k, p)| (haversine_km(u.lon, u.lat, p.lon, p.lat), from + k))
+                .filter(|&(d, _)| d <= PLANT_UNIT_KM)
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            match owner {
+                Some((_, i)) => unit_mw[i] += mw,
+                None => sites.push((u.lon, u.lat, u.fuel, Some(mw))),
+            }
+        }
+        for (p, units) in plants.iter().zip(unit_mw) {
+            let mw = match p.capacity_mw {
+                Some(mw) => Some(mw.max(units)),
+                None if units > 0.0 => Some(units),
+                None => None,
+            };
+            sites.push((p.lon, p.lat, p.fuel, mw));
+        }
+        sites
+    }
+
     /// Generators at the mapped plants (aggregated per bus and fuel), topped up
     /// with makeup units on the best connected buses when the mapped capacity
     /// falls short of the reserve-margin target. With no usable plant, the
@@ -787,22 +831,19 @@ impl OsmBuild {
         let mut capacity: BTreeMap<(usize, Fuel), f64> = BTreeMap::new();
         let mut estimated = 0usize;
         let mut snapped = 0usize;
-        for p in &self.plants {
-            let Some(bus) = snap(buses, p.lon, p.lat, None, self.options.plant_snap_km) else {
+        for (lon, lat, fuel, mw) in self.plant_sites() {
+            let Some(bus) = snap(buses, lon, lat, None, self.options.plant_snap_km) else {
                 continue;
             };
-            let mw = match p.capacity_mw {
-                Some(mw) => mw,
-                None => {
-                    estimated += 1;
-                    estimated_plant_mw(total_load)
-                }
-            };
+            let mw = mw.unwrap_or_else(|| {
+                estimated += 1;
+                estimated_plant_mw(total_load)
+            });
             if mw <= 0.0 {
                 continue;
             }
             snapped += 1;
-            *capacity.entry((bus, p.fuel)).or_default() += mw;
+            *capacity.entry((bus, fuel)).or_default() += mw;
         }
         self.counts.plants_snapped = snapped;
         self.counts.plants_estimated = estimated;

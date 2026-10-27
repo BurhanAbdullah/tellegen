@@ -99,6 +99,8 @@ pub struct OsmPlant {
     pub fuel: Fuel,
     /// Tagged electrical output, MW; `None` when untagged.
     pub capacity_mw: Option<f64>,
+    /// `power=generator`: one unit, often inside a mapped `power=plant`.
+    pub is_generator: bool,
 }
 
 /// An HVDC converter station.
@@ -188,7 +190,7 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
                     is_dc: el.tag("frequency").trim() == "0",
                 });
             }
-            "plant" | "generator" => {
+            power @ ("plant" | "generator") => {
                 let Some((lon, lat)) = el.point() else {
                     continue;
                 };
@@ -206,6 +208,7 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
                     lat,
                     fuel: parse_fuel(source),
                     capacity_mw: parse_power_mw(output),
+                    is_generator: power == "generator",
                 });
             }
             "converter" => {
