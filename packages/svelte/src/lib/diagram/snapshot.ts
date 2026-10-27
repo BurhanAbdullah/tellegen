@@ -2,10 +2,14 @@ import type { McComplex, McPfResult } from '@tellegen/engine';
 import { neutralTerminal } from '../multiconductor.js';
 
 /** Which reference a pair voltage is measured against. */
-export type PairZone = 'phase–neutral' | 'phase–phase';
+export type PairZone = 'phase–neutral' | 'phase–phase' | 'phase–ground';
+
+/** The second member of a phase–ground pair. */
+export const GROUND = 'ground';
 
 /** One declared terminal-pair voltage magnitude and, when declared, its limits. */
 export interface PairVoltage {
+	/** Two terminals, or a terminal and {@link GROUND}. */
 	pair: [string, string];
 	/** Set from the bus's declared neutral, whatever that terminal is named. */
 	zone: PairZone;
@@ -60,10 +64,14 @@ export interface ResultSnapshot {
 	branches: BranchSnapshot[];
 }
 
-/** Declared limits for one bus. Phase–neutral limits list one band per phase terminal. */
-export type BusLimits =
-	| { reference: 'phase-neutral'; min: number[]; max: number[] }
-	| { reference: 'phase-phase'; min: number; max: number };
+/** Declared limits for one bus, by reference; a bus can declare several. Phase–neutral limits
+ * list one band per phase terminal, phase–ground limits one per bounded terminal in terminal
+ * order. */
+export interface BusLimits {
+	phaseNeutral?: { min: number[]; max: number[] };
+	phasePhase?: { min: number; max: number };
+	phaseGround?: { terminal: string; min: number; max: number }[];
+}
 
 export interface SnapshotBus {
 	id: string;
@@ -113,27 +121,33 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 	// A declared neutral (or a declared absence of one) wins; aliases only when nothing is declared.
 	const neutral = neutralTerminal(bus.terminals, bus.neutral);
 	const phases = bus.terminals.filter((t) => t !== neutral);
+	const limits = bus.limits ?? {};
 	const pairs: PairVoltage[] = [];
 	const phasors: McComplex[] = [];
 	const zero: McComplex = { re: 0, im: 0 };
-	const reference = bus.limits?.reference ?? (neutral ? 'phase-neutral' : 'phase-phase');
-	if (reference === 'phase-neutral' && neutral) {
+	// Each declared reference that applies here gets its pairs. Without one, phase–neutral where
+	// there is a neutral, else phase–phase on three phases.
+	const ground = limits.phaseGround ?? [];
+	const declared =
+		(!!neutral && !!limits.phaseNeutral) ||
+		(phases.length === 3 && !!limits.phasePhase) ||
+		ground.length > 0;
+	if (neutral && (limits.phaseNeutral || !declared)) {
 		const vn = voltage(neutral) ?? zero;
 		phases.forEach((t, i) => {
 			const v = voltage(t);
 			if (!v) return;
-			const limits = bus.limits?.reference === 'phase-neutral' ? bus.limits : null;
 			pairs.push({
 				pair: [t, neutral],
 				zone: 'phase–neutral',
 				volts: magnitude(sub(v, vn)),
-				min: limits?.min[i] ?? null,
-				max: limits?.max[i] ?? null
+				min: limits.phaseNeutral?.min[i] ?? null,
+				max: limits.phaseNeutral?.max[i] ?? null
 			});
 			phasors.push(sub(v, vn));
 		});
-	} else if (phases.length === 3) {
-		const limits = bus.limits?.reference === 'phase-phase' ? bus.limits : null;
+	}
+	if (phases.length === 3 && (limits.phasePhase || (!declared && !neutral))) {
 		for (const [i, j] of [
 			[0, 1],
 			[1, 2],
@@ -146,15 +160,24 @@ function busSnapshot(bus: SnapshotBus, voltage: (terminal: string) => McComplex 
 				pair: [phases[i], phases[j]],
 				zone: 'phase–phase',
 				volts: magnitude(sub(a, b)),
-				min: limits?.min ?? null,
-				max: limits?.max ?? null
+				min: limits.phasePhase?.min ?? null,
+				max: limits.phasePhase?.max ?? null
 			});
 		}
+	}
+	// Terminal voltages are to ground, so a phase–ground pair is the terminal's own magnitude.
+	for (const { terminal, min, max } of ground) {
+		const v = voltage(terminal);
+		if (v)
+			pairs.push({ pair: [terminal, GROUND], zone: 'phase–ground', volts: magnitude(v), min, max });
+	}
+	// VUF is the same from any reference: a shared neutral shift is zero sequence, and phase–phase
+	// differences scale both sequences alike. Without phase–neutral phasors, the phase terminals'.
+	if (!phasors.length && phases.length === 3)
 		for (const t of phases) {
 			const v = voltage(t);
 			if (v) phasors.push(v);
 		}
-	}
 	const vuf = phasors.length === 3 ? sequenceUnbalance(phasors[0], phasors[1], phasors[2]) : null;
 	return { pairs, unbalance: vuf === null ? null : { percent: vuf, definition: 'VUF' as const } };
 }

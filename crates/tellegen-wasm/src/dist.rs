@@ -258,6 +258,13 @@ fn graph_with_neutral_metadata(
 /// Add declared bus voltage limits and branch ratings, which PowerIO's graph projection leaves out,
 /// so the frontend can rank limit violations and loading against what the model declares. Values
 /// keep PowerIO's names and units (volts, amperes, volt-amperes); nothing absent is invented.
+///
+/// PowerIO's phase-to-ground bounds (`v_min`/`v_max`, from BMOPF `v_min`/`v_max` or PMD
+/// `vm_lb`/`vm_ub`) are stated per phase terminal, a uniform bound as one scalar. They are keyed
+/// here by the terminal they bound (`v_min_by_terminal`, `v_max_by_terminal`), with the phase
+/// terminals PowerIO assigned them to, so the frontend need not repeat that classification. A
+/// vector whose length does not match the phase terminals is left out rather than guessed, and so
+/// is a non-finite entry (no bound on that terminal).
 fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::Value) {
     use serde_json::{json, Map, Value};
     let buses: std::collections::BTreeMap<_, _> = net
@@ -265,6 +272,23 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
         .iter()
         .map(|bus| (bus.id.to_ascii_lowercase(), bus))
         .collect();
+    let conventions = net.extras().get("bmopf_terminal_conventions");
+    let to_ground =
+        |bus: &powerio_dist::DistBus, scalar: Option<f64>, phases: &Option<Vec<f64>>| {
+            let indices = bus.phase_indices(conventions);
+            let per_phase = match (scalar, phases) {
+                (Some(volts), _) => vec![volts; indices.len()],
+                (None, Some(values)) if values.len() == indices.len() => values.clone(),
+                _ => return None,
+            };
+            let by_terminal: Map<String, Value> = indices
+                .iter()
+                .zip(per_phase)
+                .filter(|(_, volts)| volts.is_finite())
+                .map(|(&i, volts)| (bus.terminals[i].clone(), json!(volts)))
+                .collect();
+            (!by_terminal.is_empty()).then_some(Value::Object(by_terminal))
+        };
     if let Some(graph_buses) = graph.get_mut("buses").and_then(Value::as_array_mut) {
         for graph_bus in graph_buses {
             let Some(bus) = graph_bus
@@ -283,6 +307,27 @@ fn add_limits_and_ratings(net: &MulticonductorNetwork, graph: &mut serde_json::V
             ] {
                 if let Some(values) = value {
                     limits.insert(name.to_owned(), json!(values));
+                }
+            }
+            for (name, scalar, phases) in [
+                ("v_min_by_terminal", bus.v_min, &bus.v_min_phase),
+                ("v_max_by_terminal", bus.v_max, &bus.v_max_phase),
+            ] {
+                if let Some(by_terminal) = to_ground(bus, scalar, phases) {
+                    limits.insert(name.to_owned(), by_terminal);
+                }
+            }
+            // Sequence-component and neutral-to-ground bounds, as PowerIO states them. The overview
+            // does not rank these, but carrying them keeps it from calling such a case unbounded.
+            for (name, value) in [
+                ("vpos_min", bus.vpos_min),
+                ("vpos_max", bus.vpos_max),
+                ("vneg_max", bus.vneg_max),
+                ("vzero_max", bus.vzero_max),
+                ("vn_max", bus.vn_max),
+            ] {
+                if let Some(volts) = value.filter(|v| v.is_finite()) {
+                    limits.insert(name.to_owned(), json!(volts));
                 }
             }
             if !limits.is_empty() {
@@ -888,6 +933,99 @@ mod tests {
 
         let plain = parse(&ingest_dist(MICRO_BMOPF, "bmopf").expect("plain"));
         assert!(plain["graph"]["edges"][0].get("rating").is_none());
+    }
+
+    /// The `voltage_limits` object of one graph bus, or `Null` when it has none.
+    fn bus_limits(value: &Value, id: &str) -> Value {
+        value["graph"]["buses"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["id"].as_str().unwrap().eq_ignore_ascii_case(id))
+            .unwrap()
+            .get("voltage_limits")
+            .cloned()
+            .unwrap_or(Value::Null)
+    }
+
+    #[test]
+    fn graph_keys_phase_to_ground_bounds_by_the_phase_terminal_they_bound() {
+        let mut raw: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        // Uniform bounds read as one PowerIO scalar; on a numbered four-wire bus terminal 4 is the
+        // neutral, so the bounds belong to terminals 1 to 3.
+        raw["bus"]["load_bus"]["v_min"] = serde_json::json!([6800.0, 6800.0, 6800.0]);
+        raw["bus"]["load_bus"]["v_max"] = serde_json::json!([7600.0, 7600.0, 7600.0]);
+        raw["bus"]["src"]["v_min"] = serde_json::json!([6700.0, 6800.0, 6900.0]);
+        raw["bus"]["src"]["v_max"] = serde_json::json!([7500.0, 7600.0, 7700.0]);
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("bounds"));
+        let load_bus = bus_limits(&value, "load_bus");
+        assert_eq!(
+            load_bus["v_min_by_terminal"],
+            serde_json::json!({ "1": 6800.0, "2": 6800.0, "3": 6800.0 })
+        );
+        assert_eq!(
+            load_bus["v_max_by_terminal"],
+            serde_json::json!({ "1": 7600.0, "2": 7600.0, "3": 7600.0 })
+        );
+        assert!(load_bus.get("vpn_min").is_none());
+        assert_eq!(
+            bus_limits(&value, "src")["v_min_by_terminal"],
+            serde_json::json!({ "1": 6700.0, "2": 6800.0, "3": 6900.0 })
+        );
+        assert_eq!(
+            bus_limits(&value, "src")["v_max_by_terminal"],
+            serde_json::json!({ "1": 7500.0, "2": 7600.0, "3": 7700.0 })
+        );
+
+        // Declared terminal roles decide which terminals are phases, not the familiar aliases.
+        raw["terminal_conventions"] =
+            serde_json::json!({ "phase": ["2", "3", "4"], "neutral": ["1"], "earth": [] });
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("roles"));
+        assert_eq!(
+            bus_limits(&value, "src")["v_min_by_terminal"],
+            serde_json::json!({ "2": 6700.0, "3": 6800.0, "4": 6900.0 })
+        );
+
+        // A vector that does not match the phase terminals has no defined order; it is left out.
+        let mut short: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        short["bus"]["src"]["v_min"] = serde_json::json!([6700.0, 6800.0]);
+        short["bus"]["src"]["v_max"] = serde_json::json!([7500.0, 7600.0]);
+        let out = ingest_dist(&short.to_string(), "bmopf").expect("short bounds");
+        assert!(bus_limits(&parse(&out), "src").is_null());
+    }
+
+    #[test]
+    fn graph_carries_sequence_and_neutral_bounds_as_powerio_states_them() {
+        let mut raw: Value = serde_json::from_str(MICRO_BMOPF).expect("fixture JSON");
+        raw["bus"]["load_bus"]["vneg_max"] = serde_json::json!(144.0);
+        raw["bus"]["load_bus"]["vn_max"] = serde_json::json!(50.0);
+        let value = parse(&ingest_dist(&raw.to_string(), "bmopf").expect("caps"));
+        assert_eq!(
+            bus_limits(&value, "load_bus"),
+            serde_json::json!({ "vneg_max": 144.0, "vn_max": 50.0 })
+        );
+        assert!(bus_limits(&value, "src").is_null());
+    }
+
+    #[test]
+    fn graph_carries_pmd_conductor_to_ground_bounds_in_volts() {
+        // PMD states `vm_lb`/`vm_ub` per conductor in kV; PowerIO keeps the phase conductors' in
+        // volts. Values are exact in binary so the kV-to-volt scaling compares exactly.
+        let mut raw: Value = serde_json::from_str(MICRO_PMD).expect("fixture JSON");
+        raw["bus"]["b1"]["terminals"] = serde_json::json!([1, 2, 3, 4]);
+        raw["bus"]["b1"]["grounded"] = serde_json::json!([4]);
+        raw["bus"]["b1"]["vm_lb"] = serde_json::json!([0.203125, 0.21875, 0.1875, 0.0]);
+        raw["bus"]["b1"]["vm_ub"] = serde_json::json!([0.25, 0.25, 0.25, 0.25]);
+        let value = parse(&ingest_dist(&raw.to_string(), "pmd").expect("pmd bounds"));
+        let limits = bus_limits(&value, "b1");
+        assert_eq!(
+            limits["v_min_by_terminal"],
+            serde_json::json!({ "1": 203.125, "2": 218.75, "3": 187.5 })
+        );
+        assert_eq!(
+            limits["v_max_by_terminal"],
+            serde_json::json!({ "1": 250.0, "2": 250.0, "3": 250.0 })
+        );
     }
 
     #[test]

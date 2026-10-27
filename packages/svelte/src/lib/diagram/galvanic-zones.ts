@@ -172,8 +172,8 @@ export function zoneCorridors(
 }
 
 /** A zone's voltage level in volts: the declared rating of a winding or source in it (the
- * largest), else its declared limits (midpoint of the band; a phase–neutral band times √3), else
- * its solved voltages, as the median over its buses. Null when none is known. */
+ * largest), else its declared limits (midpoint of the band; a phase–neutral or phase–ground band
+ * times √3), else its solved voltages, as the median over its buses. Null when none is known. */
 export function zoneVoltage(
 	zone: GalvanicZone,
 	graph: DistGraph,
@@ -185,17 +185,21 @@ export function zoneVoltage(
 	const levels: number[] = [];
 	const mid = (lo?: number[], hi?: number[]) =>
 		lo?.length && hi?.length ? (Math.min(...lo) + Math.max(...hi)) / 2 : null;
+	const values = (byTerminal?: Record<string, number>) => byTerminal && Object.values(byTerminal);
 	for (const i of zone.buses) {
 		const l = graph.buses[i].voltage_limits;
 		const pp = mid(l?.vpp_min, l?.vpp_max);
-		const pn = mid(l?.vpn_min, l?.vpn_max);
-		let v = pp ?? (pn === null ? null : pn * Math.sqrt(3));
+		// Phase–neutral or phase–ground: the phase voltage, √3 below line to line.
+		const phaseBand =
+			mid(l?.vpn_min, l?.vpn_max) ??
+			mid(values(l?.v_min_by_terminal), values(l?.v_max_by_terminal));
+		let v = pp ?? (phaseBand === null ? null : phaseBand * Math.sqrt(3));
 		if (v === null && snapshot) {
 			const pairs = snapshot.buses[i]?.pairs ?? [];
 			const phase = pairs.filter((p) => p.zone === 'phase–phase');
-			const neutral = pairs.filter((p) => p.zone === 'phase–neutral');
+			const single = pairs.filter((p) => p.zone !== 'phase–phase');
 			if (phase.length) v = Math.max(...phase.map((p) => p.volts));
-			else if (neutral.length) v = Math.max(...neutral.map((p) => p.volts)) * Math.sqrt(3);
+			else if (single.length) v = Math.max(...single.map((p) => p.volts)) * Math.sqrt(3);
 		}
 		if (v !== null && Number.isFinite(v) && v > 0) levels.push(v);
 	}
@@ -211,19 +215,21 @@ export function zoneLevel(zone: GalvanicZone, volts: number | null): 'mv' | 'lv'
 	return volts >= 1000 ? 'mv' : 'lv';
 }
 
-/** One-line zone summary for its label: lowest phase–neutral (else phase–phase) voltage and
- * highest loading among its branches and transformers, when solved. */
+/** One-line zone summary for its label: lowest phase–neutral (else phase–ground, else
+ * phase–phase) voltage and highest loading among its branches and transformers, when solved. */
 export function zoneSummary(
 	zone: GalvanicZone,
 	snapshot: ResultSnapshot | null
 ): { minVolts: number | null; maxLoading: number | null } {
 	if (!snapshot) return { minVolts: null, maxLoading: null };
 	let pn = Infinity;
+	let pg = Infinity;
 	let pp = Infinity;
 	for (const i of zone.buses)
 		for (const p of snapshot.buses[i]?.pairs ?? []) {
 			if (!Number.isFinite(p.volts)) continue;
 			if (p.zone === 'phase–neutral') pn = Math.min(pn, p.volts);
+			else if (p.zone === 'phase–ground') pg = Math.min(pg, p.volts);
 			else pp = Math.min(pp, p.volts);
 		}
 	let loading = -Infinity;
@@ -232,7 +238,7 @@ export function zoneSummary(
 		if (l !== null && l !== undefined && Number.isFinite(l)) loading = Math.max(loading, l);
 	}
 	return {
-		minVolts: Number.isFinite(pn) ? pn : Number.isFinite(pp) ? pp : null,
+		minVolts: [pn, pg, pp].find(Number.isFinite) ?? null,
 		maxLoading: Number.isFinite(loading) ? loading : null
 	};
 }
