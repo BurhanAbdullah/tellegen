@@ -247,6 +247,23 @@ pub struct LinearConstraint {
     pub upper: Option<f64>,
 }
 
+/// Where the AC power flow's Newton iteration starts, as the lowercase JSON tags
+/// `"flat"` and `"case"`. Only `acpf` iterates from a start; every other
+/// formulation refuses `"case"`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum PowerFlowStart {
+    /// Voltage setpoint magnitudes and every angle at its island's reference angle.
+    #[default]
+    Flat,
+    /// The case's stored bus voltages: each bus's magnitude and its angle
+    /// relative to its island's reference bus (star buses of three-winding transformers
+    /// where the source carries them), or a typed instance's initial point. A
+    /// stored state that does not converge falls back to the flat start.
+    Case,
+}
+
 /// The one solve request: a formulation, an operating-point edit set, zero or more
 /// caller-supplied linear constraints, and zero or more sensitivity cells. A bare
 /// `{"formulation":"acpf"}` (or even `{}`, which defaults to DC OPF) is valid.
@@ -268,6 +285,9 @@ pub struct SolveRequest {
     pub formulation: Problem,
     #[serde(default)]
     pub edits: Edits,
+    /// The AC power flow start; `flat` when omitted.
+    #[serde(default)]
+    pub start: PowerFlowStart,
     /// Caller-supplied linear constraints, enforced by the DC OPF only. Every
     /// other formulation refuses a request that carries any. Sensitivity cells
     /// differentiate the program with them, and `ConstraintLimit` differentiates
@@ -468,8 +488,8 @@ pub struct ConstraintResult {
     /// The objective decrease per MW the binding limit is raised:
     /// `-d objective / d limit`. Positive when the upper limit binds, negative
     /// when the lower limit binds, zero when neither does. A bus's price then
-    /// differs from the reference bus's by `-shadow_price` times the change in
-    /// `value` per MW injected at the bus and withdrawn at the reference.
+    /// differs from its island's reference bus's by `-shadow_price` times the
+    /// change in `value` per MW injected at the bus and withdrawn at that reference.
     /// Absent when the declared objective gives prices no economic meaning, as
     /// for `lmp`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -477,6 +497,24 @@ pub struct ConstraintResult {
     /// `value` sits at a limit, within solver tolerance. Always true for an
     /// equality.
     pub binding: bool,
+}
+
+/// A finding about how the solve treated the network, such as an island left out
+/// because nothing supplies it. `code` is stable for programs; `message` is for
+/// people. `buses` names the original ids of the buses concerned.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct SolveDiagnostic {
+    /// `island_deenergized`: an island with no in-service generator was left
+    /// out of the solve; its buses carry no results and its load is unserved.
+    /// `island_reference_designated`: a supplied island stated no reference bus,
+    /// so the bus of its largest generator became the island's reference.
+    /// `island_extra_reference`: the AC power flow found several reference
+    /// buses in one island and kept the first as its slack; the others hold
+    /// their voltage magnitude as PV (or PQ) buses.
+    pub code: String,
+    pub message: String,
+    pub buses: Vec<usize>,
 }
 
 /// The formulation-agnostic solve result. A superset: every block is optional, and
@@ -529,6 +567,10 @@ pub struct SolveResponse {
     /// the request stated none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constraints: Option<Vec<ConstraintResult>>,
+    /// How the solve treated the network's islands. Empty, and omitted, when
+    /// every island is supplied and referenced as stated.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub diagnostics: Vec<SolveDiagnostic>,
     /// One self-describing matrix per requested cell, in request order. Each carries
     /// its own row/column element ids and the served-unit label.
     #[cfg(feature = "sensitivity")]
@@ -709,6 +751,7 @@ pub(crate) fn dc_opf_solved(
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<(DcNetwork, super::problem::DcOpfSolution), String> {
     dc.allow_shed = false;
+    reject_case_start(req, "dcopf")?;
     apply_demand_deltas(&mut dc, &req.edits.deltas)?;
     apply_rating_deltas(&mut dc, &req.edits.rates)?;
     apply_linear_constraints(&mut dc, &req.constraints)?;
@@ -768,6 +811,7 @@ pub(crate) fn dc_opf_assemble(
         dispatch: Some(zip_gen_pg(dc, &sol.pg, base)),
         constraints: (!dc.linear_rows.is_empty())
             .then(|| linear_constraint_results(dc, sol, lmp_is_economic)),
+        diagnostics: dc.diagnostics.clone(),
         #[cfg(feature = "sensitivity")]
         sensitivities,
     })
@@ -788,6 +832,7 @@ fn solve_dc_pf(net: &BalancedNetwork, req: &SolveRequest) -> Result<SolveRespons
     // Flow limits do not constrain a power flow, so a rating edit cannot enter
     // the model, and neither can a linear constraint.
     reject_rating_deltas(&req.edits.rates, "dcpf")?;
+    reject_case_start(req, "dcpf")?;
     reject_linear_constraints(&req.constraints, "dcpf")?;
     let mut dc = DcNetwork::from_network(net)?;
     let base = dc.base_mva;
@@ -826,6 +871,7 @@ fn solve_dc_pf(net: &BalancedNetwork, req: &SolveRequest) -> Result<SolveRespons
         )),
         dispatch: None,
         constraints: None,
+        diagnostics: dc.diagnostics.clone(),
         sensitivities: Vec::new(),
     })
 }
@@ -849,7 +895,11 @@ pub(crate) fn ac_pf_solved(
     reject_rating_deltas(&req.edits.rates, "acpf")?;
     reject_linear_constraints(&req.constraints, "acpf")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
-    let sol = super::problem::ac_pf(&super::formulation::AcPolar::new(), &acnet)?;
+    let start = match req.start {
+        PowerFlowStart::Flat => super::problem::AcStart::Flat,
+        PowerFlowStart::Case => super::problem::AcStart::Case,
+    };
+    let sol = super::problem::ac_pf_with_start(&super::formulation::AcPolar::new(), &acnet, start)?;
     Ok((acnet, sol))
 }
 
@@ -899,6 +949,7 @@ pub(crate) fn ac_pf_assemble(
         )),
         dispatch: None,
         constraints: None,
+        diagnostics: acnet.diagnostics.clone(),
         sensitivities,
     })
 }
@@ -918,6 +969,7 @@ pub(crate) fn socwr_solved(
     mut acnet: super::model::AcNetwork,
     req: &SolveRequest,
 ) -> Result<(super::model::AcNetwork, super::problem::SocWrSolution), String> {
+    reject_case_start(req, "socwr")?;
     reject_linear_constraints(&req.constraints, "socwr")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
     apply_rating_deltas_ac(&mut acnet, &req.edits.rates)?;
@@ -995,6 +1047,7 @@ pub(crate) fn socwr_assemble(
         )),
         dispatch: Some(zip_gen_pq(acnet, &sol.pg, &sol.qg, base)),
         constraints: None,
+        diagnostics: acnet.diagnostics.clone(),
         sensitivities,
     })
 }
@@ -1629,6 +1682,17 @@ fn reject_linear_constraints(
     Err(format!(
         "linear constraints are supported only by dcopf, not {formulation}"
     ))
+}
+
+/// Only the AC power flow iterates from a start. The convex solves and the DC power
+/// flow have none to choose, so refuse a requested case start rather than ignore it.
+fn reject_case_start(req: &SolveRequest, formulation: &str) -> Result<(), String> {
+    match req.start {
+        PowerFlowStart::Flat => Ok(()),
+        PowerFlowStart::Case => Err(format!(
+            "start \"case\" applies only to acpf, not {formulation}"
+        )),
+    }
 }
 
 /// The AC power flow has no flow limits, so a rating edit cannot enter the model;
@@ -2966,5 +3030,451 @@ mod tests {
             dc_opf["constraints"],
             serde_json::json!(["branch_flow", "bus_injection", "generator"])
         );
+    }
+
+    /// Solve a network as a stored balanced-network module.
+    fn solve_islands(network: &BalancedNetwork, request: &str) -> SolveResponse {
+        let module = powerio::PioModule::new(powerio::PioValue::BalancedNetwork(network.clone()));
+        let module = crate::ir::serialize_module(&module).expect("module JSON");
+        let out = solve_module_json(&module, request).expect("solve");
+        serde_json::from_str(&out).expect("response")
+    }
+
+    fn islands_network() -> BalancedNetwork {
+        crate::model::parse_matpower(crate::model::CASE_ISLANDS).expect("parse")
+    }
+
+    fn by_bus(scalars: &[BusScalar]) -> BTreeMap<usize, f64> {
+        scalars.iter().map(|s| (s.bus, s.value)).collect()
+    }
+
+    fn island_codes(response: &SolveResponse) -> Vec<(&str, Vec<usize>)> {
+        response
+            .diagnostics
+            .iter()
+            .map(|d| (d.code.as_str(), d.buses.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn two_supplied_islands_clear_at_their_own_prices() {
+        let response = solve_islands(&islands_network(), r#"{"formulation":"dcopf"}"#);
+        // Island 1-3 is served by the $10 unit, island 4-6 by the $20 unit; no
+        // network connects them, so each clears at its own unit's cost.
+        let lmp = by_bus(response.lmp.as_ref().expect("prices"));
+        assert_eq!(lmp.keys().copied().collect::<Vec<_>>(), [1, 2, 3, 4, 5, 6]);
+        for bus in [1, 2, 3] {
+            assert!((lmp[&bus] - 10.0).abs() < 1e-6, "bus {bus}: {}", lmp[&bus]);
+        }
+        for bus in [4, 5, 6] {
+            assert!((lmp[&bus] - 20.0).abs() < 1e-6, "bus {bus}: {}", lmp[&bus]);
+        }
+        let dispatch: Vec<f64> = response
+            .dispatch
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|g| g.pg)
+            .collect();
+        assert!((dispatch[0] - 60.0).abs() < 1e-6, "{dispatch:?}");
+        assert!((dispatch[1] - 40.0).abs() < 1e-6, "{dispatch:?}");
+        // Each island's reference holds angle zero.
+        let va = by_bus(response.va.as_ref().unwrap());
+        assert!(va[&1].abs() < 1e-9 && va[&6].abs() < 1e-9, "{va:?}");
+        assert_eq!(
+            island_codes(&response),
+            [
+                ("island_deenergized", vec![7, 8]),
+                ("island_reference_designated", vec![6]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_load_only_island_is_deenergized_with_a_diagnostic() {
+        let response = solve_islands(&islands_network(), r#"{"formulation":"dcopf"}"#);
+        let deenergized = &response.diagnostics[0];
+        assert_eq!(deenergized.code, "island_deenergized");
+        assert_eq!(deenergized.buses, [7, 8]);
+        assert!(
+            deenergized.message.contains("20.0 MW of load is unserved"),
+            "{}",
+            deenergized.message
+        );
+        // Its buses and its line carry no results.
+        assert!(response.va.as_ref().unwrap().iter().all(|s| s.bus < 7));
+        assert_eq!(response.flows.as_ref().unwrap().len(), 6);
+        // The JSON names the diagnostic block.
+        let json: Value = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["diagnostics"][0]["code"], "island_deenergized");
+
+        // A connected case reports nothing and omits the block.
+        let connected: Value = serde_json::from_str(
+            &solve_module_json(&case3_module_json(), r#"{"formulation":"dcopf"}"#).unwrap(),
+        )
+        .unwrap();
+        assert!(connected.get("diagnostics").is_none());
+    }
+
+    #[test]
+    fn linear_constraints_reach_supplied_islands_only() {
+        // Bus 6's injection is island 4-6's whole 40 MW load; its row is measured
+        // against that island's own reference.
+        let request = serde_json::json!({
+            "formulation": "dcopf",
+            "constraints": [{
+                "id": "island 4-6",
+                "terms": [{ "kind": "bus_injection", "element": 6, "coefficient": 1.0 }],
+                "upper": 100.0
+            }]
+        });
+        let response = solve_islands(&islands_network(), &request.to_string());
+        let row = &response.constraints.as_ref().expect("constraint results")[0];
+        assert!((row.value - 40.0).abs() < 1e-6, "{}", row.value);
+        assert!(!row.binding);
+
+        // Bus 7's island is de-energized, so nothing in the solve can carry a term.
+        let request = serde_json::json!({
+            "formulation": "dcopf",
+            "constraints": [{
+                "id": "dark",
+                "terms": [{ "kind": "bus_injection", "element": 7, "coefficient": 1.0 }],
+                "upper": 1.0
+            }]
+        });
+        let module = powerio::PioModule::new(powerio::PioValue::BalancedNetwork(islands_network()));
+        let module = crate::ir::serialize_module(&module).expect("module JSON");
+        let error = solve_module_json(&module, &request.to_string()).expect_err("bus 7 is dark");
+        assert!(error.contains("bus 7"), "{error}");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn dc_power_flow_grounds_every_island() {
+        let response = solve_islands(&islands_network(), r#"{"formulation":"dcpf"}"#);
+        let flows: BTreeMap<usize, f64> = response
+            .flows
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|f| (f.branch, f.pf))
+            .collect();
+        // Generator setpoints are zero, so each island's slack serves its load:
+        // bus 1 sends 60 MW toward bus 2 (40 direct, 20 around), bus 6 sends 40 MW
+        // toward bus 5.
+        assert!((flows[&1] - 40.0).abs() < 1e-6, "{flows:?}");
+        assert!((flows[&6] + 80.0 / 3.0).abs() < 1e-6, "{flows:?}");
+        assert_eq!(
+            island_codes(&response),
+            [
+                ("island_deenergized", vec![7, 8]),
+                ("island_reference_designated", vec![6]),
+            ]
+        );
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn price_sensitivity_stays_inside_each_island() {
+        // A quadratic term on the bus 1 unit makes island 1-3's price move with
+        // its demand.
+        let network = crate::model::parse_matpower(
+            &crate::model::CASE_ISLANDS.replace(" 2 0 0 2 10 0;", " 2 0 0 3 0.05 10 0;"),
+        )
+        .expect("parse");
+        let request = r#"{"formulation":"dcopf","sensitivities":[{"operand":{"Price":"Active"},"parameter":{"Demand":"Active"},"indices":[1]}]}"#;
+        let response = solve_islands(&network, request);
+        let cell = &response.sensitivities[0];
+        let column: Vec<f64> = cell.values.iter().map(|row| row[0]).collect();
+        // d(price)/d(demand at bus 2) = 2 * 0.05 $/MW^2 inside island 1-3 and zero
+        // in island 4-6.
+        for (row, value) in column.iter().enumerate() {
+            let expected = if row < 3 { 0.1 } else { 0.0 };
+            assert!(
+                (value - expected).abs() < 1e-6,
+                "row {row}: {value} vs {expected}"
+            );
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn ac_power_flow_converges_with_one_slack_per_island() {
+        let response = solve_islands(&islands_network(), r#"{"formulation":"acpf"}"#);
+        let va = by_bus(response.va.as_ref().unwrap());
+        assert_eq!(va.keys().copied().collect::<Vec<_>>(), [1, 2, 3, 4, 5, 6]);
+        assert!(va[&1].abs() < 1e-12 && va[&6].abs() < 1e-12, "{va:?}");
+        let injections: BTreeMap<usize, (f64, f64)> = response
+            .injections
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|i| (i.bus, (i.p, i.q)))
+            .collect();
+        // Load buses draw exactly their load; each slack supplies its own island
+        // plus that island's losses.
+        assert!((injections[&2].0 + 60.0).abs() < 1e-6);
+        assert!((injections[&5].0 + 40.0).abs() < 1e-6);
+        assert!(injections[&1].0 > 60.0 && injections[&1].0 < 61.0);
+        assert!(injections[&6].0 > 40.0 && injections[&6].0 < 41.0);
+        match response.iterations {
+            Some(Iterations::Newton { residual, .. }) => assert!(residual < 1e-8),
+            ref other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            island_codes(&response),
+            [
+                ("island_deenergized", vec![7, 8]),
+                ("island_reference_designated", vec![6]),
+            ]
+        );
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn ac_power_flow_keeps_one_slack_when_an_island_states_two() {
+        let mut network = crate::model::parse_matpower(CASE3).expect("parse");
+        network.buses_mut()[2].kind = powerio::BusType::Ref;
+        let response = solve_islands(&network, r#"{"formulation":"acpf"}"#);
+        assert_eq!(
+            island_codes(&response),
+            [("island_extra_reference", vec![3])]
+        );
+        let vm = by_bus(response.vm.as_ref().unwrap());
+        let va = by_bus(response.va.as_ref().unwrap());
+        // Bus 1 is the slack; bus 3 holds its magnitude with a free angle.
+        assert!(va[&1].abs() < 1e-12);
+        assert!(va[&3].abs() > 1e-6, "{va:?}");
+        assert!((vm[&3] - 1.0).abs() < 1e-9, "{vm:?}");
+    }
+
+    #[cfg(feature = "conic")]
+    #[test]
+    fn socwr_solves_each_supplied_island() {
+        let response = solve_islands(&islands_network(), r#"{"formulation":"socwr"}"#);
+        let lmp = by_bus(response.lmp.as_ref().unwrap());
+        assert!(lmp[&2] < lmp[&5], "{lmp:?}");
+        assert_eq!(response.w.as_ref().unwrap().len(), 6);
+        assert_eq!(response.diagnostics[0].code, "island_deenergized");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn case9_network() -> BalancedNetwork {
+        crate::model::parse_matpower(crate::model::CASE9).expect("parse case9")
+    }
+
+    /// Solve `network` as a stored balanced-network module under `request`.
+    #[cfg(feature = "sensitivity")]
+    fn solve_ac_module(network: &BalancedNetwork, request: &str) -> SolveResponse {
+        let module = powerio::PioModule::new(powerio::PioValue::BalancedNetwork(network.clone()));
+        let module = crate::ir::serialize_module(&module).expect("module JSON");
+        let out = solve_module_json(&module, request).expect("acpf solve");
+        serde_json::from_str(&out).expect("response")
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn newton_count(response: &SolveResponse) -> usize {
+        match response.iterations {
+            Some(Iterations::Newton { count, .. }) => count,
+            ref other => panic!("expected Newton iterations, got {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn values(scalars: &Option<Vec<BusScalar>>) -> Vec<f64> {
+        scalars
+            .as_ref()
+            .expect("bus scalars")
+            .iter()
+            .map(|s| s.value)
+            .collect()
+    }
+
+    /// Write a solved voltage state into the network's stored bus values, the way a
+    /// case file saved from a converged power flow carries it.
+    #[cfg(feature = "sensitivity")]
+    fn store_state(network: &mut BalancedNetwork, solved: &SolveResponse) {
+        let vm = values(&solved.vm);
+        let va = values(&solved.va);
+        for (bus, (vm, va)) in network.buses_mut().iter_mut().zip(vm.iter().zip(&va)) {
+            bus.vm = *vm;
+            bus.va = va.to_degrees();
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn case_start_from_the_stored_solved_state_converges_in_two_iterations() {
+        let mut network = case9_network();
+        let flat = solve_ac_module(&network, r#"{"formulation":"acpf"}"#);
+        store_state(&mut network, &flat);
+
+        let warm = solve_ac_module(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        let cold = solve_ac_module(&network, r#"{"formulation":"acpf","start":"flat"}"#);
+        assert!(
+            newton_count(&warm) <= 2,
+            "case start took {} iterations",
+            newton_count(&warm)
+        );
+        assert!(
+            newton_count(&cold) > newton_count(&warm),
+            "flat {} vs case {}",
+            newton_count(&cold),
+            newton_count(&warm)
+        );
+        for (a, b) in values(&warm.vm).iter().zip(values(&flat.vm)) {
+            assert!((a - b).abs() < 1e-8, "vm {a} vs {b}");
+        }
+        for (a, b) in values(&warm.va).iter().zip(values(&flat.va)) {
+            assert!((a - b).abs() < 1e-8, "va {a} vs {b}");
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn case_start_reads_a_typed_instance_initial_point() {
+        let network = case9_network();
+        let flat = solve_ac_module(&network, r#"{"formulation":"acpf"}"#);
+        // The network keeps its flat stored values; only the instance's initial
+        // point carries the solved state.
+        let point = powerio_prob::BalancedOperatingPointBuilder::for_point(network.clone())
+            .bus_voltage_magnitudes(values(&flat.vm))
+            .bus_voltage_angles(values(&flat.va))
+            .build_point()
+            .expect("initial point");
+        let instance = AcPfInstance::from_network(network)
+            .expect("instance")
+            .with_initial_point(point);
+        let request = SolveRequest {
+            formulation: Problem::AcPf,
+            start: PowerFlowStart::Case,
+            ..Default::default()
+        };
+        let warm = solve_ac_pf_instance(&instance, &request).expect("warm solve");
+        assert!(
+            newton_count(&warm) <= 2,
+            "{} iterations",
+            newton_count(&warm)
+        );
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn a_nonzero_reference_angle_shifts_every_angle() {
+        let zero = solve_ac_module(&case9_network(), r#"{"formulation":"acpf"}"#);
+        let mut network = case9_network();
+        network.buses_mut()[0].va = 10.0;
+        for start in ["flat", "case"] {
+            let request = format!(r#"{{"formulation":"acpf","start":"{start}"}}"#);
+            let shifted = solve_ac_module(&network, &request);
+            let va = values(&shifted.va);
+            assert!((va[0] - 10.0_f64.to_radians()).abs() < 1e-12, "{start}");
+            for (a, b) in va.iter().zip(values(&zero.va)) {
+                assert!(
+                    (a - b - 10.0_f64.to_radians()).abs() < 1e-8,
+                    "{start}: {a} vs {b}"
+                );
+            }
+            for (a, b) in values(&shifted.vm).iter().zip(values(&zero.vm)) {
+                assert!((a - b).abs() < 1e-8, "{start}: vm {a} vs {b}");
+            }
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn an_unusable_stored_magnitude_falls_back_to_the_setpoint() {
+        let mut network = case9_network();
+        network.buses_mut()[4].vm = 0.0;
+        network.buses_mut()[6].vm = f64::NAN;
+        let warm = solve_ac_module(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        let flat = solve_ac_module(&case9_network(), r#"{"formulation":"acpf"}"#);
+        for (a, b) in values(&warm.vm).iter().zip(values(&flat.vm)) {
+            assert!((a - b).abs() < 1e-8, "vm {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn case_start_is_refused_outside_acpf() {
+        let mut formulations = vec!["dcopf"];
+        if cfg!(feature = "sensitivity") {
+            formulations.push("dcpf");
+        }
+        if cfg!(feature = "conic") {
+            formulations.push("socwr");
+        }
+        for formulation in formulations {
+            let request = format!(r#"{{"formulation":"{formulation}","start":"case"}}"#);
+            let error = solve_test_network_json(&case3_json(), &request)
+                .expect_err("only acpf iterates from a start");
+            assert_eq!(
+                error,
+                format!("start \"case\" applies only to acpf, not {formulation}")
+            );
+            let request = format!(r#"{{"formulation":"{formulation}","start":"flat"}}"#);
+            solve_test_network_json(&case3_json(), &request).expect("flat is the default");
+        }
+        let error = solve_test_network_json(&case3_json(), r#"{"start":"warm"}"#)
+            .expect_err("an unknown start");
+        assert!(error.contains("unknown variant `warm`"), "{error}");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn each_island_holds_and_starts_from_its_own_reference() {
+        let zero = solve_islands(&islands_network(), r#"{"formulation":"acpf"}"#);
+        let zero = by_bus(zero.va.as_ref().unwrap());
+        // Island 1-3 states its reference at 10 degrees; island 4-6 states none, so
+        // its designated reference at bus 6 holds zero.
+        let mut network = islands_network();
+        network.buses_mut()[0].va = 10.0;
+        let flat = solve_islands(&network, r#"{"formulation":"acpf"}"#);
+        let va = by_bus(flat.va.as_ref().unwrap());
+        for (bus, shift) in [
+            (1, 10.0),
+            (2, 10.0),
+            (3, 10.0),
+            (4, 0.0),
+            (5, 0.0),
+            (6, 0.0),
+        ] {
+            let expected = zero[&bus] + f64::to_radians(shift);
+            assert!(
+                (va[&bus] - expected).abs() < 1e-8,
+                "bus {bus}: {} vs {expected}",
+                va[&bus]
+            );
+        }
+
+        // Store the solved state with island 4-6 turned a further 30 degrees. A case
+        // start reads each island's angles against that island's own reference bus,
+        // so the turn drops out and the stored state is already the solution.
+        let vm = by_bus(flat.vm.as_ref().unwrap());
+        for bus in network.buses_mut() {
+            let id = bus.id.0;
+            if let (Some(&vm), Some(&va)) = (vm.get(&id), va.get(&id)) {
+                bus.vm = vm;
+                bus.va = va.to_degrees() + if id >= 4 { 30.0 } else { 0.0 };
+            }
+        }
+        let warm = solve_islands(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        assert!(
+            newton_count(&warm) <= 2,
+            "case start took {} iterations",
+            newton_count(&warm)
+        );
+        assert!(
+            newton_count(&flat) > newton_count(&warm),
+            "flat {} vs case {}",
+            newton_count(&flat),
+            newton_count(&warm)
+        );
+        for (bus, value) in by_bus(warm.va.as_ref().unwrap()) {
+            assert!(
+                (value - va[&bus]).abs() < 1e-8,
+                "bus {bus}: {value} vs {}",
+                va[&bus]
+            );
+        }
     }
 }

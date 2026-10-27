@@ -91,6 +91,9 @@ export interface Edits {
 \trates?: BranchRatingDeltas;
 }
 
+/** Where the AC power flow starts: the setpoint flat start, or the case's stored bus voltages. */
+export type PowerFlowStart = 'flat' | 'case';
+
 export type ConstraintTermKind = 'branch_flow' | 'bus_injection' | 'generator';
 
 /** \`coefficient\` times the MW quantity \`kind\` names at \`element\` (an element id
@@ -114,6 +117,8 @@ export interface LinearConstraint {
 export interface SolveRequest {
 \tformulation?: FormulationId;
 \tedits?: Edits;
+\t/** \`acpf\` only; other formulations refuse \`'case'\`. Defaults to \`'flat'\`. */
+\tstart?: PowerFlowStart;
 \t/** Linear constraints, accepted by \`dcopf\` only. */
 \tconstraints?: LinearConstraint[];
 \tsensitivities?: SensRequest[];
@@ -192,6 +197,15 @@ export interface ConstraintResult {
 \tbinding: boolean;
 }
 
+/** How a solve treated the network's islands. \`code\` is
+ * 'island_deenergized', 'island_reference_designated', or
+ * 'island_extra_reference'; \`buses\` are original bus ids. */
+export interface SolveDiagnostic {
+\tcode: string;
+\tmessage: string;
+\tbuses: number[];
+}
+
 export interface SolveResponse {
 \tformulation: FormulationId;
 \tstatus: SolveStatus;
@@ -206,6 +220,7 @@ export interface SolveResponse {
 \tflows?: BranchFlow[];
 \tdispatch?: GenDispatch[];
 \tconstraints?: ConstraintResult[];
+\tdiagnostics?: SolveDiagnostic[];
 \tsensitivities?: SensitivityMatrix[];
 }
 

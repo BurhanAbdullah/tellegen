@@ -62,6 +62,8 @@ reader selected for transmission and distribution documents.
   net injections, and generator outputs; the response's `constraints` block
   reports each row's value and shadow price. See
   [Formulations](formulations.md#linear-constraints).
+  An `acpf` request may set `start: "case"` to start Newton from the case's
+  stored bus voltages (see [Formulations](formulations.md#ac-power-flow-polar)).
 - `createStudy(moduleJson, formulation)`: builds a browser `Study` from a
   PowerIO module and solves its declared problem instance.
 - `Study` / `BrowserStudy`: browser handle with:
@@ -155,7 +157,7 @@ file.arrayBuffer())` for a browser `File`.
 
 Public types include:
 
-- `SolveRequest`, `SolveResponse`, `ProblemCaps`
+- `SolveRequest`, `SolveResponse`, `ProblemCaps`, `PowerFlowStart`, `SolveDiagnostic`
 - `LinearConstraint`, `ConstraintTerm`, `ConstraintTermKind`, `ConstraintResult`
 - `SensRequest`, `SensitivityMatrix`, `SensitivityColumn`
 - `Network`, `NetworkBus`, `NetworkBranch`

@@ -1,5 +1,5 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: f46ae4ced51956837aa887e95ed51e39121da0526221314e75ef65de111382b2
+// Source SHA256: bb3cba49c00da8e58bf6b22a8f65d2185e426e6fc97d4bc830be91bdefba4e83
 
 export type ArtifactKind = "powerio_ir" | "geo_layer" | "evidence";
 
@@ -91,9 +91,11 @@ export type SearchOptions = { "beam_width": number; "max_iterations": number; "m
 
 export type SensitivityMatrix = { "cols": Array<ColMeta>; "rows": Array<RowMeta>; "units": string; "values": Array<Array<number>>; };
 
+export type SolveDiagnostic = { "buses": Array<number>; "code": string; "message": string; };
+
 export type SolveIteration = { "inf_du": number; "inf_pr": number; "iter": number; "objective": number; };
 
-export type SolveResponse = { "constraints"?: Array<ConstraintResult> | null; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
+export type SolveResponse = { "constraints"?: Array<ConstraintResult> | null; "diagnostics"?: Array<SolveDiagnostic>; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
 
 export type SolveStatus = ("optimal") | ("feasible");
 

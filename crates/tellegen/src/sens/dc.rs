@@ -146,7 +146,7 @@ impl KktIdx {
             .collect();
         let nu_bal = take(n);
         let nu_flow = take(m);
-        let eta = take(1);
+        let eta = take(dc.ref_buses.len());
         KktIdx {
             dim: o,
             va,
@@ -328,8 +328,8 @@ fn kkt_triplets(
         for &(i, val) in &bcols[j] {
             e!(idx.nu_bal + i, col, -val);
         }
-        if j == dc.ref_bus {
-            e!(idx.eta, col, 1.0);
+        if let Some(reference) = dc.ref_buses.iter().position(|&r| r == j) {
+            e!(idx.eta + reference, col, 1.0);
         }
     }
 
@@ -487,8 +487,10 @@ fn kkt_triplets(
         e!(idx.f + e, col, -1.0);
     }
 
-    // eta column: reference indicator.
-    e!(idx.va + dc.ref_bus, idx.eta, 1.0);
+    // eta columns: one reference indicator per reference bus.
+    for (reference, &bus) in dc.ref_buses.iter().enumerate() {
+        e!(idx.va + bus, idx.eta + reference, 1.0);
+    }
 
     // Caller-supplied linear constraints `a'x` over the flow and dispatch
     // columns. An upper limit enters like a line's upper limit: its multiplier
@@ -1163,6 +1165,64 @@ mod tests {
     #[test]
     fn parity_with_an_equality_row() {
         check_parity(&equality_constrained_case3(), "equality case3");
+    }
+
+    /// Two copies of case3 as islands 1-3 and 4-6, each with its own reference.
+    /// Island 4-6 serves 60 MW; unconstrained, its line 4-5 carries
+    /// 20 + g4/3, about 25.5 MW.
+    const TWIN_CASE3: &str = "\
+function mpc = twin
+mpc.version = '2';
+mpc.baseMVA = 100;
+mpc.bus = [
+ 1 3 0  0  0 0 1 1 0 230 1 1.1 0.9;
+ 2 1 90 30 0 0 1 1 0 230 1 1.1 0.9;
+ 3 2 0  0  0 0 1 1 0 230 1 1.1 0.9;
+ 4 3 0  0  0 0 1 1 0 230 1 1.1 0.9;
+ 5 1 60 20 0 0 1 1 0 230 1 1.1 0.9;
+ 6 2 0  0  0 0 1 1 0 230 1 1.1 0.9;
+];
+mpc.gen = [
+ 1 0  0 300 -300 1 100 1 250 10 0 0 0 0 0 0 0 0 0 0 0;
+ 3 60 0 300 -300 1 100 1 270 10 0 0 0 0 0 0 0 0 0 0 0;
+ 4 0  0 300 -300 1 100 1 250 10 0 0 0 0 0 0 0 0 0 0 0;
+ 6 40 0 300 -300 1 100 1 270 10 0 0 0 0 0 0 0 0 0 0 0;
+];
+mpc.branch = [
+ 1 2 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+ 1 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+ 2 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+ 4 5 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+ 4 6 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+ 5 6 0.01 0.1 0 250 250 250 0 0 1 -360 360;
+];
+mpc.gencost = [
+ 2 0 0 3 0.11  5   0;
+ 2 0 0 3 0.085 1.2 0;
+ 2 0 0 3 0.11  5   0;
+ 2 0 0 3 0.085 1.2 0;
+];
+";
+
+    /// An interface limit binds in each island, and a two-sided row on the
+    /// output of both islands' bus 1 and bus 4 units sits between its limits.
+    #[test]
+    fn parity_with_binding_rows_in_two_islands() {
+        let net = crate::model::parse_matpower(TWIN_CASE3).expect("parse");
+        let mut dc = DcNetwork::from_network(&net).expect("model");
+        assert_eq!(dc.ref_buses.len(), 2);
+        dc.linear_rows = vec![
+            linear_row(vec![(0, 1.0)], vec![], None, Some(38.0)),
+            linear_row(vec![(3, 1.0)], vec![], None, Some(24.0)),
+            linear_row(vec![], vec![(0, 1.0), (2, 1.0)], Some(0.0), Some(200.0)),
+        ];
+        let sol = dc_opf(&dc).expect("solve");
+        let values: Vec<f64> = sol.linear_values.iter().map(|v| v * dc.base_mva).collect();
+        assert!((values[0] - 38.0).abs() < 1e-5, "{values:?}");
+        assert!((values[1] - 24.0).abs() < 1e-5, "{values:?}");
+        assert!(sol.linear_duals[0] > 1e-3 && sol.linear_duals[1] > 1e-3);
+        assert!(sol.linear_duals[2].abs() < 1e-6, "{:?}", sol.linear_duals);
+        check_parity(&dc, "two islands");
     }
 
     #[test]
