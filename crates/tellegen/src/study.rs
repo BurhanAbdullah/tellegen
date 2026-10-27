@@ -2696,7 +2696,15 @@ mod tests {
         let network: BalancedNetwork = serde_json::from_value(net).unwrap();
         let s = Study::new(&module_json(network), Problem::DcOpf).unwrap();
 
-        for format in ["matpower", "psse", "pslf", "powerworld"] {
+        for format in [
+            "matpower",
+            "psse",
+            "psse35",
+            "pslf",
+            "powerworld",
+            "powermodels-json",
+            "pandapower-json",
+        ] {
             let exported = s.export(format).expect(format);
             assert!(
                 !exported.text.contains("\n 999,"),

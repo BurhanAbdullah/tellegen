@@ -93,8 +93,10 @@ the Safari sensitivity gap
 Long term: AC power flow in the browser once faer's wasm sparse path is
 validated. AC OPF moves to the browser when a wasm nonlinear or cone path is
 solid, and stays in the backend until then. WebGPU when deck.gl's backend
-gains picking and basemap support. Synthetic grid generation pairs with in
-browser compute.
+gains picking and basemap support. Synthetic grid generation already runs in
+the browser: `tellegen-synth` plans, validates and calibrates geo-referenced
+grids inside the one wasm module
+([Synthetic Grid Generation](synthetic-generation.md)).
 
 ## Sources
 
