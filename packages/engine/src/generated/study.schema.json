@@ -260,6 +260,51 @@
       ],
       "type": "object"
     },
+    "ConstraintResult": {
+      "description": "The solved state of one [`LinearConstraint`], in request order. `value`,\n`lower`, and `upper` are MW; `shadow_price` is in objective units per MW, the\nsame units as `lmp`.",
+      "properties": {
+        "binding": {
+          "description": "`value` sits at a limit, within solver tolerance. Always true for an\nequality.",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lower": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "shadow_price": {
+          "description": "The objective decrease per MW the binding limit is raised:\n`-d objective / d limit`. Positive when the upper limit binds, negative\nwhen the lower limit binds, zero when neither does. A bus's price then\ndiffers from its island's reference bus's by `-shadow_price` times the\nchange in `value` per MW injected at the bus and withdrawn at that reference.\nAbsent when the declared objective gives prices no economic meaning, as\nfor `lmp`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "upper": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "`sum(coefficient * quantity)` at the solution.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "value",
+        "binding"
+      ],
+      "type": "object"
+    },
     "CostApproximation": {
       "properties": {
         "bus": {
@@ -786,6 +831,21 @@
             "Generator"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A caller-supplied linear constraint, by its position in the request.",
+          "properties": {
+            "Constraint": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "Constraint"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1110,7 +1170,7 @@
       "description": "One solve of a DC OPF run under [`LimitOptions`]: the program it solved and\nhow the solution met the enforceable thermal limits. A run without lazy\nenforcement has one round.",
       "properties": {
         "added": {
-          "description": "Limits added for the next round: the violated ones and the unenforced\nones loaded at or above `near_binding`.",
+          "description": "Limits added for the next round: the unenforced ones the flows violate\nor meet, and those loaded at or above `near_binding`.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -1397,6 +1457,11 @@
           "const": "Switching",
           "description": "Branch switching state `sw` in `[0, 1]`, per branch.",
           "type": "string"
+        },
+        {
+          "const": "ConstraintLimit",
+          "description": "A shift of both limits of a caller-supplied linear constraint (the\nfixed value of an equality), per constraint in request order.",
+          "type": "string"
         }
       ]
     },
@@ -1534,6 +1599,32 @@
       ],
       "type": "object"
     },
+    "SolveDiagnostic": {
+      "description": "A finding about how the solve treated the network, such as an island left out\nbecause nothing supplies it. `code` is stable for programs; `message` is for\npeople. `buses` names the original ids of the buses concerned.",
+      "properties": {
+        "buses": {
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "code": {
+          "description": "`island_deenergized`: an island with no in-service generator was left\nout of the solve; its buses carry no results and its load is unserved.\n`island_reference_designated`: a supplied island stated no reference bus,\nso the bus of its largest generator became the island's reference.\n`island_extra_reference`: the AC power flow found several reference\nbuses in one island and kept the first as its slack; the others hold\ntheir voltage magnitude as PV (or PQ) buses.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "buses"
+      ],
+      "type": "object"
+    },
     "SolveIteration": {
       "description": "One interior-point iterate: the iteration index, the primal objective, and\nthe primal and dual residuals. Collected once per Clarabel iteration to draw\nthe convergence plot. Shape matches the frontend `SolveIteration`.",
       "properties": {
@@ -1566,6 +1657,23 @@
     "SolveResponse": {
       "description": "The formulation-agnostic solve result. A superset: every block is optional, and\neach formulation fills what it produces. Powers are MW/MVAr, nodal values are\nin objective units per selected power unit, angles radians, `vm` per unit, and\n`w = |V|^2` per unit squared. Element ids\nare the original bus/branch/generator ids, so the frontend joins straight onto\nits case.",
       "properties": {
+        "constraints": {
+          "description": "The request's linear constraints, in request order (dcopf). Absent when\nthe request stated none.",
+          "items": {
+            "$ref": "#/$defs/ConstraintResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "description": "How the solve treated the network's islands. Empty, and omitted, when\nevery island is supplied and referenced as stated.",
+          "items": {
+            "$ref": "#/$defs/SolveDiagnostic"
+          },
+          "type": "array"
+        },
         "dispatch": {
           "items": {
             "$ref": "#/$defs/GenDispatch"
@@ -2540,5 +2648,5 @@
   ],
   "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "65e6e8acd310f5f34ef21d4bc0e1d0940ad8a3206304a7b82fc3a9fd86bef447"
+  "x-rust-source-sha256": "a3fb673b92725bc0f4aff4a7648347c36841bc2e0e5209cd83cc4381c004c0fb"
 }

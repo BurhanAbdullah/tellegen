@@ -25,17 +25,18 @@ mod ac;
 #[cfg(test)]
 mod cases;
 mod dc;
+pub(crate) mod islands;
 
 #[cfg(feature = "sensitivity")]
 pub(crate) use ac::AcNetwork;
-pub(crate) use dc::DcNetwork;
+pub(crate) use dc::{DcNetwork, LinearRow};
 
 #[cfg(all(test, feature = "conic"))]
 pub(crate) use cases::parse_case3_ac;
-#[cfg(all(test, feature = "sensitivity"))]
-pub(crate) use cases::parse_case9_ac;
 #[cfg(test)]
-pub(crate) use cases::{parse_case3, CASE3};
+pub(crate) use cases::{parse_case3, CASE3, CASE3_TWIN, CASE_ISLANDS};
+#[cfg(all(test, feature = "sensitivity"))]
+pub(crate) use cases::{parse_case9_ac, CASE9};
 
 /// One convex piecewise linear objective term as the line equations used by
 /// the solver epigraph. PowerIO has already validated the breakpoint order and

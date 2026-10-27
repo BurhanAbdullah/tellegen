@@ -1,5 +1,5 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: 65e6e8acd310f5f34ef21d4bc0e1d0940ad8a3206304a7b82fc3a9fd86bef447
+// Source SHA256: a3fb673b92725bc0f4aff4a7648347c36841bc2e0e5209cd83cc4381c004c0fb
 
 export type ArtifactKind = "powerio_ir" | "geo_layer" | "evidence";
 
@@ -18,6 +18,8 @@ export type Camera = { "bearing": number; "center": Array<number>; "pitch": numb
 export type ColMeta = { "element": ElementId; "index": number; "parameter": Parameter; };
 
 export type Comparison = { "goal"?: string | null; "improvement"?: number | null; "left": string; "left_value"?: number | null; "left_view"?: (SolveResponse) | (null); "right": string; "right_value"?: number | null; "right_view"?: (SolveResponse) | (null); };
+
+export type ConstraintResult = { "binding": boolean; "id": string; "lower"?: number | null; "shadow_price"?: number | null; "upper"?: number | null; "value": number; };
 
 export type CostApproximation = { "bus": number; "generator": number; "max_breakpoint_error": number; "model_cost": GenCost; "rms_breakpoint_error": number; "source_cost": GenCost; };
 
@@ -47,7 +49,7 @@ export type DiagramCamera = { "center": Array<number>; "scale": number; };
 
 export type DisplayContext = { "camera"?: (Camera) | (null); "case_id": string; "diagram_camera"?: (DiagramCamera) | (null); "geography": string; "layers"?: Array<string>; };
 
-export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; });
+export type ElementId = ({ "Bus": number; }) | ({ "Branch": number; }) | ({ "Generator": number; }) | ({ "Constraint": number; });
 
 export type ElementKey = (number) | (string);
 
@@ -79,7 +81,7 @@ export type ObservableWeight = { "element": ElementKey; "weight": number; };
 
 export type Operand = ({ "Price": Power; }) | ({ "Dispatch": Power; }) | ({ "Flow": { "end": End; "power": Power; }; }) | ({ "Voltage": VoltageKind; });
 
-export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching");
+export type Parameter = ({ "Demand": Power; }) | ({ "Cost": CostTerm; }) | ("LineLimit") | ({ "SeriesAdmittance": GB; }) | ({ "ShuntAdmittance": GB; }) | ({ "VoltageBound": Bound; }) | ({ "GenBound": { "bound": Bound; "power": Power; }; }) | ({ "Transformer": TapKind; }) | ("Switching") | ("ConstraintLimit");
 
 export type Power = "Active" | "Reactive";
 
@@ -91,9 +93,11 @@ export type SearchOptions = { "beam_width": number; "max_iterations": number; "m
 
 export type SensitivityMatrix = { "cols": Array<ColMeta>; "rows": Array<RowMeta>; "units": string; "values": Array<Array<number>>; };
 
+export type SolveDiagnostic = { "buses": Array<number>; "code": string; "message": string; };
+
 export type SolveIteration = { "inf_du": number; "inf_pr": number; "iter": number; "objective": number; };
 
-export type SolveResponse = { "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "limit_rounds"?: Array<LimitRound> | null; "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
+export type SolveResponse = { "constraints"?: Array<ConstraintResult> | null; "diagnostics"?: Array<SolveDiagnostic>; "dispatch"?: Array<GenDispatch> | null; "flows"?: Array<BranchFlow> | null; "formulation": Problem; "injections"?: Array<BusInjection> | null; "iterations"?: (Iterations) | (null); "limit_rounds"?: Array<LimitRound> | null; "lmp"?: Array<BusScalar> | null; "lmp_q"?: Array<BusScalar> | null; "objective"?: number | null; "sensitivities"?: Array<SensitivityMatrix>; "status": SolveStatus; "va"?: Array<BusScalar> | null; "vm"?: Array<BusScalar> | null; "w"?: Array<BusScalar> | null; "wi"?: Array<BranchScalar> | null; "wr"?: Array<BranchScalar> | null; };
 
 export type SolveStatus = ("optimal") | ("feasible");
 

@@ -5,7 +5,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use clarabel::solver::SupportedConeT::{NonnegativeConeT, ZeroConeT};
+use clarabel::solver::SupportedConeT::{self, NonnegativeConeT, ZeroConeT};
 
 use crate::formulation::Dc;
 use crate::model::DcNetwork;
@@ -46,6 +46,13 @@ pub struct DcOpfSolution {
     /// The solves that produced this solution, when a request's limit options
     /// asked for them.
     pub(crate) limit_rounds: Option<Vec<crate::api::LimitRound>>,
+    /// Per unit value of each caller-supplied linear row, aligned with
+    /// `DcNetwork::linear_rows`.
+    pub(crate) linear_values: Vec<f64>,
+    /// Signed dual of each caller-supplied linear row: the upper limit's dual
+    /// minus the lower limit's (the equality dual for an equality row). It is
+    /// `-d objective / d limit` in per unit, positive when the upper limit binds.
+    pub(crate) linear_duals: Vec<f64>,
 }
 
 impl DcOpfSolution {
@@ -61,17 +68,21 @@ impl DcOpfSolution {
 /// shedding variable only for a bus whose shedding cap is positive (none unless
 /// shedding is allowed) and `t` one cost epigraph variable for each piecewise
 /// generator. Constraint rows are the equalities first (zero cone: power balance,
-/// flow definition, reference), then the inequalities (nonnegative cone: line
-/// limits, generator limits, shedding bounds, phase limits, piecewise cost
-/// segments), each block contiguous. An inactive limit, and the bounds of a
-/// shedding variable pinned at zero, get no row at all: the readout reports a
-/// zero multiplier for them, which is what the KKT system in [`crate::sens`]
-/// expects of a limit that does not bind. The assembly scatters by these offsets
-/// and the readout uses the same layout.
+/// flow definition, one reference row per reference bus), then the inequalities
+/// (nonnegative cone: line limits, generator limits, shedding bounds, phase limits,
+/// piecewise cost segments), each block contiguous. An inactive limit, and the
+/// bounds of a shedding variable pinned at zero, get no row at all: the readout
+/// reports a zero multiplier for them, which is what the KKT system in
+/// [`crate::sens`] expects of a limit that does not bind. Caller-supplied linear
+/// rows follow the piecewise cost rows: their equalities in a second zero cone,
+/// then their limits in a second nonnegative cone, so a request without them
+/// keeps the base layout exactly. The assembly scatters by these offsets and the
+/// readout uses the same layout.
 struct OpfLayout {
     n: usize,
     k: usize,
     m: usize,
+    n_ref: usize,
     n_eq: usize,
     n_ineq: usize,
     /// Upper-limit row of each branch's flow limit; its lower-limit row follows
@@ -94,6 +105,18 @@ struct OpfLayout {
     nvar: usize,
     cost_columns: Vec<Option<usize>>,
     cost_row_starts: Vec<Option<usize>>,
+    linear_rows: Vec<LinearRowIndex>,
+    n_linear_eq: usize,
+    n_linear_ineq: usize,
+}
+
+/// Program rows of one caller-supplied linear constraint: one equality row, or
+/// an upper and/or a lower inequality row.
+#[derive(Clone, Copy, Default)]
+struct LinearRowIndex {
+    equality: Option<usize>,
+    upper: Option<usize>,
+    lower: Option<usize>,
 }
 
 /// Number the `true` entries of `mask` from `start`: each gets the next index,
@@ -114,7 +137,8 @@ fn number_active(mask: impl Iterator<Item = bool>, start: usize) -> (Vec<Option<
 impl OpfLayout {
     fn dc(dc: &DcNetwork) -> Self {
         let (n, m, k) = (dc.n, dc.m, dc.k);
-        let n_eq = n + m + 1;
+        let n_ref = dc.ref_buses.len();
+        let n_eq = n + m + n_ref;
         let (line_rows, n_line) = number_active(dc.thermal_limit_active.iter().copied(), n_eq);
         let (gen_rows, n_gen_rows) = number_active(
             dc.generator_capability_active.iter().copied(),
@@ -142,12 +166,45 @@ impl OpfLayout {
                 cost_row_starts.push(None);
             }
         }
+        let n_ineq = next_cost_row - n_eq;
+        let n_linear_eq = dc
+            .linear_rows
+            .iter()
+            .filter(|row| row.is_equality())
+            .count();
+        let mut next_linear_eq = next_cost_row;
+        let mut next_linear_ineq = next_cost_row + n_linear_eq;
+        let take = |next: &mut usize| {
+            let at = *next;
+            *next += 1;
+            Some(at)
+        };
+        let linear_rows = dc
+            .linear_rows
+            .iter()
+            .map(|row| {
+                if row.is_equality() {
+                    LinearRowIndex {
+                        equality: take(&mut next_linear_eq),
+                        ..LinearRowIndex::default()
+                    }
+                } else {
+                    LinearRowIndex {
+                        equality: None,
+                        upper: row.upper_mw.and_then(|_| take(&mut next_linear_ineq)),
+                        lower: row.lower_mw.and_then(|_| take(&mut next_linear_ineq)),
+                    }
+                }
+            })
+            .collect();
+        let n_linear_ineq = next_linear_ineq - next_cost_row - n_linear_eq;
         OpfLayout {
             n,
             k,
             m,
+            n_ref,
             n_eq,
-            n_ineq: next_cost_row - n_eq,
+            n_ineq,
             line_rows,
             n_line,
             gen_rows,
@@ -160,13 +217,28 @@ impl OpfLayout {
             nvar: next_column,
             cost_columns,
             cost_row_starts,
+            linear_rows,
+            n_linear_eq,
+            n_linear_ineq,
         }
     }
     fn nvar(&self) -> usize {
         self.nvar
     }
     fn ncon(&self) -> usize {
-        self.n_eq + self.n_ineq
+        self.n_eq + self.n_ineq + self.n_linear_eq + self.n_linear_ineq
+    }
+    /// The cone partition in row order. The caller-supplied blocks are left out
+    /// when empty.
+    fn cones(&self) -> Vec<SupportedConeT<f64>> {
+        let mut cones = vec![ZeroConeT(self.n_eq), NonnegativeConeT(self.n_ineq)];
+        if self.n_linear_eq > 0 {
+            cones.push(ZeroConeT(self.n_linear_eq));
+        }
+        if self.n_linear_ineq > 0 {
+            cones.push(NonnegativeConeT(self.n_linear_ineq));
+        }
+        cones
     }
     fn col_va(&self, i: usize) -> usize {
         i
@@ -186,8 +258,9 @@ impl OpfLayout {
     fn r_fd(&self, e: usize) -> usize {
         self.n + e
     }
-    fn r_ref(&self) -> usize {
-        self.n + self.m
+    fn r_ref(&self, reference: usize) -> usize {
+        debug_assert!(reference < self.n_ref);
+        self.n + self.m + reference
     }
     fn r_lineub(&self, e: usize) -> Option<usize> {
         self.line_rows[e]
@@ -295,8 +368,10 @@ impl OpfFormulation for Dc {
                 prog.rhs(lb, -sw * dc.angmin[e]);
             }
         }
-        // Reference bus: theta[ref] = 0
-        prog.a(lay.r_ref(), lay.col_va(dc.ref_bus), 1.0);
+        // Reference buses: theta[ref] = 0 in every island.
+        for (reference, &bus) in dc.ref_buses.iter().enumerate() {
+            prog.a(lay.r_ref(reference), lay.col_va(bus), 1.0);
+        }
         // Generation limits: g <= gmax and -g <= -gmin
         for j in 0..dc.k {
             if let (Some(ub), Some(lb)) = (lay.r_genub(j), lay.r_genlb(j)) {
@@ -337,7 +412,31 @@ impl OpfFormulation for Dc {
             }
         }
 
-        prog.finish(vec![ZeroConeT(lay.n_eq), NonnegativeConeT(lay.n_ineq)])
+        // Caller-supplied linear rows over the flow and dispatch columns. An upper
+        // limit is `a'x <= upper`, a lower limit `-a'x <= -lower`, and an equality
+        // `a'x = lower`, each limit in per unit.
+        for (row, index) in dc.linear_rows.iter().zip(&lay.linear_rows) {
+            let mut write = |r: usize, sign: f64, limit_mw: f64| {
+                for &(e, coefficient) in &row.flow {
+                    prog.a(r, lay.col_f(e), sign * coefficient);
+                }
+                for &(j, coefficient) in &row.generation {
+                    prog.a(r, lay.col_pg(j), sign * coefficient);
+                }
+                prog.rhs(r, sign * limit_mw / dc.base_mva);
+            };
+            if let (Some(r), Some(limit)) = (index.equality, row.lower_mw) {
+                write(r, 1.0, limit);
+            }
+            if let (Some(r), Some(limit)) = (index.upper, row.upper_mw) {
+                write(r, 1.0, limit);
+            }
+            if let (Some(r), Some(limit)) = (index.lower, row.lower_mw) {
+                write(r, -1.0, limit);
+            }
+        }
+
+        prog.finish(lay.cones())
     }
 }
 
@@ -349,9 +448,14 @@ impl OpfFormulation for Dc {
 /// i.e. the LMP. A limit without a row reads a zero multiplier. A bus without a
 /// shedding variable reads `psh = 0` and the lower-bound multiplier its
 /// stationarity `c_shed - nu_bal + mu_ub - mu_lb = 0` would carry, the folded
-/// value the KKT snap gives a pinned shedding variable.
+/// value the KKT snap gives a pinned shedding variable. A caller-supplied row's
+/// signed dual is `z` of its upper (or equality) row minus `z` of its lower row:
+/// every row reads `A x + s = b`, so `-z` is the objective's derivative with
+/// respect to that row's `b`.
 fn read_dc_solution(dc: &DcNetwork, raw: &RawSolution) -> DcOpfSolution {
     let lay = OpfLayout::dc(dc);
+    let pg: Vec<f64> = (0..dc.k).map(|j| raw.x[lay.col_pg(j)]).collect();
+    let f: Vec<f64> = (0..dc.m).map(|e| raw.x[lay.col_f(e)]).collect();
     let (n, m, k) = (dc.n, dc.m, dc.k);
     let x = &raw.x;
     let z = &raw.z;
@@ -364,10 +468,20 @@ fn read_dc_solution(dc: &DcNetwork, raw: &RawSolution) -> DcOpfSolution {
         }
         _ => raw.objective,
     };
+    let linear_values = dc
+        .linear_rows
+        .iter()
+        .map(|row| row.evaluate(&f, &pg))
+        .collect();
+    let linear_duals = lay
+        .linear_rows
+        .iter()
+        .map(|index| dual(index.equality) + dual(index.upper) - dual(index.lower))
+        .collect();
     DcOpfSolution {
         va: (0..n).map(|i| x[lay.col_va(i)]).collect(),
-        pg: (0..k).map(|j| x[lay.col_pg(j)]).collect(),
-        f: (0..m).map(|e| x[lay.col_f(e)]).collect(),
+        pg,
+        f,
         psh: (0..n)
             .map(|i| lay.col_psh(i).map_or(0.0, |column| x[column]))
             .collect(),
@@ -404,6 +518,8 @@ fn read_dc_solution(dc: &DcNetwork, raw: &RawSolution) -> DcOpfSolution {
             })
             .collect(),
         limit_rounds: None,
+        linear_values,
+        linear_duals,
     }
 }
 

@@ -55,8 +55,9 @@ pub mod study_storage;
 pub use api::solve_ac_instance;
 pub use api::{
     capabilities_json, solve_instance, solve_instance_cancellable, solve_module_json,
-    validate_canonical_identity, BranchFlow, BranchScalar, BusInjection, BusScalar, Edits,
-    ElementKey, GenDispatch, Iterations, LazyLimits, LimitOptions, LimitRound, Problem,
+    validate_canonical_identity, BranchFlow, BranchScalar, BusInjection, BusScalar,
+    ConstraintResult, ConstraintTerm, ConstraintTermKind, Edits, ElementKey, GenDispatch,
+    Iterations, LazyLimits, LimitOptions, LimitRound, LinearConstraint, PowerFlowStart, Problem,
     ProblemCaps, SolveRequest, SolveResponse, SolveStatus, ThermalLimits,
 };
 #[cfg(feature = "sensitivity")]
