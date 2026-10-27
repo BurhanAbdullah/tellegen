@@ -278,7 +278,7 @@
           ]
         },
         "shadow_price": {
-          "description": "The objective decrease per MW the binding limit is raised:\n`-d objective / d limit`. Positive when the upper limit binds, negative\nwhen the lower limit binds, zero when neither does. A bus's price then\ndiffers from the reference bus's by `-shadow_price` times the change in\n`value` per MW injected at the bus and withdrawn at the reference.\nAbsent when the declared objective gives prices no economic meaning, as\nfor `lmp`.",
+          "description": "The objective decrease per MW the binding limit is raised:\n`-d objective / d limit`. Positive when the upper limit binds, negative\nwhen the lower limit binds, zero when neither does. A bus's price then\ndiffers from its island's reference bus's by `-shadow_price` times the\nchange in `value` per MW injected at the bus and withdrawn at that reference.\nAbsent when the declared objective gives prices no economic meaning, as\nfor `lmp`.",
           "format": "double",
           "type": [
             "number",
@@ -1524,6 +1524,32 @@
       ],
       "type": "object"
     },
+    "SolveDiagnostic": {
+      "description": "A finding about how the solve treated the network, such as an island left out\nbecause nothing supplies it. `code` is stable for programs; `message` is for\npeople. `buses` names the original ids of the buses concerned.",
+      "properties": {
+        "buses": {
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "code": {
+          "description": "`island_deenergized`: an island with no in-service generator was left\nout of the solve; its buses carry no results and its load is unserved.\n`island_reference_designated`: a supplied island stated no reference bus,\nso the bus of its largest generator became the island's reference.\n`island_extra_reference`: the AC power flow found several reference\nbuses in one island and kept the first as its slack; the others hold\ntheir voltage magnitude as PV (or PQ) buses.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "buses"
+      ],
+      "type": "object"
+    },
     "SolveIteration": {
       "description": "One interior-point iterate: the iteration index, the primal objective, and\nthe primal and dual residuals. Collected once per Clarabel iteration to draw\nthe convergence plot. Shape matches the frontend `SolveIteration`.",
       "properties": {
@@ -1565,6 +1591,13 @@
             "array",
             "null"
           ]
+        },
+        "diagnostics": {
+          "description": "How the solve treated the network's islands. Empty, and omitted, when\nevery island is supplied and referenced as stated.",
+          "items": {
+            "$ref": "#/$defs/SolveDiagnostic"
+          },
+          "type": "array"
         },
         "dispatch": {
           "items": {
@@ -2530,5 +2563,5 @@
   ],
   "title": "StudySchema",
   "type": "object",
-  "x-rust-source-sha256": "9e2e0c8f1a42c171b46f26585a14f48e838ecec2bcc8d8d3cee92562d199cd89"
+  "x-rust-source-sha256": "114d6383513f5484f3f25390d2d83a0f92451aa068a774cf7350312b5d13a1fa"
 }

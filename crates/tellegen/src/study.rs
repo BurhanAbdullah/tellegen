@@ -26,8 +26,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::{
     ac_pf_assemble, ac_pf_solved, dc_opf_assemble, dc_opf_solved, run_cells,
-    validate_canonical_edits, Edits, ElementKey, LinearConstraint, Problem, SensRequest,
-    SolveRequest, SolveResponse,
+    validate_canonical_edits, Edits, ElementKey, LinearConstraint, PowerFlowStart, Problem,
+    SensRequest, SolveRequest, SolveResponse,
 };
 use crate::model::{AcNetwork, DcNetwork};
 use crate::problem::AcPfSolution;
@@ -948,6 +948,7 @@ impl Study {
         let req = SolveRequest {
             formulation: self.formulation,
             edits: fold(log),
+            start: PowerFlowStart::Flat,
             constraints: self.constraints.clone(),
             sensitivities: sensitivities.to_vec(),
         };
@@ -3269,5 +3270,43 @@ mod tests {
             "linear constraints are supported only by dcopf, not acpf"
         );
         assert!(study.constraints().is_empty());
+    }
+
+    #[test]
+    fn a_study_over_several_islands_commits_previews_and_saves() {
+        let net =
+            module_json(crate::model::parse_matpower(crate::model::CASE_ISLANDS).expect("parse"));
+        let mut study = Study::new(&net, Problem::DcOpf).expect("study");
+        assert_eq!(study.solution().diagnostics.len(), 2);
+        let edit = [NetworkEdit::AddLoad {
+            bus: 5.into(),
+            p_mw: 10.0,
+        }];
+        let preview = study
+            .preview(&edit, &[Operand::Dispatch(Power::Active)])
+            .expect("preview");
+        let resp = study.commit(&edit).expect("commit");
+        let dispatch: Vec<f64> = resp
+            .dispatch
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|g| g.pg)
+            .collect();
+        // Island 4-6's own unit serves the added load; island 1-3 is untouched.
+        assert!((dispatch[0] - 60.0).abs() < 1e-6, "{dispatch:?}");
+        assert!((dispatch[1] - 50.0).abs() < 1e-6, "{dispatch:?}");
+        let predicted: Vec<f64> = preview.operands[0].values.iter().map(|v| v.value).collect();
+        assert!(predicted[0].abs() < 1e-6 && (predicted[1] - 10.0).abs() < 1e-6);
+        // A load edit on the de-energized island has nothing to land on.
+        let error = study
+            .commit(&[NetworkEdit::AddLoad {
+                bus: 7.into(),
+                p_mw: 1.0,
+            }])
+            .expect_err("bus 7 is out of the solve");
+        assert!(error.contains("bus 7"), "{error}");
+        study.save_module().expect("network module");
+        study.save_solution_module().expect("solution module");
     }
 }
