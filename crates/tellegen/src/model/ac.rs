@@ -146,6 +146,17 @@ pub(crate) struct AcNetwork {
     /// first bus. Each holds its island's angle reference and absorbs its
     /// island's power balance.
     pub slacks: Vec<usize>,
+    /// Reference angle (radians) of each slack, in `slacks` order. The AC power
+    /// flow holds each slack at its angle and reports the other angles of its
+    /// island against it. Zero unless an AC power flow instance states another
+    /// reference angle at that slack.
+    pub(crate) va_slacks: Vec<f64>,
+    /// Stored bus voltage state in dense order, magnitude (per unit) and angle
+    /// (radians): the case's bus values, star buses included where the lowering
+    /// carries them, overridden by an instance's initial point. The AC power flow
+    /// can start here instead of from a flat start.
+    pub(crate) vm_case: Vec<f64>,
+    pub(crate) va_case: Vec<f64>,
     /// Buses whose AC power flow magnitude is prescribed. The references are
     /// represented separately by `slacks`.
     pub(crate) pf_pv: Vec<bool>,
@@ -234,12 +245,22 @@ impl AcNetwork {
 
         model.pf_pv.fill(false);
         let mut references = Vec::new();
+        let mut stated_va = vec![0.0; model.n];
         for (dense, &source_id) in model.bus_ids.iter().enumerate() {
             let source_row = model.bus_source_rows[dense].ok_or_else(|| {
                 format!(
                     "synthetic AC preparation bus {source_id} has no source power flow specification"
                 )
             })?;
+            if let Some(point) = instance.initial_point() {
+                let bus = instance.network().buses()[source_row].id;
+                if let Some(vm) = point.bus_voltage_magnitude(bus) {
+                    model.vm_case[dense] = vm;
+                }
+                if let Some(va) = point.bus_voltage_angle(bus) {
+                    model.va_case[dense] = va;
+                }
+            }
             let specification = instance.specifications()[source_row];
             match specification {
                 AcBusSpecification::Pq { p, q } => {
@@ -252,13 +273,19 @@ impl AcNetwork {
                     model.pf_pv[dense] = true;
                 }
                 AcBusSpecification::Reference { vm, va } => {
-                    if va.abs() > 1e-12 {
+                    if !va.is_finite() {
                         return Err(format!(
-                            "AC power flow reference bus {source_id} states angle {va} degrees; Tellegen currently requires zero"
+                            "AC power flow reference bus {source_id} states a non-finite angle"
                         ));
                     }
                     references.push(dense);
                     model.vm_set[dense] = vm;
+                    // The specification carries the network's own angle unit.
+                    stated_va[dense] = if instance.network().is_normalized() {
+                        va
+                    } else {
+                        va.to_radians()
+                    };
                 }
                 AcBusSpecification::Isolated => {
                     return Err(format!(
@@ -306,6 +333,8 @@ impl AcNetwork {
         model
             .diagnostics
             .extend(extra_reference_diagnostic(&model.bus_ids, &extra));
+        // Each slack holds its stated reference angle; a designated one holds zero.
+        model.va_slacks = slacks.iter().map(|&bus| stated_va[bus]).collect();
         model.slacks = slacks;
         Ok(model)
     }
@@ -466,7 +495,10 @@ impl AcNetwork {
             vm_min: prep.buses.vm_min.clone(),
             vm_max: prep.buses.vm_max.clone(),
             vm_set,
+            va_slacks: vec![0.0; slacks.len()],
             slacks,
+            vm_case: prep.buses.initial_vm.clone(),
+            va_case: prep.buses.initial_va.clone(),
             pf_pv,
             bus_ids,
             branch_ids,
@@ -616,6 +648,8 @@ impl AcNetwork {
         let bs = buses.b_s;
         let vm_min = buses.vm_min;
         let vm_max = buses.vm_max;
+        let vm_case = buses.initial_vm;
+        let va_case = buses.initial_va;
 
         let br_from = branches.from_bus;
         let br_to = branches.to_bus;
@@ -755,7 +789,10 @@ impl AcNetwork {
             #[cfg(feature = "conic")]
             vm_max,
             vm_set,
+            va_slacks: vec![0.0; slacks.len()],
             slacks,
+            vm_case,
+            va_case,
             pf_pv,
             bus_ids,
             branch_ids,

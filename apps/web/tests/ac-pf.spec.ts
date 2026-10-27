@@ -134,15 +134,15 @@ test('a rejected AC power flow stops the solving indicator and can recover with 
 	await page.route('**/api/cases', (route) => route.fulfill({ json: [] }));
 	await page.goto('/');
 	await expect(page.getByText('no default cases loaded')).toBeVisible();
-	// The same unsupported reference angle that rejects the hosted Texas case,
-	// reproduced with a small deterministic input rather than a remote dataset.
-	const nonzeroReference = CASE3_PLANNING.replace(
-		'1 3 0  0  0 0 1 1 0 230',
-		'1 3 0  0  0 0 1 1 -11.99 230'
+	// A reactive demand no AC operating point can carry, so the AC power flow
+	// does not converge, while DC OPF ignores reactive power and still solves.
+	const reactiveOverload = CASE3_PLANNING.replace(
+		'2 1 90 30 0 0 1 1 0 230',
+		'2 1 90 3000 0 0 1 1 0 230'
 	);
 	await page.locator('input[type="file"][multiple]').setInputFiles([
 		{ name: 'case3-coords.csv', mimeType: 'text/csv', buffer: Buffer.from(CASE3_COORDS) },
-		{ name: 'reference-angle.m', mimeType: 'text/plain', buffer: Buffer.from(nonzeroReference) }
+		{ name: 'reactive-overload.m', mimeType: 'text/plain', buffer: Buffer.from(reactiveOverload) }
 	]);
 	await expect(page.locator('.solvecard')).toContainText('DC OPF', { timeout: 60_000 });
 	const calculation = page.getByRole('combobox', { name: 'Calculation', exact: true });

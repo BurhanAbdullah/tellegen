@@ -187,6 +187,23 @@ fn default_mode() -> Mode {
     Mode::Auto
 }
 
+/// Where the AC power flow's Newton iteration starts, as the lowercase JSON tags
+/// `"flat"` and `"case"`. Only `acpf` iterates from a start; every other
+/// formulation refuses `"case"`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum PowerFlowStart {
+    /// Voltage setpoint magnitudes and every angle at its island's reference angle.
+    #[default]
+    Flat,
+    /// The case's stored bus voltages: each bus's magnitude and its angle
+    /// relative to its island's reference bus (star buses of three-winding transformers
+    /// where the source carries them), or a typed instance's initial point. A
+    /// stored state that does not converge falls back to the flat start.
+    Case,
+}
+
 /// The one solve request: a formulation, an operating-point edit set, and zero or more
 /// sensitivity cells. A bare `{"formulation":"acpf"}` (or even `{}`,
 /// which defaults to DC OPF) is valid.
@@ -207,6 +224,9 @@ pub struct SolveRequest {
     pub formulation: Problem,
     #[serde(default)]
     pub edits: Edits,
+    /// The AC power flow start; `flat` when omitted.
+    #[serde(default)]
+    pub start: PowerFlowStart,
     /// Zero or more sensitivity cells, computed against the solved system in request
     /// order. Ignored by a build without the `sensitivity` feature.
     #[cfg(feature = "sensitivity")]
@@ -633,6 +653,7 @@ pub(crate) fn dc_opf_solved(
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<(DcNetwork, super::problem::DcOpfSolution), String> {
     dc.allow_shed = false;
+    reject_case_start(req, "dcopf")?;
     apply_demand_deltas(&mut dc, &req.edits.deltas)?;
     apply_rating_deltas(&mut dc, &req.edits.rates)?;
     let sol = dc_opf_cancellable(&dc, cancel)?;
@@ -710,6 +731,7 @@ fn solve_dc_pf(net: &BalancedNetwork, req: &SolveRequest) -> Result<SolveRespons
     // Flow limits do not constrain a power flow, so a rating edit cannot enter
     // the model.
     reject_rating_deltas(&req.edits.rates, "dcpf")?;
+    reject_case_start(req, "dcpf")?;
     let mut dc = DcNetwork::from_network(net)?;
     let base = dc.base_mva;
     apply_demand_deltas(&mut dc, &req.edits.deltas)?;
@@ -769,7 +791,11 @@ pub(crate) fn ac_pf_solved(
     }
     reject_rating_deltas(&req.edits.rates, "acpf")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
-    let sol = super::problem::ac_pf(&super::formulation::AcPolar::new(), &acnet)?;
+    let start = match req.start {
+        PowerFlowStart::Flat => super::problem::AcStart::Flat,
+        PowerFlowStart::Case => super::problem::AcStart::Case,
+    };
+    let sol = super::problem::ac_pf_with_start(&super::formulation::AcPolar::new(), &acnet, start)?;
     Ok((acnet, sol))
 }
 
@@ -838,6 +864,7 @@ pub(crate) fn socwr_solved(
     mut acnet: super::model::AcNetwork,
     req: &SolveRequest,
 ) -> Result<(super::model::AcNetwork, super::problem::SocWrSolution), String> {
+    reject_case_start(req, "socwr")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
     apply_rating_deltas_ac(&mut acnet, &req.edits.rates)?;
     let sol = super::problem::socwr_opf(&acnet)?;
@@ -1337,6 +1364,17 @@ fn apply_rating_deltas_ac(
         acnet.rate_a[i] += mw / base;
     }
     Ok(())
+}
+
+/// Only the AC power flow iterates from a start. The convex solves and the DC power
+/// flow have none to choose, so refuse a requested case start rather than ignore it.
+fn reject_case_start(req: &SolveRequest, formulation: &str) -> Result<(), String> {
+    match req.start {
+        PowerFlowStart::Flat => Ok(()),
+        PowerFlowStart::Case => Err(format!(
+            "start \"case\" applies only to acpf, not {formulation}"
+        )),
+    }
 }
 
 /// The AC power flow has no flow limits, so a rating edit cannot enter the model;
@@ -2287,5 +2325,225 @@ mod tests {
         assert!(lmp[&2] < lmp[&5], "{lmp:?}");
         assert_eq!(response.w.as_ref().unwrap().len(), 6);
         assert_eq!(response.diagnostics[0].code, "island_deenergized");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn case9_network() -> BalancedNetwork {
+        crate::model::parse_matpower(crate::model::CASE9).expect("parse case9")
+    }
+
+    /// Solve `network` as a stored balanced-network module under `request`.
+    #[cfg(feature = "sensitivity")]
+    fn solve_ac_module(network: &BalancedNetwork, request: &str) -> SolveResponse {
+        let module = powerio::PioModule::new(powerio::PioValue::BalancedNetwork(network.clone()));
+        let module = crate::ir::serialize_module(&module).expect("module JSON");
+        let out = solve_module_json(&module, request).expect("acpf solve");
+        serde_json::from_str(&out).expect("response")
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn newton_count(response: &SolveResponse) -> usize {
+        match response.iterations {
+            Some(Iterations::Newton { count, .. }) => count,
+            ref other => panic!("expected Newton iterations, got {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    fn values(scalars: &Option<Vec<BusScalar>>) -> Vec<f64> {
+        scalars
+            .as_ref()
+            .expect("bus scalars")
+            .iter()
+            .map(|s| s.value)
+            .collect()
+    }
+
+    /// Write a solved voltage state into the network's stored bus values, the way a
+    /// case file saved from a converged power flow carries it.
+    #[cfg(feature = "sensitivity")]
+    fn store_state(network: &mut BalancedNetwork, solved: &SolveResponse) {
+        let vm = values(&solved.vm);
+        let va = values(&solved.va);
+        for (bus, (vm, va)) in network.buses_mut().iter_mut().zip(vm.iter().zip(&va)) {
+            bus.vm = *vm;
+            bus.va = va.to_degrees();
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn case_start_from_the_stored_solved_state_converges_in_two_iterations() {
+        let mut network = case9_network();
+        let flat = solve_ac_module(&network, r#"{"formulation":"acpf"}"#);
+        store_state(&mut network, &flat);
+
+        let warm = solve_ac_module(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        let cold = solve_ac_module(&network, r#"{"formulation":"acpf","start":"flat"}"#);
+        assert!(
+            newton_count(&warm) <= 2,
+            "case start took {} iterations",
+            newton_count(&warm)
+        );
+        assert!(
+            newton_count(&cold) > newton_count(&warm),
+            "flat {} vs case {}",
+            newton_count(&cold),
+            newton_count(&warm)
+        );
+        for (a, b) in values(&warm.vm).iter().zip(values(&flat.vm)) {
+            assert!((a - b).abs() < 1e-8, "vm {a} vs {b}");
+        }
+        for (a, b) in values(&warm.va).iter().zip(values(&flat.va)) {
+            assert!((a - b).abs() < 1e-8, "va {a} vs {b}");
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn case_start_reads_a_typed_instance_initial_point() {
+        let network = case9_network();
+        let flat = solve_ac_module(&network, r#"{"formulation":"acpf"}"#);
+        // The network keeps its flat stored values; only the instance's initial
+        // point carries the solved state.
+        let point = powerio_prob::BalancedOperatingPointBuilder::for_point(network.clone())
+            .bus_voltage_magnitudes(values(&flat.vm))
+            .bus_voltage_angles(values(&flat.va))
+            .build_point()
+            .expect("initial point");
+        let instance = AcPfInstance::from_network(network)
+            .expect("instance")
+            .with_initial_point(point);
+        let request = SolveRequest {
+            formulation: Problem::AcPf,
+            start: PowerFlowStart::Case,
+            ..Default::default()
+        };
+        let warm = solve_ac_pf_instance(&instance, &request).expect("warm solve");
+        assert!(
+            newton_count(&warm) <= 2,
+            "{} iterations",
+            newton_count(&warm)
+        );
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn a_nonzero_reference_angle_shifts_every_angle() {
+        let zero = solve_ac_module(&case9_network(), r#"{"formulation":"acpf"}"#);
+        let mut network = case9_network();
+        network.buses_mut()[0].va = 10.0;
+        for start in ["flat", "case"] {
+            let request = format!(r#"{{"formulation":"acpf","start":"{start}"}}"#);
+            let shifted = solve_ac_module(&network, &request);
+            let va = values(&shifted.va);
+            assert!((va[0] - 10.0_f64.to_radians()).abs() < 1e-12, "{start}");
+            for (a, b) in va.iter().zip(values(&zero.va)) {
+                assert!(
+                    (a - b - 10.0_f64.to_radians()).abs() < 1e-8,
+                    "{start}: {a} vs {b}"
+                );
+            }
+            for (a, b) in values(&shifted.vm).iter().zip(values(&zero.vm)) {
+                assert!((a - b).abs() < 1e-8, "{start}: vm {a} vs {b}");
+            }
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn an_unusable_stored_magnitude_falls_back_to_the_setpoint() {
+        let mut network = case9_network();
+        network.buses_mut()[4].vm = 0.0;
+        network.buses_mut()[6].vm = f64::NAN;
+        let warm = solve_ac_module(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        let flat = solve_ac_module(&case9_network(), r#"{"formulation":"acpf"}"#);
+        for (a, b) in values(&warm.vm).iter().zip(values(&flat.vm)) {
+            assert!((a - b).abs() < 1e-8, "vm {a} vs {b}");
+        }
+    }
+
+    #[test]
+    fn case_start_is_refused_outside_acpf() {
+        let mut formulations = vec!["dcopf"];
+        if cfg!(feature = "sensitivity") {
+            formulations.push("dcpf");
+        }
+        if cfg!(feature = "conic") {
+            formulations.push("socwr");
+        }
+        for formulation in formulations {
+            let request = format!(r#"{{"formulation":"{formulation}","start":"case"}}"#);
+            let error = solve_test_network_json(&case3_json(), &request)
+                .expect_err("only acpf iterates from a start");
+            assert_eq!(
+                error,
+                format!("start \"case\" applies only to acpf, not {formulation}")
+            );
+            let request = format!(r#"{{"formulation":"{formulation}","start":"flat"}}"#);
+            solve_test_network_json(&case3_json(), &request).expect("flat is the default");
+        }
+        let error = solve_test_network_json(&case3_json(), r#"{"start":"warm"}"#)
+            .expect_err("an unknown start");
+        assert!(error.contains("unknown variant `warm`"), "{error}");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn each_island_holds_and_starts_from_its_own_reference() {
+        let zero = solve_islands(&islands_network(), r#"{"formulation":"acpf"}"#);
+        let zero = by_bus(zero.va.as_ref().unwrap());
+        // Island 1-3 states its reference at 10 degrees; island 4-6 states none, so
+        // its designated reference at bus 6 holds zero.
+        let mut network = islands_network();
+        network.buses_mut()[0].va = 10.0;
+        let flat = solve_islands(&network, r#"{"formulation":"acpf"}"#);
+        let va = by_bus(flat.va.as_ref().unwrap());
+        for (bus, shift) in [
+            (1, 10.0),
+            (2, 10.0),
+            (3, 10.0),
+            (4, 0.0),
+            (5, 0.0),
+            (6, 0.0),
+        ] {
+            let expected = zero[&bus] + f64::to_radians(shift);
+            assert!(
+                (va[&bus] - expected).abs() < 1e-8,
+                "bus {bus}: {} vs {expected}",
+                va[&bus]
+            );
+        }
+
+        // Store the solved state with island 4-6 turned a further 30 degrees. A case
+        // start reads each island's angles against that island's own reference bus,
+        // so the turn drops out and the stored state is already the solution.
+        let vm = by_bus(flat.vm.as_ref().unwrap());
+        for bus in network.buses_mut() {
+            let id = bus.id.0;
+            if let (Some(&vm), Some(&va)) = (vm.get(&id), va.get(&id)) {
+                bus.vm = vm;
+                bus.va = va.to_degrees() + if id >= 4 { 30.0 } else { 0.0 };
+            }
+        }
+        let warm = solve_islands(&network, r#"{"formulation":"acpf","start":"case"}"#);
+        assert!(
+            newton_count(&warm) <= 2,
+            "case start took {} iterations",
+            newton_count(&warm)
+        );
+        assert!(
+            newton_count(&flat) > newton_count(&warm),
+            "flat {} vs case {}",
+            newton_count(&flat),
+            newton_count(&warm)
+        );
+        for (bus, value) in by_bus(warm.va.as_ref().unwrap()) {
+            assert!(
+                (value - va[&bus]).abs() < 1e-8,
+                "bus {bus}: {value} vs {}",
+                va[&bus]
+            );
+        }
     }
 }
