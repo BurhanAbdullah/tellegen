@@ -42,6 +42,9 @@ fn estimated_plant_mw(total_load_mw: f64) -> f64 {
     (0.04 * total_load_mw.max(1.0)).clamp(20.0, 200.0)
 }
 
+/// A generator this close to a mapped plant of the same fuel is one of its units, km.
+const PLANT_UNIT_KM: f64 = 3.0;
+
 /// Makeup units spread the shortfall over at least this many buses.
 const MAKEUP_MIN_BUSES: usize = 5;
 
@@ -292,6 +295,12 @@ impl OsmBuild {
 
     /// Buses from substations and converter stations inside the region (or
     /// within the clip buffer of it), in the region's continuous frame.
+    ///
+    /// When the mapped substation levels and converters make more than
+    /// `limits.max_bus_count` buses, the lowest substation level present is
+    /// dropped, one at a time, until they fit; the raised floor also drops
+    /// the lines below it in the topology stage. A region whose highest level
+    /// alone exceeds the cap is refused.
     pub fn site(
         &mut self,
         req: &SynthRequest,
@@ -344,53 +353,40 @@ impl OsmBuild {
             self.plants.push(OsmPlant { lon, ..p.clone() });
         }
         self.counts.clipped = clipped;
+        let requested_floor = opts.voltage_floor_kv;
 
-        let radius_km = opts.cluster_radius_m / 1000.0;
-        let mut buses = Vec::new();
-        let points: Vec<(f64, f64)> = subs.iter().map(|s| s.0).collect();
-        let site_clusters = cluster_points(&points, radius_km);
-        self.counts.substation_sites = site_clusters.len();
-        self.sites.clear();
-        for (site, ((lon, lat), members)) in site_clusters.into_iter().enumerate() {
-            let mut kvs: Vec<f64> = members
-                .iter()
-                .flat_map(|&m| subs[m].1.iter().copied())
-                .collect();
-            kvs.sort_by(|a, b| b.partial_cmp(a).unwrap());
-            kvs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
-            let mut ids = Vec::new();
-            for kv in kvs {
-                ids.push(buses.len());
-                buses.push(osm_bus(
-                    data,
-                    lon,
-                    lat,
-                    kv,
-                    format!("OSM Substation {:03} / {} kV", site + 1, kv),
-                    BusKind::Substation,
-                    "OpenStreetMap substation (power=substation)",
-                    0.9,
-                ));
-            }
-            self.sites.push(ids);
+        // Substation levels present, lowest first: the floors a cap can raise to.
+        let mut levels: Vec<f64> = subs.iter().flat_map(|s| s.1.iter().copied()).collect();
+        levels.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        levels.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+        let cap = req.limits.max_bus_count as usize;
+        let converter_buses = self.converter_buses(&converters, requested_floor, data);
+        let mut buses = self.substation_buses(&subs, requested_floor, data);
+        let mapped = buses.len() + converter_buses.len();
+        while buses.len() + converter_buses.len() > cap {
+            let floor = self.options.voltage_floor_kv;
+            let Some(next) = levels.iter().copied().find(|kv| *kv > floor + 1e-9) else {
+                return Err(SynthError::InvalidRequest(format!(
+                    "the region's OpenStreetMap data maps to {} buses at its highest level ({floor} kV), more than limits.max_bus_count = {cap}; choose a smaller region or raise the cap",
+                    buses.len() + converter_buses.len()
+                )));
+            };
+            self.options.voltage_floor_kv = next;
+            buses = self.substation_buses(&subs, next, data);
         }
-        let points: Vec<(f64, f64)> = converters.iter().map(|c| c.0).collect();
-        let converter_clusters = cluster_points(&points, radius_km);
-        self.counts.converters = converter_clusters.len();
-        for (k, ((lon, lat), members)) in converter_clusters.into_iter().enumerate() {
-            let tagged = members.iter().map(|&m| converters[m].1).fold(0.0, f64::max);
-            let kv = tagged.max(opts.voltage_floor_kv);
-            buses.push(osm_bus(
-                data,
-                lon,
-                lat,
-                kv,
-                format!("OSM Converter {:03} / {} kV", k + 1, kv),
-                BusKind::Converter,
-                "OpenStreetMap converter station (power=converter)",
-                0.85,
+        buses.extend(converter_buses);
+        let opts = &self.options;
+        if opts.voltage_floor_kv > requested_floor {
+            warnings.push(Warning::new(
+                "osm_bus_count_capped",
+                format!(
+                    "{mapped} OpenStreetMap buses at or above {requested_floor} kV exceed limits.max_bus_count = {cap}; substation levels below {} kV were left out, which leaves {} buses",
+                    opts.voltage_floor_kv,
+                    buses.len()
+                ),
             ));
         }
+
         // Tier: rank of the bus voltage among the levels present (0 = highest).
         let mut levels: Vec<f64> = buses.iter().map(|b| b.base_kv).collect();
         levels.sort_by(|a, b| b.partial_cmp(a).unwrap());
@@ -421,6 +417,78 @@ impl OsmBuild {
             });
         }
         Ok(buses)
+    }
+
+    /// One bus per voltage level at or above `floor` at each substation
+    /// site. Records the sites and their count.
+    fn substation_buses(
+        &mut self,
+        subs: &[((f64, f64), Vec<f64>)],
+        floor: f64,
+        data: &ContextData,
+    ) -> Vec<DraftBus> {
+        let kept: Vec<&((f64, f64), Vec<f64>)> = subs
+            .iter()
+            .filter(|s| s.1.iter().any(|kv| *kv >= floor))
+            .collect();
+        let points: Vec<(f64, f64)> = kept.iter().map(|s| s.0).collect();
+        let mut buses = Vec::new();
+        let site_clusters = cluster_points(&points, self.options.cluster_radius_m / 1000.0);
+        self.counts.substation_sites = site_clusters.len();
+        self.sites.clear();
+        for (site, ((lon, lat), members)) in site_clusters.into_iter().enumerate() {
+            let mut kvs: Vec<f64> = members
+                .iter()
+                .flat_map(|&m| kept[m].1.iter().copied())
+                .filter(|kv| *kv >= floor)
+                .collect();
+            kvs.sort_by(|a, b| b.partial_cmp(a).unwrap());
+            kvs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+            let mut ids = Vec::new();
+            for kv in kvs {
+                ids.push(buses.len());
+                buses.push(osm_bus(
+                    data,
+                    lon,
+                    lat,
+                    kv,
+                    format!("OSM Substation {:03} / {} kV", site + 1, kv),
+                    BusKind::Substation,
+                    "OpenStreetMap substation (power=substation)",
+                    0.9,
+                ));
+            }
+            self.sites.push(ids);
+        }
+        buses
+    }
+
+    /// One bus per converter station, at its tagged voltage or `floor`.
+    fn converter_buses(
+        &mut self,
+        converters: &[((f64, f64), f64)],
+        floor: f64,
+        data: &ContextData,
+    ) -> Vec<DraftBus> {
+        let points: Vec<(f64, f64)> = converters.iter().map(|c| c.0).collect();
+        let converter_clusters = cluster_points(&points, self.options.cluster_radius_m / 1000.0);
+        self.counts.converters = converter_clusters.len();
+        let mut buses = Vec::new();
+        for (k, ((lon, lat), members)) in converter_clusters.into_iter().enumerate() {
+            let tagged = members.iter().map(|&m| converters[m].1).fold(0.0, f64::max);
+            let kv = tagged.max(floor);
+            buses.push(osm_bus(
+                data,
+                lon,
+                lat,
+                kv,
+                format!("OSM Converter {:03} / {} kV", k + 1, kv),
+                BusKind::Converter,
+                "OpenStreetMap converter station (power=converter)",
+                0.85,
+            ));
+        }
+        buses
     }
 
     /// Corridors from the mapped lines, transformers inside multi-level
@@ -705,6 +773,47 @@ impl OsmBuild {
         cut
     }
 
+    /// Mapped generation sites as (lon, lat, fuel, MW), `None` MW for a plant
+    /// with neither an output tag nor tagged units (estimated by the caller). A
+    /// generator within [`PLANT_UNIT_KM`] of a plant of the same fuel is a unit
+    /// of that plant, so the two are counted once: the plant's tagged output or
+    /// its units' sum, whichever is larger. Other generators stand alone; one
+    /// with no output tag (mostly rooftop solar) is left out.
+    fn plant_sites(&self) -> Vec<(f64, f64, Fuel, Option<f64>)> {
+        let mut plants: Vec<&OsmPlant> = self.plants.iter().filter(|p| !p.is_generator).collect();
+        plants.sort_by(|a, b| a.lat.total_cmp(&b.lat));
+        let dlat = PLANT_UNIT_KM / 111.0;
+        let mut unit_mw = vec![0.0; plants.len()];
+        let mut sites = Vec::new();
+        for u in self.plants.iter().filter(|p| p.is_generator) {
+            let Some(mw) = u.capacity_mw else {
+                continue;
+            };
+            let from = plants.partition_point(|p| p.lat < u.lat - dlat);
+            let owner = plants[from..]
+                .iter()
+                .take_while(|p| p.lat <= u.lat + dlat)
+                .enumerate()
+                .filter(|(_, p)| p.fuel == u.fuel)
+                .map(|(k, p)| (haversine_km(u.lon, u.lat, p.lon, p.lat), from + k))
+                .filter(|&(d, _)| d <= PLANT_UNIT_KM)
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            match owner {
+                Some((_, i)) => unit_mw[i] += mw,
+                None => sites.push((u.lon, u.lat, u.fuel, Some(mw))),
+            }
+        }
+        for (p, units) in plants.iter().zip(unit_mw) {
+            let mw = match p.capacity_mw {
+                Some(mw) => Some(mw.max(units)),
+                None if units > 0.0 => Some(units),
+                None => None,
+            };
+            sites.push((p.lon, p.lat, p.fuel, mw));
+        }
+        sites
+    }
+
     /// Generators at the mapped plants (aggregated per bus and fuel), topped up
     /// with makeup units on the best connected buses when the mapped capacity
     /// falls short of the reserve-margin target. With no usable plant, the
@@ -722,22 +831,19 @@ impl OsmBuild {
         let mut capacity: BTreeMap<(usize, Fuel), f64> = BTreeMap::new();
         let mut estimated = 0usize;
         let mut snapped = 0usize;
-        for p in &self.plants {
-            let Some(bus) = snap(buses, p.lon, p.lat, None, self.options.plant_snap_km) else {
+        for (lon, lat, fuel, mw) in self.plant_sites() {
+            let Some(bus) = snap(buses, lon, lat, None, self.options.plant_snap_km) else {
                 continue;
             };
-            let mw = match p.capacity_mw {
-                Some(mw) => mw,
-                None => {
-                    estimated += 1;
-                    estimated_plant_mw(total_load)
-                }
-            };
+            let mw = mw.unwrap_or_else(|| {
+                estimated += 1;
+                estimated_plant_mw(total_load)
+            });
             if mw <= 0.0 {
                 continue;
             }
             snapped += 1;
-            *capacity.entry((bus, p.fuel)).or_default() += mw;
+            *capacity.entry((bus, fuel)).or_default() += mw;
         }
         self.counts.plants_snapped = snapped;
         self.counts.plants_estimated = estimated;

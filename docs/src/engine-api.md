@@ -15,6 +15,12 @@
 - `createBrowserWasmTransport()`: returns the browser wasm transport facade.
 - `preloadEngine()`: initializes the wasm package.
 
+The package also exports its two large assets as files, so a host can preload
+or budget them without a path into `dist`: `@tellegen/engine/wasm` is the
+WebAssembly binary and `@tellegen/engine/places` the populated places table.
+Vite imports them as URLs with `?url`
+(`import engineWasmUrl from "@tellegen/engine/wasm?url"`).
+
 The facade has the same methods as the direct exports:
 
 - `classifyJson(bytes)`
@@ -51,7 +57,9 @@ reader selected for transmission and distribution documents.
 ## Solves And Studies
 
 - `capabilities()`: returns available formulations, operands, and parameters.
-- `solveModule(moduleJson, request)`: stateless solve from a PowerIO module.
+- `solveModule(moduleJson, request)`: stateless solve from a PowerIO module. An
+  `acpf` request may set `start: "case"` to start Newton from the case's stored
+  bus voltages (see [Formulations](formulations.md#ac-power-flow-polar)).
 - `createStudy(moduleJson, formulation)`: builds a browser `Study` from a
   PowerIO module and solves its declared problem instance.
 - `Study` / `BrowserStudy`: browser handle with:
@@ -145,7 +153,7 @@ file.arrayBuffer())` for a browser `File`.
 
 Public types include:
 
-- `SolveRequest`, `SolveResponse`, `ProblemCaps`
+- `SolveRequest`, `SolveResponse`, `ProblemCaps`, `PowerFlowStart`
 - `SensRequest`, `SensitivityMatrix`, `SensitivityColumn`
 - `Network`, `NetworkBus`, `NetworkBranch`
 - `Solution`, `SolveIteration`, `DemandDeltas`

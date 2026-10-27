@@ -337,7 +337,7 @@ These commands are for local development and do not authorize distribution.
 | Geographic sidecars / layout | Supported while retaining the instance |
 | Demand or rating edits | Rejected; reset edits before selecting AC OPF |
 | LMPs / sensitivities | Unavailable |
-| Save case / export committed state | Disabled; the one-shot path has no retained Study |
+| Save case / Export as | Disabled; the one-shot path has no retained Study |
 | Save exact AC OPF solution in the UI | Unavailable; portable solution emission is currently a native API |
 | Server fallback / WebMCP calculations | Unavailable for AC OPF |
 

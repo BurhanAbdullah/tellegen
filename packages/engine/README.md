@@ -17,6 +17,19 @@ import {
 The wasm files are resolved relative to the package module. Host apps must serve
 package asset files from `node_modules`.
 
+A host that preloads or budgets the engine's two large assets names them by
+export rather than by path: `@tellegen/engine/wasm` is the WebAssembly binary
+and `@tellegen/engine/places` the populated places table. In Vite, import them
+with `?url`:
+
+```ts
+import engineWasmUrl from "@tellegen/engine/wasm?url";
+import placesUrl from "@tellegen/engine/places?url";
+```
+
+Elsewhere, `import.meta.resolve("@tellegen/engine/wasm")` gives the file's URL.
+`syntheticPlacesUrl()` returns the places table's URL at run time.
+
 Under a Content Security Policy the engine needs `script-src 'wasm-unsafe-eval'`
 (to compile WebAssembly; never `'unsafe-eval'`) and `worker-src 'self'`: its
 workers are same-origin module workers.
@@ -94,8 +107,9 @@ describes the stages, the demand model and the evidence.
 
 The package ships data from third parties:
 
-- **Natural Earth** populated places (`dist/data/populated_places.json`) and
-  country areas (compiled into the wasm): public domain,
+- **Natural Earth** v5.1.2 populated places (`dist/data/populated_places.json`,
+  which names the release and its source file's SHA-256) and country areas
+  (compiled into the wasm): public domain,
   [naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/).
 - **Ember**, *Yearly Electricity Data*, through **Our World in Data**,
   *Energy dataset*: national electricity demand, compiled into the wasm.

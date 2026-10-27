@@ -5,7 +5,7 @@
 </script>
 
 {#if app.placingId}
-	<div class="placement-cue mono">click the map to place the topology layout</div>
+	<div class="placement-cue">Click the map to place the topology layout</div>
 {/if}
 
 <style>

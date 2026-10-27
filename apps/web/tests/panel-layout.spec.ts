@@ -131,7 +131,10 @@ test('short desktop windows use one drawer without covering map controls', async
 	const toolbar = await box(page.locator('.panel-toolbar'));
 	expect(bounds.y).toBeGreaterThan(toolbar.y + toolbar.height + 40);
 	expect(bounds.y + bounds.height).toBeLessThanOrEqual(362);
-	const attribution = await box(page.locator('.maplibregl-ctrl-attrib'));
+	// MapLibre adds the attribution control once the map loads, which can trail the panel.
+	const credit = page.locator('.maplibregl-ctrl-attrib');
+	await expect(credit).toBeVisible();
+	const attribution = await box(credit);
 	expect(bounds.y + bounds.height).toBeLessThan(attribution.y);
 });
 

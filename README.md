@@ -24,8 +24,10 @@ Live demo: [tellegen.dev](https://tellegen.dev). Documentation:
 
 ```sh
 npm install @tellegen/engine   # case parsing and wasm solves, framework agnostic
-npm install @tellegen/svelte   # map, panels, and solve card as Svelte components
 npm install @tellegen/webmcp   # WebMCP tools and host adapter
+# map, panels, and solve card as Svelte components, with the map libraries
+# they take as peer dependencies
+npm install @tellegen/svelte maplibre-gl @deck.gl/core @deck.gl/layers @deck.gl/maplibre
 ```
 
 `@tellegen/engine` exports case parsing, browser solving, the `Study` preview

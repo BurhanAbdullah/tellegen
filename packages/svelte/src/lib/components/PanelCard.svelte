@@ -158,7 +158,7 @@
 			<button
 				class="title"
 				aria-label={`Move ${panel.title} panel`}
-				title="Click to expand. Drag or use arrow keys to move. Open panel options to dock."
+				title="Drag or use arrow keys to move"
 				onpointerdown={(event) => start(event, 'move')}
 				onkeydown={key}
 				onclick={() => layout.activate(panel)}>{panel.title}</button

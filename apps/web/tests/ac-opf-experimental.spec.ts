@@ -39,12 +39,8 @@ test('the capability-gated selector runs AC OPF in the isolated WASI worker', as
 	);
 	await expect(page.getByRole('button', { name: 'LMP', exact: true })).toHaveCount(0);
 	await expect(page.locator('.error')).toHaveCount(0);
-	await expect(
-		page.getByRole('button', { name: 'save PowerIO module (.json)', exact: true })
-	).toBeDisabled();
-	await expect(
-		page.getByRole('button', { name: 'export committed state…', exact: true })
-	).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Save case', exact: true })).toBeDisabled();
+	await expect(page.getByRole('button', { name: 'Export as', exact: true })).toBeDisabled();
 	await expect(
 		page.getByText('Saving and exporting AC OPF cases is not supported yet.', { exact: true })
 	).toBeVisible();

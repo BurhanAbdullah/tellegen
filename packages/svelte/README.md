@@ -3,8 +3,12 @@
 Svelte components for tellegen maps, case panels, local case files, and browser solves.
 
 ```sh
-npm install @tellegen/svelte
+npm install @tellegen/svelte maplibre-gl @deck.gl/core @deck.gl/layers @deck.gl/maplibre
 ```
+
+`maplibre-gl` and the three `@deck.gl` packages are peer dependencies: the map
+shares their instances with the host through `extraLayers` and `onMapReady`, so
+the app installs them and resolves one copy of each.
 
 Import the component and stylesheet in your app:
 
@@ -42,6 +46,10 @@ remain in the browser on this path.
 - `orgLabel`
 - `showFooter`, default `true`
 - `theme`, `light` (default) or `dark`
+- `cartoApiKey`, the basemap key (see [Basemap](#basemap))
+
+`theme` and `cartoApiKey` follow their props. The others are read once, when
+the viewer mounts; remount it to change them.
 
 Use `TellegenProvider` and `TellegenShell` when state should survive route changes:
 
@@ -55,6 +63,11 @@ Use `TellegenProvider` and `TellegenShell` when state should survive route chang
   <TellegenShell />
 </TellegenProvider>
 ```
+
+The provider owns the controller and its cases. Unmounting it disposes the
+controller, which frees every case's browser Study and multiconductor session
+in the engine worker, so a provider that should keep its cases across pages
+belongs in a layout that stays mounted.
 
 ## Experimental AC OPF
 
@@ -138,6 +151,19 @@ inside `TellegenProvider`:
 <PanelFrame id="region" title="Region" side="left">...</PanelFrame>
 ```
 
+The components show data, labels and controls, not host copy. A host that
+wants a note under a local case's stats passes `ControlPanel` a `caseNote`
+snippet, which receives the case; `DropZone` renders its children under the
+drop prompt:
+
+```svelte
+<ControlPanel>
+  {#snippet caseNote(lc)}
+    <p>{lc.label} is a synthetic grid.</p>
+  {/snippet}
+</ControlPanel>
+```
+
 `ShellEnvironment` is renderless and keeps the compact-layout, pointer and
 viewport state in step, as the default shell does. `PanelHost` reads
 `--tellegen-dock-left`, `--tellegen-dock-right` and `--tellegen-dock-bottom`
@@ -208,7 +234,8 @@ besides its click callbacks:
 - `attribution`: `'compact'` (default) or `'full'`. There is no off switch.
 - `onMapReady(map, overlay)`: called with the MapLibre map and the deck
   overlay once they exist. It may return a cleanup, and it fires again after
-  a context-loss or basemap rebuild.
+  a context-loss or basemap rebuild. If it throws, the map and its window
+  and document listeners are still released when the map is torn down.
 - `onBasemapFallback(reason)`: the switch to the fallback happened.
   `reason.from` and `reason.to` name the two providers.
 - `onBasemapError(reason)`: no basemap can be shown. The network layers
@@ -216,7 +243,8 @@ besides its click callbacks:
   `reason.to` is `null`.
 
 `TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
-together with `theme`, to the default shell's map. A SvelteKit 3 host can
+together with `theme`, to the default shell's map. Both follow their props:
+changing either rebuilds that map in place. A SvelteKit 3 host can
 declare the key as an optional public build-time variable:
 
 ```ts
@@ -266,13 +294,13 @@ tiles, fonts and sprites are all fetched. The engine underneath also needs
 `script-src 'wasm-unsafe-eval'` (never `'unsafe-eval'`) and `worker-src
 'self'`, since its workers are same-origin.
 
-A host that passes its own deck.gl layers in `extraLayers`, or works with the
-MapLibre map from `onMapReady`, must resolve one copy each of
-`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`.
-When two deck.gl versions load, deck.gl throws "multiple versions detected".
-If the host's ranges differ from this package's (`^9.4.0` for deck.gl,
-`^6.15.0` for maplibre-gl), point both at one version with npm `overrides`
-(or `resolutions` in pnpm and Yarn).
+`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`
+are peer dependencies (`^9.4.0` for deck.gl, `^6.15.0` for maplibre-gl), so
+the host's copies are the ones the map uses, including the deck.gl layers it
+passes in `extraLayers` and the MapLibre map it gets from `onMapReady`. When
+two deck.gl versions load, deck.gl throws "multiple versions detected"; if
+another dependency pulls in a second copy, point both at one version with npm
+`overrides` (or `resolutions` in pnpm and Yarn).
 
 The map needs no Vite settings, in a build or in the dev server. MapLibre's
 worker comes from a `?worker&url` import, which a production build bundles

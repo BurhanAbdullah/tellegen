@@ -1,5 +1,42 @@
 # @tellegen/engine
 
+## 0.4.2
+
+### Patch Changes
+
+- [#223](https://github.com/eigenergy/tellegen/pull/223) [`880f6f3`](https://github.com/eigenergy/tellegen/commit/880f6f36be4039674660f84508c1565749117e46) Thanks [@samtalki](https://github.com/samtalki)! - The OpenStreetMap provenance block records the Overpass answer's licence notice (`osm3s.copyright`) as `copyright`.
+
+- [#222](https://github.com/eigenergy/tellegen/pull/222) [`869302d`](https://github.com/eigenergy/tellegen/commit/869302d90c96546b200b2350e78851331656f374) Thanks [@samtalki](https://github.com/samtalki)! - OpenStreetMap grids no longer inflate their generation. A plant and its mapped units count once (the larger of the plant's tag and the units' sum), and a generator with no output tag, mostly rooftop solar, adds nothing instead of an estimated 20 to 200 MW. The Overpass query fetches only generators rated in MW or GW, which shrinks answers (Luxembourg: 1.4 MB to 0.9 MB).
+
+## 0.4.1
+
+### Patch Changes
+
+- [#215](https://github.com/eigenergy/tellegen/pull/215) [`2abf68f`](https://github.com/eigenergy/tellegen/commit/2abf68f1d659f77344934e4200719d0c543194f5) Thanks [@samtalki](https://github.com/samtalki)! - The package exports its two large assets: `@tellegen/engine/wasm` is the
+  WebAssembly binary and `@tellegen/engine/places` the populated places table. A
+  host that preloads or budgets them names them by export (in Vite,
+  `import engineWasmUrl from "@tellegen/engine/wasm?url"`) instead of reaching
+  into `dist/wasm-pkg/tellegen_bg.wasm` and `dist/data/populated_places.json`.
+
+- [#213](https://github.com/eigenergy/tellegen/pull/213) [`0cc5d77`](https://github.com/eigenergy/tellegen/commit/0cc5d77bfb79760fd326943aacafd0c89db14640) Thanks [@samtalki](https://github.com/samtalki)! - Synthetic generation refuses an unknown key at every level of the request, not
+  only at the top, so a misspelt `limits`, `islands`, `osm`, `demand`,
+  `calibration`, `validation`, `region` or `fallback_from` option is an
+  `invalid_request` instead of being ignored. `limits.max_area_km2` must be
+  positive and finite, and `limits.max_branch_factor` finite and at least 1.
+
+  OpenStreetMap mode keeps to `limits.max_bus_count`. When the mapped substation
+  levels and converters make more buses than the cap, the lowest substation
+  levels are left out, one at a time, until they fit, and the
+  `osm_bus_count_capped` warning says which were kept. A region whose highest
+  level alone exceeds the cap is refused as `invalid_request`.
+
+  `data/populated_places.json` records its source: it is now an object that names
+  Natural Earth v5.1.2 and the SHA-256 of `ne_10m_populated_places_simple.geojson`,
+  with the same rows under `places`, written by
+  `scripts/derive-populated-places.py`. The report's `provenance.places` carries
+  the new `source` and `source_sha256`. `loadSyntheticPlaces` still accepts a bare
+  array of rows, whose provenance names no source.
+
 ## 0.4.0
 
 ### Minor Changes

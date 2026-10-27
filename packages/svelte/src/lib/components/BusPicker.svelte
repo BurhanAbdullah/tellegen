@@ -89,14 +89,14 @@
 			if (!e.currentTarget.contains(e.relatedTarget as Node | null)) open = false;
 		}}
 	>
-		<label class="mono dim" for="bus-lookup-input">bus lookup</label>
+		<label class="dim" for="bus-lookup-input">Bus lookup</label>
 		<input
 			id="bus-lookup-input"
 			class="mono"
 			type="text"
 			inputmode="numeric"
 			autocomplete="off"
-			placeholder="bus id"
+			placeholder="Bus ID"
 			role="combobox"
 			aria-keyshortcuts="/"
 			aria-expanded={open}
@@ -114,7 +114,7 @@
 			onkeydown={onKeydown}
 		/>
 		{#if open && results.length > 0}
-			<ul class="mono" id="bus-lookup-listbox" role="listbox" aria-label="matching buses">
+			<ul id="bus-lookup-listbox" role="listbox" aria-label="Matching buses">
 				{#each results as bus, i (bus.id)}
 					<li
 						id="bus-lookup-opt-{bus.id}"
@@ -126,12 +126,12 @@
 							commit(bus.id);
 						}}
 					>
-						bus {bus.id}
+						Bus <span class="mono">{bus.id}</span>
 					</li>
 				{/each}
 			</ul>
 		{:else if open && query.trim() !== ''}
-			<p class="mono dim empty">no bus matches "{query.trim()}"</p>
+			<p class="dim empty">No matching bus</p>
 		{/if}
 	</div>
 {/if}
@@ -156,7 +156,6 @@
 	label {
 		display: block;
 		font-size: 12px;
-		text-transform: uppercase;
 		margin-bottom: 3px;
 	}
 

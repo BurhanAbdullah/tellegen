@@ -1,5 +1,79 @@
 # @tellegen/svelte
 
+## 0.4.3
+
+### Patch Changes
+
+- [#219](https://github.com/eigenergy/tellegen/pull/219) [`5ebcad8`](https://github.com/eigenergy/tellegen/commit/5ebcad80c08495ec01d80dc06a885a2817585e40) Thanks [@samtalki](https://github.com/samtalki)! - The demand slider's Nearby and Full range buttons are named by their visible
+  text again. 0.4.2 labelled them "Nearby demand range" and "Full demand range",
+  which do not contain the visible "Full range", so speech input could not reach
+  the button by what it shows (WCAG 2.5.3, axe `label-content-name-mismatch`).
+  The "Demand range" group still names the pair.
+
+## 0.4.2
+
+### Patch Changes
+
+- [#211](https://github.com/eigenergy/tellegen/pull/211) [`1f30672`](https://github.com/eigenergy/tellegen/commit/1f30672b5f7b05e0314d05b1248c0bf8bb4fa291) Thanks [@samtalki](https://github.com/samtalki)! - Components show data, labels and controls, and leave notes to the host. The
+  "parsed in your browser" and "never uploaded" lines are gone from
+  `LocalCaseDetails`, `DropZone` and `AppHeader`, and coordinate provenance is a
+  labelled value (Coordinates: Generated, Synthetic layout, Manual layout, From
+  file or From the geographic file's name) beside a File row. The solver card lists
+  the calculation, iterations and time as labelled values, and the compute-off
+  notices no longer carry a contact address.
+
+  A host adds its own note through two optional snippets: `ControlPanel`'s
+  `caseNote`, rendered under a local case's stats with the case as its argument,
+  and `DropZone`'s children, rendered under the drop prompt.
+
+  Visible text is in sentence case, and the monospace face is kept for numbers
+  and identifiers. The case actions read Save case, Save solution, Export as and
+  Save geography (Save drawing in diagram view). Hosts that match on the old
+  strings need updating: the solver card no longer shows "OPF solve", the bus
+  lookup's accessible name is "Bus lookup", and the full demand range button is
+  named "Full demand range".
+
+- [#214](https://github.com/eigenergy/tellegen/pull/214) [`4ea6b1c`](https://github.com/eigenergy/tellegen/commit/4ea6b1c7126b348bc07b6ac66d211b6d261bcde8) Thanks [@samtalki](https://github.com/samtalki)! - `TellegenProvider` disposes its controller when it unmounts. The new
+  `Controller.dispose()` frees every case's browser Study, including one still
+  being built, and every multiconductor session, cancels their pending edits and
+  in-flight requests, and builds nothing afterwards, so a provider's Studies and
+  sessions no longer stay in the engine worker.
+
+  `theme` and `cartoApiKey` on `TellegenProvider` and `TellegenViewer` follow
+  their props: switching either updates the root `data-theme` attribute and
+  rebuilds the default shell's map in place. The other props are still read once,
+  at mount.
+
+  `TellegenMap` assigns its teardown before it calls `onMapReady`, so a host
+  callback that throws no longer keeps the MapLibre map and its window and
+  document listeners alive.
+
+- [#215](https://github.com/eigenergy/tellegen/pull/215) [`2abf68f`](https://github.com/eigenergy/tellegen/commit/2abf68f1d659f77344934e4200719d0c543194f5) Thanks [@samtalki](https://github.com/samtalki)! - `maplibre-gl`, `@deck.gl/core`, `@deck.gl/layers` and `@deck.gl/maplibre` are
+  peer dependencies instead of dependencies, with the same ranges. The map shares
+  their instances with the host through `extraLayers` and `onMapReady`, so the
+  host installs them and one copy of each resolves. npm 7 and later and pnpm 8
+  and later install missing peers on their own; with Yarn or
+  `--legacy-peer-deps`, add them to the app's dependencies.
+- Updated dependencies [[`2abf68f`](https://github.com/eigenergy/tellegen/commit/2abf68f1d659f77344934e4200719d0c543194f5), [`0cc5d77`](https://github.com/eigenergy/tellegen/commit/0cc5d77bfb79760fd326943aacafd0c89db14640)]:
+  - @tellegen/engine@0.4.1
+
+## 0.4.1
+
+### Patch Changes
+
+- [#209](https://github.com/eigenergy/tellegen/pull/209) [`107aa8c`](https://github.com/eigenergy/tellegen/commit/107aa8c9e68e7b19531f33ef18029a7cc7e081de) Thanks [@samtalki](https://github.com/samtalki)! - Show bus demand as colour. A `demand` display mode shades buses by their
+  demand in MW, committed changes included, on a square-root scale with a cool
+  viridis ramp that cannot be mistaken for the nodal value ramp.
+  `AppState.busSizing` chooses how markers are sized: `power` (the default)
+  scales them by the larger of demand and generation as before, and `uniform`
+  draws every bus alike. Uniform markers on the map keep one ground radius
+  between 2 and 4.5 pixels, so a whole country reads as a mesh with its lines
+  showing and a closer view as distinct buses. Changing the calculation keeps a
+  demand colouring, and the bus tooltip does not repeat demand under it.
+  `@tellegen/svelte/map` exports `busMarkerRadius`, `busRadiusFor`,
+  `demandColor`, `demandDomain`, `demandGradient`, `UNIFORM_BUS_RADIUS`,
+  `UNIFORM_BUS_MIN_RADIUS` and `UNIFORM_BUS_GROUND_RADIUS`.
+
 ## 0.4.0
 
 ### Minor Changes

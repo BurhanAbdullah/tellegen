@@ -95,8 +95,10 @@ fn the_fixture_maps_to_a_grid_that_solves() {
     assert_eq!(hvdc.len(), 1);
     assert_eq!((hvdc[0].circuits, hvdc[0].circuit_index), (1, 1));
 
-    // Mapped plants: 2x600 MW coal at A, 300 MW wind at B, an untagged solar
-    // generator at E (estimated); makeup covers the rest of the reserve margin.
+    // Mapped plants: 2x600 MW coal at A (its two mapped 600 MW units are the
+    // same capacity), 300 MW wind at B, and an untagged solar plant at E
+    // (estimated) with an untagged solar generator beside it (left out); makeup
+    // covers the rest of the reserve margin.
     assert_eq!(count(&report, "plants_snapped"), 3);
     assert_eq!(count(&report, "plants_estimated"), 1);
     let coal: f64 = elements
@@ -179,6 +181,69 @@ fn island_policies() {
         .iter()
         .all(|i| i.status != "infeasible" && i.status != "no_generation"));
     assert_eq!(dc.status, SolveOutcome::Optimal, "{:?}", dc.message);
+}
+
+#[test]
+fn the_bus_cap_drops_the_lowest_levels_first() {
+    // Nine buses at 110 kV and above. A cap of eight drops the 110 kV level:
+    // sites A, B and C keep their 380 kV buses, and the two converters stay.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 8;
+    let (module, report) = generate(req, common::places(), Some(FIXTURE.to_owned())).unwrap();
+    let net = module.value();
+    assert_eq!(
+        net.buses().len(),
+        5,
+        "{:?}",
+        net.buses().iter().map(|b| &b.name).collect::<Vec<_>>()
+    );
+    assert!(net.buses().iter().all(|b| b.base_kv == 380.0
+        || b.name
+            .as_deref()
+            .is_some_and(|n| n.starts_with("OSM Converter"))));
+    assert_eq!(count(&report, "substation_sites"), 3);
+    assert_eq!(count(&report, "converters"), 2);
+    assert_eq!(count(&report, "transformers"), 0);
+    let capped = report
+        .warnings
+        .iter()
+        .find(|w| w.code == "osm_bus_count_capped")
+        .expect("the cap is reported");
+    assert!(
+        capped.message.contains("9 OpenStreetMap buses"),
+        "{}",
+        capped.message
+    );
+    assert!(
+        capped.message.contains("below 380 kV"),
+        "{}",
+        capped.message
+    );
+
+    // At the cap nothing is dropped.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 9;
+    let (module, report) = generate(req, common::places(), Some(FIXTURE.to_owned())).unwrap();
+    assert_eq!(module.value().buses().len(), 9);
+    assert!(!report
+        .warnings
+        .iter()
+        .any(|w| w.code == "osm_bus_count_capped"));
+}
+
+#[test]
+fn a_highest_level_over_the_bus_cap_is_refused() {
+    // The 380 kV level and the converters alone make five buses.
+    let mut req = request(OsmIslands::Connect);
+    req.limits.max_bus_count = 4;
+    let err = generate(req, common::places(), Some(FIXTURE.to_owned()))
+        .err()
+        .unwrap();
+    assert!(matches!(err, SynthError::InvalidRequest(_)), "{err}");
+    assert!(
+        err.to_string().contains("limits.max_bus_count = 4"),
+        "{err}"
+    );
 }
 
 #[test]

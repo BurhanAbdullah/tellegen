@@ -56,6 +56,7 @@ export type {
   Network,
   NetworkBranch,
   NetworkBus,
+  PowerFlowStart,
   ProblemCaps,
   SensRequest,
   SensitivityColumn,

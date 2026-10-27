@@ -22,34 +22,33 @@
 	const neutralPos = $derived(thumbAlignedPos(neutralFrac));
 	const fillLo = $derived(valFrac < neutralFrac ? valPos : neutralPos);
 	const fillHi = $derived(valFrac < neutralFrac ? neutralPos : valPos);
-	const sliderTip =
-		'The black tick marks the last committed rating change. Drag the knob to preview a new thermal rating; release to solve and move the tick to that point.';
-	const disabledTip = "this line's rating is synthesized; not adjustable";
+	const sliderTip = 'Drag to preview, release to solve. The tick marks the committed rating.';
+	const disabledTip = 'Synthesized rating; not adjustable';
 	const scoreTip =
-		'Gradient estimates the declared objective change versus base before the solve finishes, from the engine preview at the committed point. Exact is the resolved OPF objective change.';
+		'Gradient: first-order estimate from the committed point. Exact: solved objective change.';
 </script>
 
 {#if ctrl.activeSolvable}
 	{@const c = ctrl.activeSolvable}
 	{@const branch = ctrl.selectedBranchData}
 	<div class="slider-block">
-		<div class="slider-head mono">
-			<span>&Delta; rating</span>
-			<span class="val">{signed(ctrl.ratingSliderValue)} MW</span>
+		<div class="slider-head">
+			<span>Rating change</span>
+			<span class="val mono">{signed(ctrl.ratingSliderValue)} MW</span>
 		</div>
-		<div class="line-row mono">
+		<div class="line-row">
 			{#if branch}
 				<span class="dim"
-					>line {branch.from}&#8201;&ndash;&#8201;{branch.to}, {fmt.format(branch.rate_mw)} MW</span
+					>Line <span class="mono"
+						>{branch.from}&#8201;&ndash;&#8201;{branch.to}, {fmt.format(branch.rate_mw)} MW</span
+					></span
 				>
 			{/if}
-			<span class="dim">
-				{#if bounds.disabled}
-					not adjustable
-				{:else}
-					{fmt.format(bounds.min)} to +{fmt.format(bounds.max)} MW
-				{/if}
-			</span>
+			{#if bounds.disabled}
+				<span class="dim">Not adjustable</span>
+			{:else}
+				<span class="mono dim">{fmt.format(bounds.min)} to +{fmt.format(bounds.max)} MW</span>
+			{/if}
 		</div>
 		<div
 			class="slider-track"
@@ -63,7 +62,7 @@
 				step="any"
 				disabled={bounds.disabled}
 				bind:value={ctrl.ratingSliderCurrent, ctrl.setRatingPreview}
-				aria-label="rating delta at selected line"
+				aria-label="Rating delta at selected line"
 				onpointerdown={() => ctrl.setRatingPreview(ctrl.ratingSliderValue)}
 				onkeydown={(e) => {
 					const next = sliderKeyValue(e.key, ctrl.ratingSliderValue, bounds.min, bounds.max);
@@ -80,18 +79,18 @@
 			/>
 		</div>
 		<div class="rating-feedback" class:idle={!ctrl.previewing && !ctrl.isPerturbed(c)}>
-			<p class="pred mono dim" aria-hidden={!(ctrl.predictedDeltaObj !== null && ctrl.previewing)}>
+			<p class="pred dim" aria-hidden={!(ctrl.predictedDeltaObj !== null && ctrl.previewing)}>
 				{#if ctrl.predictedDeltaObj !== null && ctrl.previewing}
-					predicted &Delta;objective {signed(ctrl.predictedDeltaObj)}
+					Predicted objective change <span class="mono">{signed(ctrl.predictedDeltaObj)}</span>
 				{:else}
 					&nbsp;
 				{/if}
 			</p>
-			<p class="score mono" aria-hidden={!(ctrl.gradientScore && ctrl.isPerturbed(c))}>
+			<p class="score" aria-hidden={!(ctrl.gradientScore && ctrl.isPerturbed(c))}>
 				{#if ctrl.gradientScore && ctrl.isPerturbed(c)}
 					<span title={scoreTip}>
-						gradient {signed(ctrl.gradientScore.pred)}, exact {signed(ctrl.gradientScore.exact)} objective
-						units
+						Gradient <span class="mono">{signed(ctrl.gradientScore.pred)}</span>, exact
+						<span class="mono">{signed(ctrl.gradientScore.exact)}</span> objective units
 					</span>
 				{:else}
 					&nbsp;
@@ -99,7 +98,7 @@
 			</p>
 			<div class="reset-row">
 				{#if ctrl.isPerturbed(c)}
-					<button class="reset mono" onclick={() => ctrl.resetCase(c)}>reset rating</button>
+					<button class="reset" onclick={() => ctrl.resetCase(c)}>Reset rating</button>
 				{/if}
 			</div>
 		</div>

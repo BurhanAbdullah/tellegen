@@ -23,48 +23,43 @@
 	const neutralPos = $derived(thumbAlignedPos(neutralFrac));
 	const fillLo = $derived(valFrac < neutralFrac ? valPos : neutralPos);
 	const fillHi = $derived(valFrac < neutralFrac ? neutralPos : valPos);
-	const sliderTip =
-		'The black tick marks the last committed demand. Drag the knob to preview a new demand; release to solve and move the tick to that point.';
-	const disabledTip = 'this analysis bus is display-only; demand is not adjustable';
-	const scoreTip =
-		'Gradient estimates the declared objective change before the solve finishes. It uses the selected bus LMP times the demand step, plus local curvature when the preview engine is unavailable. Exact is the resolved OPF objective change.';
+	const sliderTip = 'Drag to preview, release to solve. The tick marks the committed demand.';
+	const disabledTip = 'Display-only bus; demand is fixed';
+	const scoreTip = 'Gradient: first-order estimate from the LMP. Exact: solved objective change.';
 </script>
 
 {#if ctrl.activeSolvable}
 	{@const c = ctrl.activeSolvable}
 	<div class="slider-block">
-		<div class="slider-head mono">
-			<span>&Delta; demand</span>
-			<span class="val">{signed(ctrl.sliderValue)} MW</span>
+		<div class="slider-head">
+			<span>Demand change</span>
+			<span class="val mono">{signed(ctrl.sliderValue)} MW</span>
 		</div>
 		<div class="range-mode">
-			<div class="segment mono" role="group" aria-label="demand range">
+			<div class="segment" role="group" aria-label="Demand range">
 				<button
 					type="button"
 					class:active={app.demandRangeMode === 'local'}
 					aria-pressed={app.demandRangeMode === 'local'}
-					aria-label="nearby demand range"
 					{disabled}
-					title="range near the selected demand setting"
-					onclick={() => ctrl.setDemandRangeMode('local')}>nearby</button
+					title="Range near the committed demand"
+					onclick={() => ctrl.setDemandRangeMode('local')}>Nearby</button
 				>
 				<button
 					type="button"
 					class:active={app.demandRangeMode === 'full'}
 					aria-pressed={app.demandRangeMode === 'full'}
-					aria-label="full range of demand"
 					{disabled}
-					title="range from zero load to the local physical limit"
-					onclick={() => ctrl.setDemandRangeMode('full')}>full range</button
+					title="Zero load to the local physical limit"
+					onclick={() => ctrl.setDemandRangeMode('full')}>Full range</button
 				>
 			</div>
-			<span class="mono dim">
-				{#if disabled}
-					not adjustable
-				{:else}
-					{fmt.format(ctrl.sliderMin)} to {fmt.format(ctrl.sliderMax)} MW
-				{/if}
-			</span>
+			{#if disabled}
+				<span class="dim">Not adjustable</span>
+			{:else}
+				<span class="mono dim">{fmt.format(ctrl.sliderMin)} to {fmt.format(ctrl.sliderMax)} MW</span
+				>
+			{/if}
 		</div>
 		<div
 			class="slider-track"
@@ -78,7 +73,7 @@
 				step="any"
 				{disabled}
 				bind:value={ctrl.sliderCurrent, ctrl.setSliderPreview}
-				aria-label="demand delta at selected bus"
+				aria-label="Demand delta at selected bus"
 				onpointerdown={() => ctrl.setSliderPreview(ctrl.sliderValue)}
 				onkeydown={(e) => {
 					const next = sliderKeyValue(e.key, ctrl.sliderValue, ctrl.sliderMin, ctrl.sliderMax);
@@ -95,18 +90,18 @@
 			/>
 		</div>
 		<div class="demand-feedback" class:idle={!ctrl.previewing && !ctrl.isPerturbed(c)}>
-			<p class="pred mono dim" aria-hidden={!(ctrl.predictedDeltaObj !== null && ctrl.previewing)}>
+			<p class="pred dim" aria-hidden={!(ctrl.predictedDeltaObj !== null && ctrl.previewing)}>
 				{#if ctrl.predictedDeltaObj !== null && ctrl.previewing}
-					predicted &Delta;objective {signed(ctrl.predictedDeltaObj)}
+					Predicted objective change <span class="mono">{signed(ctrl.predictedDeltaObj)}</span>
 				{:else}
 					&nbsp;
 				{/if}
 			</p>
-			<p class="score mono" aria-hidden={!(ctrl.gradientScore && ctrl.isPerturbed(c))}>
+			<p class="score" aria-hidden={!(ctrl.gradientScore && ctrl.isPerturbed(c))}>
 				{#if ctrl.gradientScore && ctrl.isPerturbed(c)}
 					<span title={scoreTip}>
-						gradient {signed(ctrl.gradientScore.pred)}, exact {signed(ctrl.gradientScore.exact)} objective
-						units
+						Gradient <span class="mono">{signed(ctrl.gradientScore.pred)}</span>, exact
+						<span class="mono">{signed(ctrl.gradientScore.exact)}</span> objective units
 					</span>
 				{:else}
 					&nbsp;
@@ -114,7 +109,7 @@
 			</p>
 			<div class="reset-row">
 				{#if ctrl.isPerturbed(c)}
-					<button class="reset mono" onclick={() => ctrl.resetCase(c)}>reset demand</button>
+					<button class="reset" onclick={() => ctrl.resetCase(c)}>Reset demand</button>
 				{/if}
 			</div>
 		</div>
