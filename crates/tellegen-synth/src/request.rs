@@ -14,6 +14,7 @@ use crate::error::SynthError;
 /// ring, later rings are holes) and a label for reports and bus names.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct Region {
     /// GeoJSON geometry object (`{"type":"Polygon","coordinates":[...]}`).
     pub geometry: serde_json::Value,
@@ -128,7 +129,7 @@ impl Fuel {
 /// Peak demand of the region.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DemandSpec {
     /// Peak MW from the population of the places inside the region. Each place
     /// draws its country's average load per head of the places table (the
@@ -179,6 +180,7 @@ pub enum FarIslandPolicy {
 /// Island handling for synthetic generation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct IslandOptions {
     /// Landmasses whose nearest buses are closer than this are joined by an
     /// interconnect corridor (submarine or overhead), like Sicily or the Danish
@@ -221,6 +223,7 @@ pub enum OsmIslands {
 /// Thresholds for mapping an Overpass document onto a grid.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct OsmOptions {
     /// Lines and substations below this nominal voltage are distribution and
     /// are dropped.
@@ -296,6 +299,7 @@ impl Default for OsmOptions {
 /// `[low, high]` of the published or measured statistic.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct CalibrationTargets {
     /// Identifier of the reference set (`reference_stats.json` entry).
     pub set_id: String,
@@ -343,6 +347,7 @@ impl CalibrationTargets {
 /// OPF-in-the-loop calibration controls.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct CalibrationOptions {
     #[serde(default = "default_true")]
     pub enabled: bool,
@@ -379,6 +384,7 @@ impl Default for CalibrationOptions {
 /// Validation controls.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct ValidationOptions {
     #[serde(default = "default_true")]
     pub run_dc_opf: bool,
@@ -414,12 +420,18 @@ impl Default for ValidationOptions {
 /// Caps that keep a request inside what a browser session can afford.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct Limits {
+    /// Bus cap. A synthetic grid's count is held at it (`bus_count_capped`);
+    /// an OpenStreetMap grid drops its lowest voltage levels until it fits
+    /// (`osm_bus_count_capped`) and is refused when its highest level alone
+    /// exceeds it.
     #[serde(default = "default_max_bus_count")]
     pub max_bus_count: u32,
-    /// Spherical area cap of the region, km².
+    /// Spherical area cap of the region, km²; positive and finite.
     #[serde(default = "default_max_area_km2")]
     pub max_area_km2: f64,
+    /// Upper bound of `branch_factor`; finite and at least 1.
     #[serde(default = "default_max_branch_factor")]
     pub max_branch_factor: f64,
 }
@@ -451,6 +463,7 @@ impl Default for Limits {
 /// echoed in the report's provenance.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct FallbackFrom {
     pub source: Source,
     pub reason: FallbackReason,
@@ -470,7 +483,8 @@ pub enum FallbackReason {
     OverpassFailed,
 }
 
-/// The one generation request.
+/// The one generation request. Unknown keys are refused here and in every
+/// nested option, so a misspelt option fails instead of taking its default.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -566,12 +580,26 @@ impl SynthRequest {
     /// context stage.
     pub fn validate(&self) -> Result<(), SynthError> {
         let bad = |m: String| Err(SynthError::InvalidRequest(m));
+        // The upper bounds below sit far outside any real system; they keep a
+        // huge but finite number from overflowing later arithmetic.
+        if self.limits.max_bus_count == 0 {
+            return bad("limits.max_bus_count must be at least 1".into());
+        }
+        // A NaN cap compares false against every area and would switch the
+        // area check off.
+        if !(self.limits.max_area_km2.is_finite() && self.limits.max_area_km2 > 0.0) {
+            return bad("limits.max_area_km2 must be a positive finite number".into());
+        }
+        // `branch_factor` must lie in 1..=max, which is empty below 1.
+        if !(self.limits.max_branch_factor.is_finite() && self.limits.max_branch_factor >= 1.0) {
+            return bad("limits.max_branch_factor must be a finite number of at least 1".into());
+        }
         if !self
             .voltage_levels_kv
             .iter()
-            .all(|v| v.is_finite() && *v > 0.0)
+            .all(|v| v.is_finite() && (1.0..=1500.0).contains(v))
         {
-            return bad("voltage levels must be positive finite numbers".into());
+            return bad("voltage levels must be between 1 and 1500 kV".into());
         }
         if let Some(n) = self.target_bus_count {
             if n < 1 || n > self.limits.max_bus_count {
@@ -594,16 +622,16 @@ impl SynthRequest {
                 per_capita_kw,
                 peak_factor,
             } => {
-                if per_capita_kw.is_some_and(|kw| !(kw.is_finite() && kw > 0.0)) {
-                    return bad("demand.per_capita_kw must be positive".into());
+                if per_capita_kw.is_some_and(|kw| !(kw.is_finite() && kw > 0.0 && kw <= 100.0)) {
+                    return bad("demand.per_capita_kw must be positive and at most 100".into());
                 }
-                if !(peak_factor.is_finite() && *peak_factor >= 1.0) {
-                    return bad("demand.peak_factor must be at least 1".into());
+                if !(peak_factor.is_finite() && (1.0..=10.0).contains(peak_factor)) {
+                    return bad("demand.peak_factor must be between 1 and 10".into());
                 }
             }
             DemandSpec::TotalMw { mw } => {
-                if !(mw.is_finite() && *mw >= 0.0) {
-                    return bad("demand.mw must be a non-negative finite number".into());
+                if !(mw.is_finite() && (0.0..=1.0e7).contains(mw)) {
+                    return bad("demand.mw must be between 0 and 1e7".into());
                 }
             }
         }
@@ -637,9 +665,6 @@ impl SynthRequest {
             if !(band[0].is_finite() && band[1].is_finite() && 0.0 < band[0] && band[0] < band[1]) {
                 return bad(format!("{name} must be an increasing positive pair"));
             }
-        }
-        if self.limits.max_bus_count == 0 {
-            return bad("limits.max_bus_count must be at least 1".into());
         }
         crate::geom::region::validate_geometry(&self.region.geometry)
             .map_err(SynthError::InvalidRequest)?;

@@ -9,15 +9,10 @@
 {#if ctrl.activeSolvable}
 	{@const c = ctrl.activeSolvable}
 	<div class="formulation">
-		<label
-			class="formulation-row mono"
-			for="formulation-select"
-			title={formulationHint(c.formulation)}
-		>
+		<label class="formulation-row" for="formulation-select" title={formulationHint(c.formulation)}>
 			<span>Calculation</span>
 			<select
 				id="formulation-select"
-				class="mono"
 				disabled={c.solving}
 				value={c.formulation}
 				onchange={(e) => ctrl.changeFormulation(c, e.currentTarget.value as Formulation)}
@@ -52,7 +47,7 @@
 	}
 
 	.formulation-row select {
-		font-family: var(--font-mono);
+		font-family: inherit;
 		font-size: 13px;
 		padding: 3px 22px 3px 8px;
 		border: 1px solid var(--line);

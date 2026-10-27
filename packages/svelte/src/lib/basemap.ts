@@ -305,7 +305,8 @@ function errorStatus(error: unknown): number | undefined {
  * 2. a source or tile error with status 401, 403 or 429, or a message naming
  *    an API key, forbidden or unauthorized access: switch;
  * 3. more than six tile fetch failures within ten seconds while no tile of
- *    any source has arrived: switch;
+ *    any source has arrived: switch. A failure is a network error with no
+ *    status, or an HTTP 5xx answer;
  * 4. a WebGL error: report failure, no style can help;
  * 5. everything else is logged the way MapLibre logs an unhandled error,
  *    because registering this listener silences that default.
@@ -380,7 +381,9 @@ export function attachBasemapFallback(
 			fallBack({ kind: 'source-forbidden', message, status: status ?? 0, sourceId });
 			return;
 		}
-		if (event.tile && (status === undefined || status === 0) && NETWORK_MESSAGE.test(message)) {
+		const transient =
+			status === undefined || status === 0 ? NETWORK_MESSAGE.test(message) : status >= 500;
+		if (event.tile && transient) {
 			const t = now();
 			if (tileFailures === 0 || t - tileWindowStart > TILE_FAILURE_WINDOW_MS) {
 				tileWindowStart = t;

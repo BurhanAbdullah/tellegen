@@ -1,10 +1,13 @@
 <script lang="ts">
-	import { untrack, type Snippet } from 'svelte';
+	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import {
+		resolveCartoApiKey,
 		resolveTellegenUiConfig,
+		resolveTheme,
 		setAppState,
 		setController,
 		setUiConfig,
+		type TellegenUiConfig,
 		type TellegenUiOptions
 	} from './context.svelte.js';
 	import { createController } from './controller.svelte.js';
@@ -28,18 +31,28 @@
 		children
 	}: Props = $props();
 
-	const config = untrack(() =>
-		resolveTellegenUiConfig({
-			apiBase,
-			loadDefaultCases,
-			docsHref,
-			orgHref,
-			orgLabel,
-			showFooter,
-			theme,
-			cartoApiKey
-		})
-	);
+	// Read once, at mount: `apiBase` and `loadDefaultCases` configure the
+	// controller this provider owns, and the links and footer are fixed copy.
+	// `theme` and `cartoApiKey` stay live, so a host can switch them and the
+	// root attribute and the default shell's map follow.
+	const config: TellegenUiConfig = {
+		...untrack(() =>
+			resolveTellegenUiConfig({
+				apiBase,
+				loadDefaultCases,
+				docsHref,
+				orgHref,
+				orgLabel,
+				showFooter
+			})
+		),
+		get theme() {
+			return resolveTheme(theme);
+		},
+		get cartoApiKey() {
+			return resolveCartoApiKey(cartoApiKey);
+		}
+	};
 	const app = createAppState();
 	const ctrl = createController(app, {
 		apiBase: config.apiBase,
@@ -54,6 +67,9 @@
 	setUiConfig(config);
 	setAppState(app);
 	setController(ctrl);
+	// The controller's Studies and multiconductor sessions live in the engine
+	// worker; release them with the provider.
+	onDestroy(() => ctrl.dispose());
 
 	// The dark tokens in styles.css hang off `:root[data-theme='dark']`. Set it
 	// only for dark, and only while mounted, so a light host is untouched. A

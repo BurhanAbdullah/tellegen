@@ -110,12 +110,11 @@ type JsonDropRoute =
 
 /** Terminal copy when nothing can solve. Two facts decide the wording: whether
  * this browser's engine failure is known permanent, and that the server
- * declines compute. Server compute exists in the codebase but ships disabled;
- * interest routes to email until it is offered. */
+ * declines compute. */
 const WASM_REQUIRED_NOTICE =
-	'this browser cannot run the WebAssembly engine that solves locally, and server side compute is disabled in this demo. it may be offered later; to express interest, email Samuel Talkington at talks@umich.edu';
+	'This browser cannot run the WebAssembly engine, and server compute is disabled';
 const COMPUTE_OFF_NOTICE =
-	'solving in this browser did not complete, and server side compute is disabled in this demo. retry to run the browser engine again, or email Samuel Talkington at talks@umich.edu to express interest in server compute';
+	'The browser solve did not complete, and server compute is disabled. Retry to run it again';
 
 /** Upper bound on waiting for a camera fly-to before the sensitivity solve
  * starts anyway: a missing map or a cue that never appears must not stall the
@@ -272,6 +271,8 @@ export class Controller {
 	// File reads and worker messages retain whole buffers. Admit one validated
 	// batch at a time so repeated drops cannot multiply the aggregate byte cap.
 	private readonly dropBatchGate = new DropBatchGate();
+	// Set by dispose(). Not $state; nothing renders it.
+	disposed = false;
 
 	nearbyRangeAnchor = $state<DemandRangeAnchor | null>(null);
 	// Default cases the user has closed; drives the restore affordance. Seeded in load().
@@ -457,6 +458,8 @@ export class Controller {
 	// under that formulation. Returns null when the sens module can't load; the caller then
 	// falls back to the server, surfacing solveFallbackReason.
 	async getStudy(c: SolvableCase, studyInputJson: string): Promise<BrowserStudy | null> {
+		// A disposed controller builds nothing that would outlive it.
+		if (this.disposed) return null;
 		const latched = this.studyUnavailable.get(c);
 		if (latched) {
 			c.solveFallbackReason ??= latched;
@@ -539,6 +542,26 @@ export class Controller {
 	): Promise<SensitivityColumn | null> {
 		const study = await this.getStudy(c, studyInputJson);
 		return study ? study.sensitivity(c.id, this.caseDeltas(c), this.caseRatings(c), target) : null;
+	}
+
+	/** Release every engine handle this controller holds: each case's browser
+	 * Study, including one still being built, and each multiconductor
+	 * session, with their pending edits and in-flight requests.
+	 * `TellegenProvider` calls it when it unmounts; the controller builds no
+	 * Study and keeps no new session afterwards. */
+	dispose() {
+		if (this.disposed) return;
+		this.disposed = true;
+		this.abort?.abort();
+		this.abort = null;
+		for (const c of [...this.app.cases, ...this.app.localCases]) this.disposeStudy(c);
+		for (const c of this.app.multiCases) {
+			c.solveAbort?.abort();
+			if (c.mcEditTimer !== null) clearTimeout(c.mcEditTimer);
+			c.mcEditTimer = null;
+			c.mcSession?.free();
+			c.mcSession = null;
+		}
 	}
 
 	// Release a case's Study (if any) when the case is removed.
@@ -692,7 +715,8 @@ export class Controller {
 		if (values.length === 0) return null;
 		const domain = scalarDomain(this.activeDisplay.mode, values);
 		const { min, max } = extent(values);
-		const flatThreshold = this.activeDisplay.mode === 'price' ? 1 : 1e-5;
+		const flatThreshold =
+			this.activeDisplay.mode === 'price' || this.activeDisplay.mode === 'demand' ? 1 : 1e-5;
 		return {
 			lo: { value: domain.lo, clamped: min < domain.lo - flatThreshold / 20 },
 			hi: { value: domain.hi, clamped: max > domain.hi + flatThreshold / 20 },
@@ -1786,6 +1810,13 @@ export class Controller {
 			if (seq !== (c.solveSeq ?? 0)) return;
 			if (!studyInputJson) {
 				c.solveFallbackReason ??= 'PowerIO module unavailable';
+				// The server fallback only implements DC OPF. Preserve the requested
+				// calculation when its browser input cannot be loaded.
+				if (c.formulation !== 'dcopf') {
+					c.solving = false;
+					this.app.error = `${this.caseName(c)}: ${formulationLabel(c.formulation)} requires its PowerIO module; ${c.solveFallbackReason}`;
+					return;
+				}
 				if (this.hasRatingEdits(c)) {
 					c.solving = false;
 					this.app.error = this.ratingEditsFallbackError(c);
@@ -1986,7 +2017,9 @@ export class Controller {
 		}
 		if (FORMULATIONS.find((f) => f.id === next)?.disabled) return;
 		c.formulation = next;
-		this.app.displayMode = next === 'acpf' ? 'voltage' : 'price';
+		// Demand does not depend on the calculation, so a demand colouring stays.
+		if (this.app.displayMode !== 'demand')
+			this.app.displayMode = next === 'acpf' ? 'voltage' : 'price';
 		this.bumpRevision(c);
 		// The committed point carries over (same demand), but the model and its solution do
 		// not; drop the Study and the cached solutions so they rebuild under `next`.
@@ -2383,7 +2416,8 @@ export class Controller {
 		options: McPfOptions = {},
 		signal?: AbortSignal
 	): Promise<McPfSummary> => {
-		if (signal?.aborted) throw new DOMException('Calculation cancelled', 'AbortError');
+		if (signal?.aborted || this.disposed)
+			throw new DOMException('Calculation cancelled', 'AbortError');
 		if (c.solving) throw new Error('A calculation is already running for this case');
 		const unavailable = c.mcPfReason;
 		if (unavailable) {
@@ -2429,7 +2463,9 @@ export class Controller {
 					snapshot?.result ?? (await this.mcTransport.solveMcModule(input, options, abort.signal));
 				result = summarizeMcPfResult(fullResult);
 			}
-			if (abort.signal.aborted) throw new DOMException('Calculation cancelled', 'AbortError');
+			// dispose() aborts too; a session that arrives after it is freed below.
+			if (abort.signal.aborted || this.disposed)
+				throw new DOMException('Calculation cancelled', 'AbortError');
 			if (
 				seq !== c.solveSeq ||
 				(retainedAtStart ? retainedAtStart !== c.mcSession : input !== c.moduleJson) ||

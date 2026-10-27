@@ -871,7 +871,7 @@ mod tests {
     fn conic_tier1_slack_columns_vanish() {
         // On the loose base case these constraints are slack (or carry zero dual, like
         // the costless reactive bounds), so their columns are identically zero and
-        // finite — the norm-floor case of the parity contract.
+        // finite — the norm-floor case of the parity check.
         let net = parse_case9_ac();
         let sol = socwr_opf(&net).expect("socwr");
         let sys = ConicKkt::new(&net, &sol).expect("kkt");

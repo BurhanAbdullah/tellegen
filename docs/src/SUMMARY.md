@@ -22,7 +22,7 @@
 - [Architecture](architecture.md)
   - [Release Architecture](release-architecture.md)
   - [Formulations](formulations.md)
-  - [Sensitivity contract](sensitivity-contract.md)
+  - [Sensitivity interface](sensitivity-interface.md)
   - [Methodology](methodology.md)
   - [Validation](validation.md)
   - [Benchmark Results](benchmark-results.md)

@@ -32,8 +32,10 @@ archives.
 
 The synthetic grid generator ships `crates/tellegen-synth/data/populated_places.json`
 (copied into `@tellegen/engine` as `data/populated_places.json`): name,
-longitude, latitude, `pop_max` and country of the Natural Earth 1:10m
-populated places. Natural Earth data is in the public domain
+longitude, latitude, `pop_max` and country of the Natural Earth v5.1.2 1:10m
+populated places, derived by `scripts/derive-populated-places.py` from
+`ne_10m_populated_places_simple.geojson`, whose SHA-256 the table records.
+Natural Earth data is in the public domain
 ([naturalearthdata.com](https://www.naturalearthdata.com/about/terms-of-use/)).
 
 It also ships `crates/tellegen-synth/data/national_demand.json`, compiled
@@ -41,9 +43,14 @@ into the engine: each country's annual electricity demand and population,
 derived by `scripts/derive-national-demand.py` from Our World in Data's
 energy dataset ([github.com/owid/energy-data](https://github.com/owid/energy-data)),
 whose `electricity_demand` column comes from Ember's Yearly Electricity Data.
-Both are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
-Ember, *Yearly Electricity Data*; Our World in Data, *Energy dataset*. The
-table records the SHA-256 of the CSV it was derived from.
+Ember, *Yearly Electricity Data*, and Our World in Data, *Energy dataset*, are
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the
+table keeps each country's latest year, so changes were made. The
+`population` column is Our World in Data's population series, compiled from
+the sources listed at
+[ourworldindata.org/population-sources](https://ourworldindata.org/population-sources)
+and subject to their terms. The table records the SHA-256 of the CSV it was
+derived from.
 
 `crates/tellegen-synth/data/country_areas.json`, also compiled into the
 engine, gives each country's area, measured by
@@ -100,3 +107,11 @@ are recoloured.
 The attribution control shows the credits of whichever provider is on screen
 and cannot be switched off. Keep it visible in any hosted demo or derivative
 deployment.
+
+## OpenStreetMap Mode
+
+A grid generated with `source: "osm"` contains data derived from
+OpenStreetMap, © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+contributors, available under the Open Database License (ODbL) 1.0. Check the
+ODbL's attribution and share-alike terms before redistributing such a module
+or its exports.

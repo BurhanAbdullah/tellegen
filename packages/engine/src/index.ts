@@ -27,20 +27,20 @@ import type {
   SolveRequest,
   SolveResponse,
   SolveIteration,
-} from "./generated/contracts.js";
+} from "./generated/api-types.js";
 import type {
   ErrorPayload as SynthErrorPayload,
   GenerationReport,
   Stage as SynthStage,
   StepOutcome,
   SynthRequest,
-} from "./generated/synth-contracts.js";
+} from "./generated/synth-types.js";
 export {
-  CONTRACT_SOURCE_SHA256,
-  CONTRACT_VERSION,
+  API_SOURCE_SHA256,
+  ENGINE_VERSION,
   FORMULATION_IDS,
   SOLVE_STATUSES,
-} from "./generated/contracts.js";
+} from "./generated/api-types.js";
 export { MAX_ENGINE_INPUT_BYTES } from "./input-limit.js";
 
 export type {
@@ -51,6 +51,7 @@ export type {
   Network,
   NetworkBranch,
   NetworkBus,
+  PowerFlowStart,
   ProblemCaps,
   SensRequest,
   SensitivityColumn,
@@ -59,7 +60,7 @@ export type {
   SolveIteration,
   SolveRequest,
   SolveResponse,
-} from "./generated/contracts.js";
+} from "./generated/api-types.js";
 
 /** One structured PowerIO finding. */
 export interface PowerIoDiagnostic {
@@ -1659,7 +1660,7 @@ export class BrowserStudy {
   /** The Study's current exact solution. Called immediately after Study creation
    * to cache the base point for formulation comparisons. */
   async currentView(): Promise<
-    import("./generated/study-contracts.js").SolveResponse
+    import("./generated/study-types.js").SolveResponse
   > {
     return JSON.parse(
       expectText(
@@ -2327,13 +2328,13 @@ export type {
   StudyObjective,
   StateNode,
   Comparison,
-} from "./generated/study-contracts.js";
+} from "./generated/study-types.js";
 
 export type {
   ModelDetails,
   SolveResponse as StudyView,
   SearchOptions,
   StudySummary,
-} from "./generated/study-contracts.js";
+} from "./generated/study-types.js";
 export { studySchema } from "./generated/study-schema.js";
 export { synthSchema } from "./generated/synth-schema.js";

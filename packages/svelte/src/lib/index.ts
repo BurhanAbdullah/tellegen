@@ -102,6 +102,7 @@ export type {
 export type { MapPalette } from './colors.js';
 export type { DisplayOption } from './display.js';
 export type {
+	BusSizing,
 	CameraSnapshot,
 	DiagramCameraSnapshot,
 	DemandRangeMode,

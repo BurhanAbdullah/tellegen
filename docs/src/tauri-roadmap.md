@@ -13,4 +13,4 @@ The pieces already fit. The SvelteKit app is a static single-page app and the en
 - `apps/desktop`: the Tauri shell. It loads the same `apps/web` build.
 - `crates/tellegen-tauri`: a workspace member that holds a native `Study` and exposes it through `#[tauri::command]`. Built natively, it adds the interior point AC OPF backend.
 
-One UI, three transports: the in-browser `Study`, the HTTP server, and the Tauri bridge, chosen at runtime. The `Study` contract is the same across all three; only the transport differs.
+One UI, three transports: the in-browser `Study`, the HTTP server, and the Tauri bridge, chosen at runtime. The `Study` interface is the same across all three; only the transport differs.

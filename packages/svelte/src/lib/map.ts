@@ -32,6 +32,11 @@ export {
 	branchWidth,
 	busNeutral,
 	busRadius,
+	busMarkerRadius,
+	busRadiusFor,
+	demandColor,
+	demandDomain,
+	demandGradient,
 	priceColor,
 	priceDomain,
 	priceGradient,
@@ -40,7 +45,10 @@ export {
 	sensFlatColor,
 	sensGradient,
 	sensNeutral,
-	sensitivityDomain
+	sensitivityDomain,
+	UNIFORM_BUS_GROUND_RADIUS,
+	UNIFORM_BUS_MIN_RADIUS,
+	UNIFORM_BUS_RADIUS
 } from './colors.js';
 export { caseDeltas, displayMetaFor, displaySeriesFor } from './display.js';
 export type { MapPalette, RGBA, SensitivityDomain } from './colors.js';

@@ -3,8 +3,12 @@
 Svelte components for tellegen maps, case panels, local case files, and browser solves.
 
 ```sh
-npm install @tellegen/svelte
+npm install @tellegen/svelte maplibre-gl @deck.gl/core @deck.gl/layers @deck.gl/maplibre
 ```
+
+`maplibre-gl` and the three `@deck.gl` packages are peer dependencies: the map
+shares their instances with the host through `extraLayers` and `onMapReady`, so
+the app installs them and resolves one copy of each.
 
 Import the component and stylesheet in your app:
 
@@ -41,6 +45,10 @@ remain in the browser on this path.
 - `orgLabel`
 - `showFooter`, default `true`
 - `theme`, `light` (default) or `dark`
+- `cartoApiKey`, the basemap key (see [Basemap](#basemap))
+
+`theme` and `cartoApiKey` follow their props. The others are read once, when
+the viewer mounts; remount it to change them.
 
 Use `TellegenProvider` and `TellegenShell` when state should survive route changes:
 
@@ -54,6 +62,11 @@ Use `TellegenProvider` and `TellegenShell` when state should survive route chang
   <TellegenShell />
 </TellegenProvider>
 ```
+
+The provider owns the controller and its cases. Unmounting it disposes the
+controller, which frees every case's browser Study and multiconductor session
+in the engine worker, so a provider that should keep its cases across pages
+belongs in a layout that stays mounted.
 
 ## Panel layout
 
@@ -121,6 +134,19 @@ inside `TellegenProvider`:
 <PanelHost showToolbar={false} />
 <NotificationCenter />
 <PanelFrame id="region" title="Region" side="left">...</PanelFrame>
+```
+
+The components show data, labels and controls, not host copy. A host that
+wants a note under a local case's stats passes `ControlPanel` a `caseNote`
+snippet, which receives the case; `DropZone` renders its children under the
+drop prompt:
+
+```svelte
+<ControlPanel>
+  {#snippet caseNote(lc)}
+    <p>{lc.label} is a synthetic grid.</p>
+  {/snippet}
+</ControlPanel>
 ```
 
 `ShellEnvironment` is renderless and keeps the compact-layout, pointer and
@@ -193,7 +219,8 @@ besides its click callbacks:
 - `attribution`: `'compact'` (default) or `'full'`. There is no off switch.
 - `onMapReady(map, overlay)`: called with the MapLibre map and the deck
   overlay once they exist. It may return a cleanup, and it fires again after
-  a context-loss or basemap rebuild.
+  a context-loss or basemap rebuild. If it throws, the map and its window
+  and document listeners are still released when the map is torn down.
 - `onBasemapFallback(reason)`: the switch to the fallback happened.
   `reason.from` and `reason.to` name the two providers.
 - `onBasemapError(reason)`: no basemap can be shown. The network layers
@@ -201,7 +228,8 @@ besides its click callbacks:
   `reason.to` is `null`.
 
 `TellegenProvider` and `TellegenViewer` also take `cartoApiKey`, and pass it,
-together with `theme`, to the default shell's map. A SvelteKit 3 host can
+together with `theme`, to the default shell's map. Both follow their props:
+changing either rebuilds that map in place. A SvelteKit 3 host can
 declare the key as an optional public build-time variable:
 
 ```ts
@@ -247,7 +275,17 @@ its fallback is never `null`. The fallback reasons use the same names in
 
 A Content Security Policy must allow `https://tiles.openfreemap.org` and
 `https://*.cartocdn.com` in `connect-src` and `img-src`. The style, vector
-tiles, fonts and sprites are all fetched.
+tiles, fonts and sprites are all fetched. The engine underneath also needs
+`script-src 'wasm-unsafe-eval'` (never `'unsafe-eval'`) and `worker-src
+'self'`, since its workers are same-origin.
+
+`@deck.gl/core`, `@deck.gl/layers`, `@deck.gl/maplibre` and `maplibre-gl`
+are peer dependencies (`^9.4.0` for deck.gl, `^6.15.0` for maplibre-gl), so
+the host's copies are the ones the map uses, including the deck.gl layers it
+passes in `extraLayers` and the MapLibre map it gets from `onMapReady`. When
+two deck.gl versions load, deck.gl throws "multiple versions detected"; if
+another dependency pulls in a second copy, point both at one version with npm
+`overrides` (or `resolutions` in pnpm and Yarn).
 
 The map needs no Vite settings, in a build or in the dev server. MapLibre's
 worker comes from a `?worker&url` import, which a production build bundles
@@ -327,3 +365,13 @@ release. The package ships only `dist`, the README, the MIT license text, and
 package metadata. The packed smoke test installs the generated tarballs into a
 temporary Svelte consumer and builds it so missing exports, styles, or wasm
 assets fail before publish.
+
+## Citing
+
+If you use this package in published work, please cite the tellegen paper:
+Samuel Talkington, Frederik Geth, Qian Zhang, Le Xie, and Skyler Liu. 2026.
+*Interactive Power Flow in the Browser*. The Inaugural ACM Conference on Digital
+Transformation (ACM DXConf 2026), Ann Arbor, MI, USA.
+[doi:10.1145/3847238.3849038](https://doi.org/10.1145/3847238.3849038). The
+[repository README](https://github.com/eigenergy/tellegen#citing) has the BibTeX
+entry.

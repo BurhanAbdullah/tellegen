@@ -298,6 +298,7 @@ a {
    before the component split. Scoping this would raise its specificity past that rule. */
 .mode > button {
 	margin-left: auto;
+	font-family: inherit;
 	font-size: 12.5px;
 	padding: 2px 7px;
 	background: none;
@@ -313,6 +314,7 @@ a {
 }
 
 .display-mode {
+	flex-wrap: wrap;
 	gap: 8px;
 }
 
@@ -387,6 +389,7 @@ a {
 
 .reset {
 	margin-top: 10px;
+	font-family: inherit;
 	font-size: 12.5px;
 	padding: 3px 10px;
 	background: none;

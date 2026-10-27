@@ -10,8 +10,10 @@
 		MAP_PALETTE,
 		branchColor,
 		branchWidth,
+		busMarkerRadius,
 		busNeutral,
-		busRadius,
+		busRadiusFor,
+		demandColor,
 		priceColor,
 		scalarDomain,
 		sensColor,
@@ -30,7 +32,7 @@
 	} from './basemap.js';
 	import { caseDeltas, caseRatings, displayMetaFor, displaySeriesFor } from './display.js';
 	import {
-		CaseState,
+		type CaseState,
 		type CameraSnapshot,
 		type DisplayMode,
 		type LocalCase
@@ -414,6 +416,8 @@
 				if (d.previewDomain.flat) return sensFlatColor(d.previewDomain);
 				return sensColor((d.preview.get(bus.id) ?? 0) / d.previewDomain.scale);
 			}
+			if (d.scalarMode === 'demand')
+				return demandColor(((d.scalar.get(bus.id) ?? 0) - d.scalarLo) / (d.scalarHi - d.scalarLo));
 			const mid = (d.scalarLo + d.scalarHi) / 2;
 			return priceColor(((d.scalar.get(bus.id) ?? mid) - d.scalarLo) / (d.scalarHi - d.scalarLo));
 		};
@@ -729,13 +733,13 @@
 			if (info.layer.id === 'study-branches') {
 				const flow = view?.flows?.find((f) => f.branch === id);
 				return {
-					html: `<b>branch ${id}</b><br>saved state: ${esc(app.studyView.label)}${flow ? `<br>P from ${flow.pf.toFixed(3)} MW, loading ${(100 * flow.loading).toFixed(1)}%` : ''}`
+					html: `<b>Branch ${id}</b><br>Saved state: ${esc(app.studyView.label)}${flow ? `<br>P from ${flow.pf.toFixed(3)} MW<br>Loading ${(100 * flow.loading).toFixed(1)}%` : ''}`
 				};
 			}
 			const p = view?.lmp?.find((v) => v.bus === id),
 				v = view?.vm?.find((v) => v.bus === id);
 			return {
-				html: `<b>bus ${id}</b><br>saved state: ${esc(app.studyView.label)}${p ? `<br>LMP ${p.value.toFixed(4)}` : ''}${v ? `<br>voltage ${v.value.toFixed(5)} pu` : ''}`
+				html: `<b>Bus ${id}</b><br>Saved state: ${esc(app.studyView.label)}${p ? `<br>LMP ${p.value.toFixed(4)}` : ''}${v ? `<br>Voltage ${v.value.toFixed(5)} pu` : ''}`
 			};
 		}
 		if (info.layer?.id.startsWith('local-subs-')) {
@@ -745,25 +749,22 @@
 			const s = object as { number: number; name: string };
 			const named = s.name ? ` ${esc(s.name)}` : '';
 			return {
-				html: `<div class="tt"><b>substation ${Number(s.number)}</b>${named}<br><span style="opacity:0.6">.pwd diagram, approximate position</span></div>`
+				html: `<div class="tt"><b>Substation ${Number(s.number)}</b>${named}<br>Approximate position</div>`
 			};
 		}
 		const layerId = info.layer?.id;
 		if (layerId?.startsWith('multi-edges-')) {
 			const e = object as PlacedMultiEdge;
-			const state = e.kind === 'switch' ? (e.closed ? ' &#8901; closed' : ' &#8901; open') : '';
+			const state = e.kind === 'switch' ? (e.closed ? '<br>Closed' : '<br>Open') : '';
 			return {
-				html: `<div class="tt"><b>${esc(e.kind)} ${esc(e.from)}&#8201;&ndash;&#8201;${esc(e.to)}</b> ${e.n_phases}&#8202;&phi;${state}</div>`
+				html: `<div class="tt"><b>${esc(e.kind)} ${esc(e.from)}&#8201;&ndash;&#8201;${esc(e.to)}</b><br>${e.n_phases}&#8202;&phi;${state}</div>`
 			};
 		}
 		if (layerId?.startsWith('multi-buses-')) {
 			const b = object as PlacedMultiBus;
-			const roles = b.attachmentKinds.length ? b.attachmentKinds.join(', ') : 'none';
+			const roles = b.attachmentKinds.length ? b.attachmentKinds.join(', ') : 'None';
 			return {
-				html: `<div class="tt"><b>bus ${esc(b.id)}</b>
-					${b.terminals.length} terminals${b.grounded.length ? ` &#8901; ${b.grounded.length} grounded` : ''}<br>
-					load ${b.load_kw.toFixed(0)} kW &#8901; gen ${b.gen_kw.toFixed(0)} kW<br>
-					<span style="opacity:0.6">${esc(roles)}</span></div>`
+				html: `<div class="tt"><b>Bus ${esc(b.id)}</b><br>${b.terminals.length} terminals${b.grounded.length ? `, ${b.grounded.length} grounded` : ''}<br>Load ${b.load_kw.toFixed(0)} kW<br>Generation ${b.gen_kw.toFixed(0)} kW<br>Attachments: ${esc(roles)}</div>`
 			};
 		}
 		const c = caseOf(info);
@@ -772,17 +773,15 @@
 			const b = object as NetworkBranch;
 			const flow = d
 				? `${((d.loading.get(b.id) ?? 0) * 100).toFixed(0)}% of ${b.rate_mw.toFixed(0)} MW`
-				: `rate ${b.rate_mw.toFixed(0)} MW`;
+				: `Rating ${b.rate_mw.toFixed(0)} MW`;
 			return {
-				html: `<div class="tt"><b>line ${b.from}&#8201;&ndash;&#8201;${b.to}</b> ${flow}</div>`
+				html: `<div class="tt"><b>Line ${b.from}&#8201;&ndash;&#8201;${b.to}</b><br>${flow}</div>`
 			};
 		}
 		const bus = object as NetworkBus;
 		if (!c) {
 			return {
-				html: `<div class="tt"><b>bus ${bus.id}</b>
-					load ${bus.demand_mw.toFixed(0)} MW &#8901; gen ${bus.gen_mw.toFixed(0)} MW<br>
-					<span style="opacity:0.6">local file</span></div>`
+				html: `<div class="tt"><b>Bus ${bus.id}</b><br>Load ${bus.demand_mw.toFixed(0)} MW<br>Generation ${bus.gen_mw.toFixed(0)} MW</div>`
 			};
 		}
 		const price = d?.prices.get(bus.id);
@@ -792,8 +791,8 @@
 		const delta = caseDeltas(c)[bus.id] ?? 0;
 		const loadRow =
 			delta === 0
-				? `load ${bus.demand_mw.toFixed(0)} MW`
-				: `load ${(bus.demand_mw + delta).toFixed(0)} MW (${delta > 0 ? '+' : ''}${delta.toFixed(0)})`;
+				? `Load ${bus.demand_mw.toFixed(0)} MW`
+				: `Load ${(bus.demand_mw + delta).toFixed(0)} MW (${delta > 0 ? '+' : ''}${delta.toFixed(0)})`;
 		const sensRow =
 			sens === undefined
 				? ''
@@ -802,18 +801,15 @@
 			preview === undefined
 				? ''
 				: `<br>&Delta; LMP ${preview >= 0 ? '+' : ''}${preview.toExponential(2)} objective units/MW`;
-		const localRow =
-			c instanceof CaseState ? '' : '<br><span style="opacity:0.6">local file</span>';
+		// Demand already has its own row below, so the demand colouring shows LMP here alone.
 		const scalarRow =
-			!d || d.scalarMode === 'price'
+			!d || d.scalarMode === 'price' || d.scalarMode === 'demand'
 				? `LMP ${price === undefined ? '&mdash;' : fmt.format(price)} objective units/MW`
 				: `${d.scalarLabel} ${
 						scalar === undefined ? '&mdash;' : displayFmt(d.scalarMode, scalar)
 					} ${d.scalarUnit}<br>LMP ${price === undefined ? '&mdash;' : fmt.format(price)} objective units/MW`;
 		return {
-			html: `<div class="tt"><b>bus ${bus.id}</b>
-				${scalarRow}<br>
-				${loadRow} &#8901; gen ${bus.gen_mw.toFixed(0)} MW${sensRow}${previewRow}${localRow}</div>`
+			html: `<div class="tt"><b>Bus ${bus.id}</b><br>${scalarRow}<br>${loadRow}<br>Generation ${bus.gen_mw.toFixed(0)} MW${sensRow}${previewRow}</div>`
 		};
 	}
 
@@ -1000,7 +996,27 @@
 
 				map = m;
 				overlay = o;
-				const detachReady = onMapReady?.(m, o);
+				// Assign the teardown before host code runs: if onMapReady throws,
+				// the map and its window and document listeners are still released.
+				let detachReady: void | (() => void);
+				cleanup = () => {
+					clearRebuild();
+					clearStabilize();
+					document.removeEventListener('visibilitychange', onVisible);
+					window.removeEventListener('focus', repaint);
+					window.removeEventListener('pageshow', repaint);
+					m.off('load', syncCues);
+					m.off('move', syncCues);
+					m.off('resize', syncCues);
+					m.off('style.load', applyStyleExtras);
+					detachFallback();
+					detachReady?.();
+					app.settleFrame();
+					m.remove();
+					map = null;
+					overlay = null;
+				};
+				detachReady = onMapReady?.(m, o);
 				// A view closing onto this map (the diagram, from geographic positions) hands it its
 				// camera to continue from.
 				const handedOff = app.cameraHandoff;
@@ -1022,24 +1038,6 @@
 						stabilizeTimer = null;
 					}, 10000);
 				}
-
-				cleanup = () => {
-					clearRebuild();
-					clearStabilize();
-					document.removeEventListener('visibilitychange', onVisible);
-					window.removeEventListener('focus', repaint);
-					window.removeEventListener('pageshow', repaint);
-					m.off('load', syncCues);
-					m.off('move', syncCues);
-					m.off('resize', syncCues);
-					m.off('style.load', applyStyleExtras);
-					detachFallback();
-					detachReady?.();
-					app.settleFrame();
-					m.remove();
-					map = null;
-					overlay = null;
-				};
 			})
 			.catch((e) => {
 				if (!cancelled) app.error = `map failed to load: ${e instanceof Error ? e.message : e}`;
@@ -1071,20 +1069,23 @@
 		if (!overlay || !layerCtors) return;
 		const { PathLayer, ScatterplotLayer, IconLayer } = layerCtors;
 		const layers: Layer[] = [];
+		const marker = busMarkerRadius(app.busSizing);
 		const study = app.studyView;
 		if (study) {
 			const s = study.solution;
 			const mode = app.displayMode;
 			const series =
-				mode === 'angle'
-					? (s?.va ?? [])
-					: mode === 'voltage'
-						? (s?.vm ??
-							(s?.w ?? []).map((v) => ({
-								...v,
-								value: Math.sqrt(Math.max(0, v.value))
-							})))
-						: (s?.lmp ?? []);
+				mode === 'demand'
+					? study.network.buses.map((b) => ({ bus: b.id, value: b.demand_mw }))
+					: mode === 'angle'
+						? (s?.va ?? [])
+						: mode === 'voltage'
+							? (s?.vm ??
+								(s?.w ?? []).map((v) => ({
+									...v,
+									value: Math.sqrt(Math.max(0, v.value))
+								})))
+							: (s?.lmp ?? []);
 			const values = new Map(series.map((v) => [v.bus, v.value]));
 			const domain = scalarDomain(
 				mode,
@@ -1114,13 +1115,17 @@
 					id: 'study-buses',
 					data: study.network.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-					radiusUnits: 'pixels',
+					getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+					radiusUnits: marker.radiusUnits,
+					radiusMinPixels: marker.radiusMinPixels,
+					radiusMaxPixels: marker.radiusMaxPixels,
 					getFillColor: (b) => {
 						const value = values.get(b.id);
 						return value === undefined
 							? palette.grey
-							: priceColor((value - domain.lo) / Math.max(domain.hi - domain.lo, 1e-12));
+							: (mode === 'demand' ? demandColor : priceColor)(
+									(value - domain.lo) / Math.max(domain.hi - domain.lo, 1e-12)
+								);
 					},
 					pickable: true,
 					stroked: true,
@@ -1133,7 +1138,7 @@
 						app.selectedBus = bus.id;
 						return true;
 					},
-					updateTriggers: { getFillColor: [study, mode, theme] }
+					updateTriggers: { getFillColor: [study, mode, theme], getRadius: [app.busSizing] }
 				})
 			);
 			overlay.setProps({ layers: [...layers, ...extraLayers] });
@@ -1180,8 +1185,10 @@
 					id: `buses-${c.id}`,
 					data: c.network.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-					radiusUnits: 'pixels',
+					getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+					radiusUnits: marker.radiusUnits,
+					radiusMinPixels: marker.radiusMinPixels,
+					radiusMaxPixels: marker.radiusMaxPixels,
 					getFillColor: busFill(c.id),
 					stroked: true,
 					billboard: true,
@@ -1201,6 +1208,7 @@
 						return true;
 					},
 					updateTriggers: {
+						getRadius: [app.busSizing],
 						getFillColor: [display],
 						getLineColor: [app.selectedBus, app.activeCaseId, theme],
 						getLineWidth: [app.selectedBus, app.activeCaseId]
@@ -1254,8 +1262,10 @@
 						id: `local-buses-${c.id}`,
 						data: c.view.buses,
 						getPosition: (b) => [b.lon, b.lat],
-						getRadius: (b) => busRadius(Math.max(b.demand_mw, b.gen_mw)),
-						radiusUnits: 'pixels',
+						getRadius: (b) => marker.radius(Math.max(b.demand_mw, b.gen_mw)),
+						radiusUnits: marker.radiusUnits,
+						radiusMinPixels: marker.radiusMinPixels,
+						radiusMaxPixels: marker.radiusMaxPixels,
 						getFillColor: d ? busFill(c.id) : palette.grey,
 						stroked: true,
 						billboard: true,
@@ -1275,6 +1285,7 @@
 							return true;
 						},
 						updateTriggers: {
+							getRadius: [app.busSizing],
 							getFillColor: [display],
 							getLineColor: [app.selectedBus, app.activeLocalId, theme],
 							getLineWidth: [app.selectedBus, app.activeLocalId]
@@ -1368,7 +1379,7 @@
 					id: `multi-buses-${c.id}`,
 					data: c.view.buses,
 					getPosition: (b) => [b.lon, b.lat],
-					getRadius: (b) => busRadius(Math.max(b.load_kw, b.gen_kw)),
+					getRadius: (b) => busRadiusFor(app.busSizing, Math.max(b.load_kw, b.gen_kw)),
 					radiusUnits: 'pixels',
 					radiusMinPixels: 3,
 					getFillColor: (b) => multiBusFill(b),
@@ -1392,6 +1403,7 @@
 						return true;
 					},
 					updateTriggers: {
+						getRadius: [app.busSizing],
 						getLineColor: [selectedId, theme],
 						getLineWidth: [selectedId]
 					}
@@ -1556,14 +1568,14 @@
 {#if app.placingId && map}
 	<button
 		type="button"
-		class="place-at-center mono"
+		class="place-at-center"
 		onclick={() => {
 			if (!map) return;
 			const center = map.getCenter();
 			onplacecase(center.lng, center.lat);
 		}}
 	>
-		place at map center
+		Place at map center
 	</button>
 {/if}
 
@@ -1753,6 +1765,7 @@
 		border: 1px solid var(--accent);
 		border-radius: 3px;
 		color: var(--text-accent);
+		font-family: inherit;
 		font-size: 11px;
 		cursor: pointer;
 		box-shadow: var(--elev-cue);
@@ -1830,8 +1843,9 @@
 		background: var(--panel) !important;
 		border: 1px solid var(--line);
 		color: var(--ink) !important;
-		font-family: var(--font-mono);
-		font-size: 11px;
+		font-family: var(--font-display);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
 		line-height: 1.5;
 		padding: 8px 10px !important;
 		border-radius: 2px;

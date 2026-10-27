@@ -710,11 +710,20 @@ pub struct ElementAnnotations {
     pub generators: Vec<GeneratorAnnotation>,
 }
 
+/// The populated places table behind the run.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct PlacesProvenance {
     pub count: usize,
+    /// SHA-256 of the table as loaded.
     pub sha256: String,
+    /// The dataset the table was derived from (the bundled table names
+    /// Natural Earth's release); absent for a bare array of rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// SHA-256 of that dataset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sha256: Option<String>,
 }
 
 /// The voltage ladder table behind a country or fallback voltage basis.
@@ -755,6 +764,10 @@ pub struct OsmProvenance {
     pub generator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp_osm_base: Option<String>,
+    /// The Overpass answer's `osm3s.copyright` notice: the licence (ODbL) the
+    /// data was served under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copyright: Option<String>,
     pub document_sha256: String,
     pub elements: usize,
     pub counts: BTreeMap<String, u64>,

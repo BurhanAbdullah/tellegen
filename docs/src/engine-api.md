@@ -4,8 +4,8 @@
 
 ## Constants
 
-- `CONTRACT_VERSION`: the public TypeScript contract version. It matches the package version.
-- `CONTRACT_SOURCE_SHA256`: the `crates/tellegen/src/api.rs` hash used to generate the TypeScript contracts.
+- `ENGINE_VERSION`: the `@tellegen/engine` package version.
+- `API_SOURCE_SHA256`: the `crates/tellegen/src/api.rs` hash the generated TypeScript types were built from.
 - `FORMULATION_IDS` and `SOLVE_STATUSES`: generated enum tags from the Rust API layer.
 - `FORMULATIONS` and `DEFAULT_FORMULATION`: browser UI formulation list and default formulation.
 
@@ -14,6 +14,12 @@
 - `browserWasmTransport`: object facade for the browser wasm transport.
 - `createBrowserWasmTransport()`: returns the browser wasm transport facade.
 - `preloadEngine()`: initializes the wasm package.
+
+The package also exports its two large assets as files, so a host can preload
+or budget them without a path into `dist`: `@tellegen/engine/wasm` is the
+WebAssembly binary and `@tellegen/engine/places` the populated places table.
+Vite imports them as URLs with `?url`
+(`import engineWasmUrl from "@tellegen/engine/wasm?url"`).
 
 The facade has the same methods as the direct exports:
 
@@ -51,7 +57,9 @@ reader selected for transmission and distribution documents.
 ## Solves And Studies
 
 - `capabilities()`: returns available formulations, operands, and parameters.
-- `solveModule(moduleJson, request)`: stateless solve from a PowerIO module.
+- `solveModule(moduleJson, request)`: stateless solve from a PowerIO module. An
+  `acpf` request may set `start: "case"` to start Newton from the case's stored
+  bus voltages (see [Formulations](formulations.md#ac-power-flow-polar)).
 - `createStudy(moduleJson, formulation)`: builds a browser `Study` from a
   PowerIO module and solves its declared problem instance.
 - `Study` / `BrowserStudy`: browser handle with:
@@ -96,7 +104,7 @@ invalidate the retained interactive Study.
 ## Synthetic Grid Generation
 
 - `createSynthSession(request, { osm?, places?, signal? })`: opens a staged
-  generation on the dedicated synthetic worker (`synthEngineHost()`) and
+  generation on a dedicated synthetic worker and
   returns a `BrowserSynthSession`:
   - `advance({ withPreview? })` runs one stage (`context`, `site_buses`,
     `topology`, `electrify`, `dc_opf`, `calibrate` once per iteration,
@@ -145,7 +153,7 @@ file.arrayBuffer())` for a browser `File`.
 
 Public types include:
 
-- `SolveRequest`, `SolveResponse`, `ProblemCaps`
+- `SolveRequest`, `SolveResponse`, `ProblemCaps`, `PowerFlowStart`
 - `SensRequest`, `SensitivityMatrix`, `SensitivityColumn`
 - `Network`, `NetworkBus`, `NetworkBranch`
 - `Solution`, `SolveIteration`, `DemandDeltas`
@@ -153,4 +161,4 @@ Public types include:
 - `IngestedJsonDrop`, `JsonDropClassification`, `JsonDropKind`
 - `BrowserFormulation`, `FormulationId`, `SolveStatus`
 
-The generated file is committed at `packages/engine/src/generated/contracts.ts` and checked in CI.
+The generated file is committed at `packages/engine/src/generated/api-types.ts` and checked in CI.
