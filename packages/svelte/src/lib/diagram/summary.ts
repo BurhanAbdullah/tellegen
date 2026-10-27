@@ -44,15 +44,16 @@ export function exceedance(p: PairVoltage): number {
 	return (-100 * Math.min(p.volts - p.min, p.max - p.volts)) / (p.max - p.min);
 }
 
-/** Magnitude-only fallback: max deviation from the mean / mean (IEEE PVUR or NEMA LVUR). */
-export function magnitudeUnbalance(pairs: PairVoltage[]): UnbalanceValue | null {
+/** Magnitude-only fallback: max deviation from the mean / mean (IEEE PVUR or NEMA LVUR), over the
+ * three pairs of the bus's first reference. */
+export function magnitudeUnbalance(all: PairVoltage[]): UnbalanceValue | null {
+	const zone = all[0]?.zone;
+	const pairs = all.filter((p) => p.zone === zone);
 	if (pairs.length !== 3) return null;
-	const zones = new Set(pairs.map((p) => p.zone));
-	if (zones.size !== 1) return null;
 	const mean = (pairs[0].volts + pairs[1].volts + pairs[2].volts) / 3;
 	if (!(mean > 0)) return null;
 	const percent = (100 * Math.max(...pairs.map((p) => Math.abs(p.volts - mean)))) / mean;
-	return { percent, definition: zones.has('phase–phase') ? 'NEMA LVUR' : 'IEEE PVUR' };
+	return { percent, definition: zone === 'phase–phase' ? 'NEMA LVUR' : 'IEEE PVUR' };
 }
 
 /** Phasor unbalance when the snapshot has it, otherwise the labelled magnitude fallback. */

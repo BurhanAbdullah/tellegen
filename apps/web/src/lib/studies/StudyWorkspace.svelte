@@ -532,9 +532,11 @@
 								details: multi.mcPfReason ?? 'This case cannot run AC power flow'
 							})}>Why unavailable</button
 					>{/if}
-				{#if multi.result && multi.graph}<McWorkbench
-						result={multi.overviewResult}
+				{#if multi.result && multi.graph && multi.overviewInputs && multi.overviewSearch}<McWorkbench
+						snapshot={multi.overviewSnapshot}
 						graph={multi.graph}
+						inputs={multi.overviewInputs}
+						search={multi.overviewSearch}
 						loading={multi.overviewLoading}
 						selectedBus={multi.selectedBusId}
 						selectedEdge={multi.selectedEdgeId}

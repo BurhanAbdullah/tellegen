@@ -221,7 +221,8 @@ export interface DistGraphBus {
   has_source: boolean;
   terminal_attachments?: Record<string, DistGraphAttachment[]>;
   /** Declared voltage magnitude bounds in volts, present only when the model declares them.
-   * Phase–neutral bounds list one value per phase terminal; phase–phase bounds one per pair. */
+   * Phase–neutral bounds list one value per phase terminal; phase–phase bounds one per pair;
+   * phase-to-ground bounds are keyed by terminal; sequence and neutral bounds are one value each. */
   voltage_limits?: DistVoltageLimits;
   /** Declared rated voltage in volts where a transformer winding or a source connects: a
    * polyphase winding's line-to-line rating, a single-phase winding's own, a polyphase source's
@@ -236,6 +237,23 @@ export interface DistVoltageLimits {
   vpn_max?: number[];
   vpp_min?: number[];
   vpp_max?: number[];
+  /** The phase-terminal pairs the phase–phase bounds are ordered by: (1,2), (2,3), (3,1) of the
+   * phase terminals (BMOPF 0.2.0). Present with phase–phase bounds on a bus with two or three
+   * phase terminals. */
+  vpp_pairs?: [string, string][];
+  /** Phase-to-ground magnitude bounds (PowerIO's `v_min`/`v_max`: BMOPF `v_min`/`v_max`, PMD
+   * `vm_lb`/`vm_ub`), keyed by the phase terminal they bound. A terminal without a finite bound is
+   * absent. */
+  v_min_by_terminal?: Record<string, number>;
+  v_max_by_terminal?: Record<string, number>;
+  /** Positive-sequence magnitude bounds. */
+  vpos_min?: number;
+  vpos_max?: number;
+  /** Negative- and zero-sequence magnitude caps. */
+  vneg_max?: number;
+  vzero_max?: number;
+  /** Neutral-to-ground magnitude cap. */
+  vn_max?: number;
 }
 
 /** A declared branch rating: per-conductor ampacity in conductor order for lines and switches, or

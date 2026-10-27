@@ -1,13 +1,11 @@
 <script lang="ts">
-	import type { DistGraph, McPfResult } from '@tellegen/engine';
+	import type { DistGraph } from '@tellegen/engine';
 	import MultiWire from './MultiWire.svelte';
 	import OmniSearch from './OmniSearch.svelte';
 	import ResultsTable from './ResultsTable.svelte';
 	import {
-		buildSearchIndex,
 		busState,
 		conductorBars,
-		graphInputs,
 		LOADING_WARNING,
 		loadingState,
 		magnitudeUnbalance,
@@ -15,19 +13,23 @@
 		pairBar,
 		queryTable,
 		rankIssues,
-		snapshotFromMcPf,
 		snapshotSummary,
 		tableCsv,
 		tableModel,
+		type GraphInputs,
 		type Issue,
+		type ResultSnapshot,
+		type SearchIndex,
 		type SearchMatch,
 		type TableKind
 	} from '../diagram/index.js';
 	import { neutralTerminal } from '../multiconductor.js';
 
 	let {
-		result,
+		snapshot,
 		graph,
+		inputs,
+		search,
 		loading = false,
 		selectedBus,
 		selectedEdge,
@@ -41,9 +43,14 @@
 		onhover,
 		onreveal
 	}: {
-		/** The full operating point; `null` while it is being fetched. */
-		result: McPfResult | null;
+		/** The operating point projected onto `inputs` (`snapshotFromMcPf`); `null` while it is being
+		 * fetched. `MulticonductorCase.overviewSnapshot` holds a case's, shared with the diagram. */
+		snapshot: ResultSnapshot | null;
 		graph: DistGraph;
+		/** `graphInputs(graph)`; `MulticonductorCase.overviewInputs` holds a case's. */
+		inputs: GraphInputs;
+		/** `buildSearchIndex(inputs.entities)`; `MulticonductorCase.overviewSearch` holds a case's. */
+		search: SearchIndex;
 		loading?: boolean;
 		selectedBus: string | null;
 		selectedEdge: string | null;
@@ -64,15 +71,14 @@
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
-	const inputs = $derived(graphInputs(graph));
-	const snapshot = $derived(
-		result ? snapshotFromMcPf(result, inputs.buses, inputs.branches) : null
-	);
 	const issues = $derived(snapshot ? rankIssues(snapshot) : []);
 	const summary = $derived(snapshot ? snapshotSummary(snapshot, issues) : null);
 	const limitsDeclared = $derived(
 		inputs.buses.some((b) => b.limits) || inputs.branches.some((b) => b.rating)
 	);
+	/** Declared voltage limits the overview does not rank: sequence or neutral-to-ground bounds, a
+	 * bound without its other side, or non-uniform phase–phase bounds without named pairs. */
+	const unrankedLimits = $derived(!limitsDeclared && graph.buses.some((b) => b.voltage_limits));
 	const busIndex = $derived(new Map(graph.buses.map((b, i) => [b.id, i])));
 	/** The first edge of each id: a multi-winding transformer's winding-pair edges share its id, and
 	 * the selection, tables and conductor panel show its first (primary) edge. */
@@ -83,8 +89,6 @@
 		});
 		return index;
 	});
-	// Network-only structures are rebuilt when the case changes, not after every solve.
-	const searchIndex = $derived(buildSearchIndex(inputs.entities));
 	let tableKind = $state<TableKind>('bus');
 	const tables = $derived(
 		snapshot
@@ -224,7 +228,7 @@
 			>{/if}
 	</div>
 	<OmniSearch
-		index={searchIndex}
+		index={search}
 		hint={searchHint}
 		onselect={(m) => selectOnce(m.kind === 'bus' ? 'bus' : 'branch', m.index)}
 	/>
@@ -248,7 +252,9 @@
 						? `+ ${warning} warning${warning === 1 ? '' : 's'}`
 						: limitsDeclared
 							? 'within declared limits'
-							: 'no limits declared'}</span
+							: unrankedLimits
+								? 'no ranked limits'
+								: 'no limits declared'}</span
 				>
 			</button>
 			<div class="kpi" title="Sum of both into-equipment end powers over active branches">
@@ -305,10 +311,14 @@
 		</div>
 
 		<h4>Issues <span class="count">{issues.length.toLocaleString()}</span></h4>
-		{#if !limitsDeclared}
+		{#if unrankedLimits}
 			<p class="hint">
-				This case declares no phase–neutral or phase–phase voltage limits and no ratings, so nothing
-				is ranked against them.
+				This case declares no ratings, and none of its voltage limits is a band the overview ranks
+				(phase–neutral, phase–phase or phase–ground), so nothing is ranked against them.
+			</p>
+		{:else if !limitsDeclared}
+			<p class="hint">
+				This case declares no voltage limits or ratings, so nothing is ranked against them.
 			</p>
 		{:else if !issues.length}
 			<p class="hint ok">No limit violations or loading warnings.</p>

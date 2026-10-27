@@ -23,7 +23,6 @@
 		chordsInto,
 		displayTree,
 		ease,
-		graphInputs,
 		diagramLayer,
 		EMPTY_GEOMETRY,
 		fromEngineLayout,
@@ -34,7 +33,6 @@
 		MORPH_MS,
 		placeLabels,
 		screenAnchored,
-		snapshotFromMcPf,
 		sourceLayout,
 		titleBlock,
 		worstBand,
@@ -174,7 +172,8 @@
 
 	const graph = $derived(mc.graph!);
 	const tree = $derived(displayTree(graph));
-	const inputs = $derived(graphInputs(graph));
+	// The case's own copies, shared with the overview: built once per graph and once per solve.
+	const inputs = $derived(mc.overviewInputs!);
 	const source = $derived(
 		mc.view
 			? sourceLayout(graph, mc.view.buses, mc.coordsKind === 'geographic', tree, mc.view.edges)
@@ -288,9 +287,7 @@
 	});
 	$effect(() => () => basemap?.remove());
 	const powers = $derived(mc.overviewResult ? elementPowers(mc.overviewResult) : null);
-	const snapshot = $derived(
-		mc.overviewResult ? snapshotFromMcPf(mc.overviewResult, inputs.buses, inputs.branches) : null
-	);
+	const snapshot = $derived(mc.overviewSnapshot);
 	/** Equipment symbols on the shown layout: branch symbols interrupt their line. */
 	const equipment = $derived(shown ? schematicEquipment(graph, geometry) : null);
 	/** Symbols draw once they are legible (a glyph about 6 px across); below that the plain lines

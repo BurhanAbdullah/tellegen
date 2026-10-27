@@ -11,16 +11,36 @@ export interface GraphInputs {
 	entities: SearchEntity[];
 }
 
-/** Declared limits only. Non-uniform phase–phase bounds have no declared pair order, so they are
- * left undeclared rather than guessed. */
-export function busLimits(bus: Pick<DistGraphBus, 'voltage_limits'>): BusLimits | null {
+/** Declared bands only, each with both a minimum and a maximum. Phase–phase bounds are ordered by
+ * the pairs (1,2), (2,3), (3,1) of the phase terminals (BMOPF 0.2.0), which the engine names in
+ * `vpp_pairs`; without those names only a uniform band is taken, as there is nothing to place the
+ * others by. Sequence and neutral-to-ground bounds are not ranked. */
+export function busLimits(
+	bus: Pick<DistGraphBus, 'voltage_limits' | 'terminals'>
+): BusLimits | null {
 	const l = bus.voltage_limits;
-	if (l?.vpn_min?.length && l.vpn_max?.length === l.vpn_min.length)
-		return { reference: 'phase-neutral', min: l.vpn_min, max: l.vpn_max };
-	const uniform = (v?: number[]) => (v?.length && v.every((x) => x === v[0]) ? v[0] : null);
-	const min = uniform(l?.vpp_min);
-	const max = uniform(l?.vpp_max);
-	return min !== null && max !== null ? { reference: 'phase-phase', min, max } : null;
+	if (!l) return null;
+	const limits: BusLimits = {};
+	if (l.vpn_min?.length && l.vpn_max?.length === l.vpn_min.length)
+		limits.phaseNeutral = { min: l.vpn_min, max: l.vpn_max };
+	const [lo, hi, pairs] = [l.vpp_min, l.vpp_max, l.vpp_pairs];
+	if (pairs?.length && lo?.length === pairs.length && hi?.length === pairs.length) {
+		limits.phasePhase = pairs.map((pair, k) => ({ pair, min: lo[k], max: hi[k] }));
+	} else {
+		const uniform = (v?: number[]) => (v?.length && v.every((x) => x === v[0]) ? v[0] : null);
+		const min = uniform(lo);
+		const max = uniform(hi);
+		if (min !== null && max !== null) limits.phasePhase = [{ pair: null, min, max }];
+	}
+	const below = l.v_min_by_terminal ?? {};
+	const above = l.v_max_by_terminal ?? {};
+	const ground = bus.terminals.flatMap((terminal) =>
+		Object.hasOwn(below, terminal) && Object.hasOwn(above, terminal)
+			? [{ terminal, min: below[terminal], max: above[terminal] }]
+			: []
+	);
+	if (ground.length) limits.phaseGround = ground;
+	return limits.phaseNeutral || limits.phasePhase || limits.phaseGround ? limits : null;
 }
 
 export function edgeRating(edge: Pick<DistGraphEdge, 'rating'>): BranchRating | null {
