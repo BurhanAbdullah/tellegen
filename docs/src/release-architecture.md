@@ -218,10 +218,13 @@ Each surface keeps its own generated changelog:
 `CHANGELOG.md` is the curated view across all four and the only record for
 releases before the split.
 
-release-plz writes the crate changelog from commit messages. The
-`commit_parsers` in `release-plz.toml` skip merge commits, whose changes
-arrive with the commits they merge, and then restate release-plz's default
-groups, because setting the list replaces the defaults.
+release-plz writes a draft crate changelog from commit messages, which is
+curated on the release pull request before it merges. The `commit_parsers` in
+`release-plz.toml` keep merge commits: when pull request branches take `main`
+by merging it, every commit release-plz reaches can be a merge, and skipping
+them leaves a version bump with no changelog, which the crate release rejects.
+The parsers restate release-plz's default groups, because setting the list
+replaces the defaults.
 
 ## CI Gates
 
