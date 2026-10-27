@@ -1,5 +1,5 @@
 ---
-"@tellegen/engine": minor
+"@tellegen/engine": patch
 ---
 
 `SolveRequest` accepts `constraints`: linear constraints on the DC OPF over

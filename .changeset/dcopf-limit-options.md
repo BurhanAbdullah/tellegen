@@ -1,5 +1,5 @@
 ---
-"@tellegen/engine": minor
+"@tellegen/engine": patch
 ---
 
 DC OPF requests accept `limits` (`LimitOptions`):

@@ -1,5 +1,5 @@
 ---
-"@tellegen/engine": minor
+"@tellegen/engine": patch
 ---
 
 DC OPF sensitivities now cover requests with linear `constraints`: every cell
