@@ -208,7 +208,7 @@
 		{#if onschematic}<button
 				class="schematic-toggle"
 				aria-pressed={schematic}
-				onclick={() => onschematic(!schematic)}>{schematic ? 'Show map' : 'Show schematic'}</button
+				onclick={() => onschematic(!schematic)}>{schematic ? 'Show map' : 'Show diagram'}</button
 			>{/if}
 	</div>
 	<OmniSearch

@@ -71,7 +71,7 @@ test('protocol tasks stay within their interaction budgets', async ({ page }) =>
 test('7. switch to the schematic and between layouts, keeping the selection', async ({ page }) => {
 	const overview = await solvedOverview(page);
 	await overview.locator('.issues button').first().click();
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
 	await expect(schematic).toBeVisible();
 	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
@@ -102,7 +102,7 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 	page
 }) => {
 	const overview = await solvedOverview(page);
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	const legend = page.getByRole('list', { name: 'Symbols' });
 	await expect(legend).toBeVisible();
 	await expect(legend.getByRole('listitem')).toHaveText([
@@ -137,7 +137,7 @@ test('the schematic draws equipment symbols with a legend, and hides them when t
 
 test('the schematic can be walked bus by bus from the keyboard', async ({ page }) => {
 	const overview = await solvedOverview(page);
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	const schematic = page.getByRole('application', { name: 'Schematic diagram' });
 	await expect(page.getByRole('list', { name: 'Symbols' })).toBeVisible();
 	await schematic.focus();
@@ -171,7 +171,7 @@ test('hovering a table row marks it as the linked hover, and leaving clears it',
 test('8. a link reopens the saved study with its selection and view', async ({ page, context }) => {
 	const overview = await solvedOverview(page);
 	await overview.locator('.issues button').first().click();
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	await page.getByRole('button', { name: 'Save result' }).click();
 	await expect(page.getByRole('button', { name: 'Copy view link' })).toBeVisible({
 		timeout: 30_000
@@ -235,7 +235,7 @@ test('the schematic layout file loads back with the case as its diagram', async 
 	context
 }) => {
 	const overview = await solvedOverview(page);
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	const toolbar = page.getByRole('toolbar', { name: 'Schematic' });
 	await toolbar.getByRole('button', { name: 'Schematic', exact: true }).click();
 	const download = page.waitForEvent('download');
@@ -314,7 +314,7 @@ test('a balanced case without limits does not break the overview', async ({ page
 			overview.getByRole('heading', { name: new RegExp(`^(Phases at|Conductors on) ${id}$`) })
 		).toBeVisible();
 	}
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
 	await expect(page.getByText('Internal Error')).toHaveCount(0);
 });
@@ -345,7 +345,7 @@ test('a center-tap transformer (one id, several graph edges) does not break the 
 	await page.getByText('Equipment currents and power').click();
 	const equipment = page.getByLabel('Branch result');
 	await expect(equipment.locator('option', { hasText: 't1' })).toHaveCount(1);
-	await overview.getByRole('button', { name: 'Show schematic' }).click();
+	await overview.getByRole('button', { name: 'Show diagram' }).click();
 	await expect(page.getByRole('application', { name: 'Schematic diagram' })).toBeVisible();
 	await expect(page.getByText('Internal Error')).toHaveCount(0);
 });
