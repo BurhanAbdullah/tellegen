@@ -2,7 +2,7 @@
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import { tick, untrack } from 'svelte';
 	import type { Layer, PickingInfo } from '@deck.gl/core';
-	import type { IconLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
+	import type { IconLayer, IconLayerProps, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 	import type { MapLibreOverlay } from '@deck.gl/maplibre';
 	import type { LngLatBoundsLike, Map as MapLibreMap } from 'maplibre-gl';
 	import type { NetworkBranch, NetworkBus } from './api.js';
@@ -50,7 +50,11 @@
 		type TransformerMark,
 		multiDiagramNetwork
 	} from './multiconductor.js';
-	import { transformerIcon } from './transformer-icon.js';
+	import {
+		TRANSFORMER_ICON,
+		transformerIconAtlas,
+		transformerIconMapping
+	} from './transformer-icon.js';
 	import { foldMapBounds } from './map-bounds.js';
 	import { getAppState, getController } from './context.svelte.js';
 	import { displayFmt, fmt, rgbaCss } from './format.js';
@@ -1345,7 +1349,11 @@
 				new IconLayer<TransformerMark>({
 					id: `multi-xfmr-${c.id}`,
 					data: transformerMarks(c.view.edges),
-					getIcon: () => transformerIcon(),
+					// deck.gl makes a texture from any image, canvas included, but types
+					// iconAtlas as a URL or a Texture.
+					iconAtlas: transformerIconAtlas() as unknown as IconLayerProps['iconAtlas'],
+					iconMapping: transformerIconMapping,
+					getIcon: () => TRANSFORMER_ICON,
 					getPosition: (m) => m.position,
 					getAngle: (m) => m.angle,
 					billboard: false,
