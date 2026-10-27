@@ -245,6 +245,87 @@ pub struct LinearConstraint {
     pub upper: Option<f64>,
 }
 
+/// Which limits the DC OPF program carries. Omitted from a request, the program
+/// carries every limit the instance declares, as before.
+///
+/// ```json
+/// { "angle_difference": false, "thermal": "rated", "lazy": { "near_binding": 0.98 } }
+/// ```
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LimitOptions {
+    /// Keep the branch angle-difference rows (default `true`). Each branch
+    /// costs two rows, and at the default +-60 degree window they rarely bind.
+    /// They also keep the angles bounded: a lazy first round without them has
+    /// no inequality on any angle or flow, which an interior point method can
+    /// fail to make progress on when every cost is linear.
+    #[serde(default = "default_true")]
+    pub angle_difference: bool,
+    /// Which thermal limits the program may enforce (default `all`).
+    #[serde(default)]
+    pub thermal: ThermalLimits,
+    /// Enforce the thermal limits lazily: solve with none, add the violated ones
+    /// and the near-binding ones, and re-solve until every limit left out is
+    /// strictly slack.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lazy: Option<LazyLimits>,
+}
+
+impl Default for LimitOptions {
+    fn default() -> Self {
+        Self {
+            angle_difference: true,
+            thermal: ThermalLimits::All,
+            lazy: None,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// The thermal limits a DC OPF may enforce, as `"all"`, `"rated"`, or
+/// `{"branches": [keys]}`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ThermalLimits {
+    /// Every limit the instance declares, including those synthesized for
+    /// unrated branches.
+    #[default]
+    All,
+    /// Only limits from a stated rating; an unrated branch's synthesized limit
+    /// is dropped.
+    Rated,
+    /// Only the limits of these branches, keyed like rating edits.
+    Branches(Vec<ElementKey>),
+}
+
+/// Lazy thermal limit enforcement settings.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LazyLimits {
+    /// The most solves to run (default 20). A solution that still violates or
+    /// meets a limit left out after the last one is an error.
+    #[serde(default = "default_max_rounds")]
+    pub max_rounds: usize,
+    /// Loading, as a fraction of the limit, at which a limit not yet enforced
+    /// joins the next round alongside the violated ones (default 0.98).
+    #[serde(default = "default_near_binding")]
+    pub near_binding: f64,
+}
+
+fn default_max_rounds() -> usize {
+    20
+}
+
+fn default_near_binding() -> f64 {
+    0.98
+}
+
 /// Where the AC power flow's Newton iteration starts, as the lowercase JSON tags
 /// `"flat"` and `"case"`. Only `acpf` iterates from a start; every other
 /// formulation refuses `"case"`.
@@ -292,6 +373,10 @@ pub struct SolveRequest {
     /// with respect to their limits.
     #[serde(default)]
     pub constraints: Vec<LinearConstraint>,
+    /// Which limits the DC OPF carries, and whether it finds the binding thermal
+    /// limits lazily. DC OPF only; omitted, every declared limit is enforced.
+    #[serde(default)]
+    pub limits: Option<LimitOptions>,
     /// Zero or more sensitivity cells, computed against the solved system in request
     /// order. Ignored by a build without the `sensitivity` feature.
     #[cfg(feature = "sensitivity")]
@@ -306,6 +391,43 @@ pub struct SolveRequest {
 /// targets on a public API.
 pub(crate) fn validate_canonical_edits(net: &BalancedNetwork, edits: &Edits) -> Result<(), String> {
     validate_canonical_identity(net)?;
+    if edits.deltas.is_empty() && edits.rates.is_empty() {
+        return Ok(());
+    }
+    // One pass builds each lookup the edits need, so validating an edit set is
+    // linear in the network, not in the network times the edits. The first row
+    // with a key wins, as a scan would find it.
+    let keyed = |keys: &HashMap<ElementKey, f64>| {
+        keys.keys()
+            .fold((false, false), |(ids, uids), key| match key {
+                ElementKey::Id(_) => (true, uids),
+                ElementKey::Uid(_) => (ids, true),
+            })
+    };
+    let (bus_ids, bus_uids) = keyed(&edits.deltas);
+    let (_, branch_uids) = keyed(&edits.rates);
+    let mut bus_by_id: HashMap<usize, &powerio::Bus> = HashMap::new();
+    if bus_ids || !edits.rates.is_empty() {
+        for bus in net.buses() {
+            bus_by_id.entry(bus.id.0).or_insert(bus);
+        }
+    }
+    let mut bus_by_uid: HashMap<&str, &powerio::Bus> = HashMap::new();
+    if bus_uids {
+        for bus in net.buses() {
+            if let Some(uid) = bus.uid.as_deref() {
+                bus_by_uid.entry(uid).or_insert(bus);
+            }
+        }
+    }
+    let mut branch_by_uid: HashMap<&str, &powerio::Branch> = HashMap::new();
+    if branch_uids {
+        for branch in net.branches() {
+            if let Some(uid) = branch.uid.as_deref() {
+                branch_by_uid.entry(uid).or_insert(branch);
+            }
+        }
+    }
     for (bus, mw) in sorted_deltas(&edits.deltas) {
         if !mw.is_finite() {
             return Err(format!("demand delta for bus {bus} must be finite"));
@@ -316,11 +438,8 @@ pub(crate) fn validate_canonical_edits(net: &BalancedNetwork, edits: &Edits) -> 
             }
             ElementKey::Id(id) => usize::try_from(*id)
                 .ok()
-                .and_then(|id| net.buses().iter().find(|bus| bus.id.0 == id)),
-            ElementKey::Uid(uid) => net
-                .buses()
-                .iter()
-                .find(|bus| bus.uid.as_deref() == Some(uid)),
+                .and_then(|id| bus_by_id.get(&id).copied()),
+            ElementKey::Uid(uid) => bus_by_uid.get(uid.as_str()).copied(),
         };
         let Some(target) = target else {
             return Err(format!("unknown demand delta bus {bus}"));
@@ -341,18 +460,15 @@ pub(crate) fn validate_canonical_edits(net: &BalancedNetwork, edits: &Edits) -> 
                 .ok()
                 .and_then(|id| id.checked_sub(1))
                 .and_then(|row| net.branches().get(row)),
-            ElementKey::Uid(uid) => net
-                .branches()
-                .iter()
-                .find(|branch| branch.uid.as_deref() == Some(uid)),
+            ElementKey::Uid(uid) => branch_by_uid.get(uid.as_str()).copied(),
         };
         let Some(target) = target else {
             return Err(format!("unknown rating delta branch {branch}"));
         };
-        let endpoint_is_editable = |id| {
-            net.buses()
-                .iter()
-                .any(|bus| bus.id == id && bus.kind != powerio::BusType::Isolated)
+        let endpoint_is_editable = |id: powerio::BusId| {
+            bus_by_id
+                .get(&id.0)
+                .is_some_and(|bus| bus.kind != powerio::BusType::Isolated)
         };
         if !target.in_service
             || target.from == target.to
@@ -516,6 +632,28 @@ pub struct GenDispatch {
     pub qg: Option<f64>,
 }
 
+/// One solve of a DC OPF run under [`LimitOptions`]: the program it solved and
+/// how the solution met the enforceable thermal limits. A run without lazy
+/// enforcement has one round.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LimitRound {
+    /// Thermal limits the round's program enforced.
+    pub enforced: usize,
+    /// Enforceable limits the round's solution violated; zero on the last round.
+    pub violated: usize,
+    /// Limits added for the next round: the unenforced ones the flows violate
+    /// or meet, and those loaded at or above `near_binding`.
+    pub added: usize,
+    /// The largest loading over the enforceable limits, as a fraction.
+    pub max_loading: f64,
+    /// Variables and constraint rows of the round's program.
+    pub variables: usize,
+    pub rows: usize,
+    /// Interior-point iterations of the round's solve.
+    pub ipm_iterations: usize,
+}
+
 /// The solved state of one [`LinearConstraint`], in request order. `value`,
 /// `lower`, and `upper` are MW; `shadow_price` is in objective units per MW, the
 /// same units as `lmp`.
@@ -615,6 +753,10 @@ pub struct SolveResponse {
     /// every island is supplied and referenced as stated.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub diagnostics: Vec<SolveDiagnostic>,
+    /// The solves a DC OPF ran under the request's `limits` (dcopf with
+    /// `limits` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_rounds: Option<Vec<LimitRound>>,
     /// One self-describing matrix per requested cell, in request order. Each carries
     /// its own row/column element ids and the served-unit label.
     #[cfg(feature = "sensitivity")]
@@ -827,6 +969,7 @@ pub fn solve_ac_opf_instance_cancellable(
     }
     reject_case_start(req, "acopf")?;
     reject_linear_constraints(&req.constraints, "acopf")?;
+    reject_limit_options(req, "acopf")?;
     validate_canonical_edits(instance.network(), &req.edits)?;
     if !req.edits.deltas.is_empty() || !req.edits.rates.is_empty() {
         return Err(
@@ -975,6 +1118,7 @@ fn ac_opf_assemble(
         dispatch: Some(dispatch),
         diagnostics: Vec::new(),
         constraints: None,
+        limit_rounds: None,
         #[cfg(feature = "sensitivity")]
         sensitivities: Vec::new(),
     })
@@ -999,8 +1143,164 @@ pub(crate) fn dc_opf_solved(
     apply_demand_deltas(&mut dc, &req.edits.deltas)?;
     apply_rating_deltas(&mut dc, &req.edits.rates)?;
     apply_linear_constraints(&mut dc, &req.constraints)?;
-    let sol = dc_opf_cancellable(&dc, cancel)?;
+    let Some(limits) = &req.limits else {
+        let sol = dc_opf_cancellable(&dc, cancel)?;
+        return Ok((dc, sol));
+    };
+    let enforceable = apply_limit_options(&mut dc, limits)?;
+    let sol = match &limits.lazy {
+        None => {
+            let mut sol = dc_opf_cancellable(&dc, cancel)?;
+            let mut round = limit_round(&dc, &sol, &enforceable);
+            round.added = 0;
+            sol.limit_rounds = Some(vec![round]);
+            sol
+        }
+        Some(lazy) => solve_with_lazy_limits(&mut dc, &enforceable, lazy, cancel)?,
+    };
     Ok((dc, sol))
+}
+
+/// Apply a request's [`LimitOptions`] to the model's constraint masks, and
+/// return the thermal limits it allows the program to enforce.
+fn apply_limit_options(dc: &mut DcNetwork, limits: &LimitOptions) -> Result<Vec<bool>, String> {
+    if !limits.angle_difference {
+        dc.angle_bound_active.fill(false);
+    }
+    match &limits.thermal {
+        ThermalLimits::All => {}
+        ThermalLimits::Rated => {
+            for (active, &rated) in dc.thermal_limit_active.iter_mut().zip(&dc.thermal_rated) {
+                *active &= rated;
+            }
+        }
+        ThermalLimits::Branches(keys) => {
+            let needs_uids = keys.iter().any(|key| matches!(key, ElementKey::Uid(_)));
+            let idx = KeyIndex::with_uids(&dc.branch_ids, &dc.branch_uids, needs_uids);
+            let mut selected = vec![false; dc.m];
+            for key in keys {
+                let e = idx
+                    .get(key)
+                    .ok_or_else(|| format!("unknown thermal limit branch {key}"))?;
+                selected[e] = true;
+            }
+            for (active, &keep) in dc.thermal_limit_active.iter_mut().zip(&selected) {
+                *active &= keep;
+            }
+        }
+    }
+    if let Some(lazy) = &limits.lazy {
+        if lazy.max_rounds == 0 {
+            return Err("lazy limits need at least one round".into());
+        }
+        if !(lazy.near_binding > 0.0 && lazy.near_binding <= 1.0) {
+            return Err("lazy near_binding must be in (0, 1]".into());
+        }
+    }
+    Ok(dc.thermal_limit_active.clone())
+}
+
+/// A flow exceeds its limit by more than this fraction of the limit.
+const LIMIT_VIOLATION_TOL: f64 = 1e-6;
+
+/// Summarize one solve against the enforceable thermal limits. `added` counts
+/// the limits the next lazy round would add: the violated ones and, when any is
+/// violated, the unenforced ones at or above `near_binding` (filled in by the
+/// caller; zero here).
+fn limit_round(
+    dc: &DcNetwork,
+    sol: &super::problem::DcOpfSolution,
+    enforceable: &[bool],
+) -> LimitRound {
+    let (variables, rows) = super::problem::dc_opf_size(dc);
+    let mut violated = 0;
+    let mut max_loading = 0.0_f64;
+    for (e, _) in enforceable.iter().enumerate().filter(|&(_, &on)| on) {
+        if dc.fmax[e] <= 0.0 {
+            continue;
+        }
+        let loading = sol.f[e].abs() / dc.fmax[e];
+        max_loading = max_loading.max(loading);
+        if loading > 1.0 + LIMIT_VIOLATION_TOL {
+            violated += 1;
+        }
+    }
+    LimitRound {
+        enforced: dc
+            .thermal_limit_active
+            .iter()
+            .filter(|&&active| active)
+            .count(),
+        violated,
+        added: 0,
+        max_loading,
+        variables,
+        rows,
+        ipm_iterations: sol.iterations.len(),
+    }
+}
+
+/// Lazy thermal limits: start with none enforced, and after each solve add every
+/// enforceable limit the flows violate or meet together with the unenforced ones
+/// loaded at or above `near_binding`, until a solve leaves every unenforced limit
+/// strictly slack. A solution that violates none of the limits it was not held
+/// to is optimal for the program with all of them, since adding satisfied rows
+/// cannot improve a relaxation's optimum. Requiring the omitted limits to be
+/// slack, not merely satisfied, also makes the last round's program carry every
+/// limit that binds at the optimum, so the KKT system built from it, which
+/// treats an omitted limit as absent, has the full program's derivatives. Leaves
+/// `dc` with the last round's limits enforced.
+fn solve_with_lazy_limits(
+    dc: &mut DcNetwork,
+    enforceable: &[bool],
+    lazy: &LazyLimits,
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<super::problem::DcOpfSolution, String> {
+    dc.thermal_limit_active.fill(false);
+    // An unenforced limit loaded at least this much is met: it joins the next
+    // round even when nothing is violated.
+    let met = 1.0 - LIMIT_VIOLATION_TOL;
+    let mut rounds = Vec::new();
+    loop {
+        let mut sol = dc_opf_cancellable(dc, cancel.clone())
+            .map_err(|error| format!("lazy limit round {}: {error}", rounds.len() + 1))?;
+        let mut round = limit_round(dc, &sol, enforceable);
+        let unenforced_loading = |e: usize| {
+            (enforceable[e] && !dc.thermal_limit_active[e] && dc.fmax[e] > 0.0)
+                .then(|| sol.f[e].abs() / dc.fmax[e])
+        };
+        let met_unenforced = (0..dc.m)
+            .filter(|&e| unenforced_loading(e).is_some_and(|loading| loading >= met))
+            .count();
+        if round.violated == 0 && met_unenforced == 0 {
+            rounds.push(round);
+            sol.limit_rounds = Some(rounds);
+            return Ok(sol);
+        }
+        if rounds.len() + 1 >= lazy.max_rounds {
+            return Err(if round.violated > 0 {
+                format!(
+                    "lazy thermal limits still violate {} limit(s) after {} round(s)",
+                    round.violated, lazy.max_rounds
+                )
+            } else {
+                format!(
+                    "lazy thermal limits still leave {met_unenforced} limit(s) at their limit \
+                     unenforced after {} round(s)",
+                    lazy.max_rounds
+                )
+            });
+        }
+        let threshold = lazy.near_binding.min(met);
+        let added: Vec<usize> = (0..dc.m)
+            .filter(|&e| unenforced_loading(e).is_some_and(|loading| loading >= threshold))
+            .collect();
+        for e in added {
+            dc.thermal_limit_active[e] = true;
+            round.added += 1;
+        }
+        rounds.push(round);
+    }
 }
 
 /// Assemble the DC OPF [`SolveResponse`] (and any requested sensitivity cells) from a
@@ -1056,6 +1356,7 @@ pub(crate) fn dc_opf_assemble(
         constraints: (!dc.linear_rows.is_empty())
             .then(|| linear_constraint_results(dc, sol, lmp_is_economic)),
         diagnostics: dc.diagnostics.clone(),
+        limit_rounds: sol.limit_rounds.clone(),
         #[cfg(feature = "sensitivity")]
         sensitivities,
     })
@@ -1078,6 +1379,7 @@ fn solve_dc_pf(net: &BalancedNetwork, req: &SolveRequest) -> Result<SolveRespons
     reject_rating_deltas(&req.edits.rates, "dcpf")?;
     reject_case_start(req, "dcpf")?;
     reject_linear_constraints(&req.constraints, "dcpf")?;
+    reject_limit_options(req, "dcpf")?;
     let mut dc = DcNetwork::from_network(net)?;
     let base = dc.base_mva;
     apply_demand_deltas(&mut dc, &req.edits.deltas)?;
@@ -1116,6 +1418,7 @@ fn solve_dc_pf(net: &BalancedNetwork, req: &SolveRequest) -> Result<SolveRespons
         dispatch: None,
         constraints: None,
         diagnostics: dc.diagnostics.clone(),
+        limit_rounds: None,
         sensitivities: Vec::new(),
     })
 }
@@ -1138,6 +1441,7 @@ pub(crate) fn ac_pf_solved(
     }
     reject_rating_deltas(&req.edits.rates, "acpf")?;
     reject_linear_constraints(&req.constraints, "acpf")?;
+    reject_limit_options(req, "acpf")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
     let start = match req.start {
         PowerFlowStart::Flat => super::problem::AcStart::Flat,
@@ -1194,6 +1498,7 @@ pub(crate) fn ac_pf_assemble(
         dispatch: None,
         constraints: None,
         diagnostics: acnet.diagnostics.clone(),
+        limit_rounds: None,
         sensitivities,
     })
 }
@@ -1215,6 +1520,7 @@ pub(crate) fn socwr_solved(
 ) -> Result<(super::model::AcNetwork, super::problem::SocWrSolution), String> {
     reject_case_start(req, "socwr")?;
     reject_linear_constraints(&req.constraints, "socwr")?;
+    reject_limit_options(req, "socwr")?;
     apply_demand_deltas_ac(&mut acnet, &req.edits.deltas)?;
     apply_rating_deltas_ac(&mut acnet, &req.edits.rates)?;
     let sol = super::problem::socwr_opf(&acnet)?;
@@ -1292,6 +1598,7 @@ pub(crate) fn socwr_assemble(
         dispatch: Some(zip_gen_pq(acnet, &sol.pg, &sol.qg, base)),
         constraints: None,
         diagnostics: acnet.diagnostics.clone(),
+        limit_rounds: None,
         sensitivities,
     })
 }
@@ -1731,6 +2038,18 @@ fn apply_rating_deltas_ac(
         acnet.rate_a[i] += mw / base;
     }
     Ok(())
+}
+
+/// Limit options shape the DC OPF program only; refuse them elsewhere instead
+/// of solving as if they were absent.
+#[cfg(any(feature = "sensitivity", feature = "acopf"))]
+fn reject_limit_options(req: &SolveRequest, formulation: &str) -> Result<(), String> {
+    match req.limits {
+        None => Ok(()),
+        Some(_) => Err(format!(
+            "limit options apply only to dcopf, not {formulation}"
+        )),
+    }
 }
 
 /// Validate the request's linear constraints and resolve them onto the DC OPF
@@ -2833,6 +3152,352 @@ mod tests {
         assert!(
             error.contains("vm[1]") && error.contains("invalid bounds"),
             "{error}"
+        );
+    }
+
+    /// CASE3 with linear costs ($10/MWh at bus 1, $20/MWh at bus 3), zero
+    /// minimum output, and line 1-2 rated 50 MW. Unconstrained, line 1-2 would
+    /// carry 30 + g1/3 = 60 MW, so its limit binds and holds g1 to 60 MW.
+    fn congested_case3_json() -> String {
+        case3_line_1_2_rated_json(50)
+    }
+
+    /// The linear-cost CASE3 of [`congested_case3_json`] with line 1-2 rated
+    /// `rating` MW.
+    fn case3_line_1_2_rated_json(rating: u32) -> String {
+        let text = CASE3
+            .replace(" 1 100 1 250 10 ", " 1 100 1 250 0 ")
+            .replace(" 1 100 1 270 10 ", " 1 100 1 270 0 ")
+            .replace(" 2 0 0 3 0.11  5   0;", " 2 0 0 2 10 0;")
+            .replace(" 2 0 0 3 0.085 1.2 0;", " 2 0 0 2 20 0;")
+            .replace(
+                " 1 2 0.01 0.1 0 250 250 250 0 0 1 -360 360;",
+                &format!(" 1 2 0.01 0.1 0 {rating} {rating} {rating} 0 0 1 -360 360;"),
+            );
+        serde_json::to_string(&crate::model::parse_matpower(&text).expect("parse"))
+            .expect("network JSON")
+    }
+
+    fn solve_limits(network: &str, limits: Value) -> Result<SolveResponse, String> {
+        let request = serde_json::json!({ "formulation": "dcopf", "limits": limits });
+        let out = solve_test_network_json(network, &request.to_string())?;
+        Ok(serde_json::from_str(&out).expect("response"))
+    }
+
+    fn assert_same_solution(a: &SolveResponse, b: &SolveResponse) {
+        let (oa, ob) = (a.objective.unwrap(), b.objective.unwrap());
+        assert!(
+            (oa - ob).abs() < 1e-5 * (1.0 + oa.abs()),
+            "objective {oa} vs {ob}"
+        );
+        for (pa, pb) in a.lmp.as_ref().unwrap().iter().zip(b.lmp.as_ref().unwrap()) {
+            assert!((pa.value - pb.value).abs() < 1e-4, "lmp {pa:?} vs {pb:?}");
+        }
+        for (fa, fb) in a
+            .flows
+            .as_ref()
+            .unwrap()
+            .iter()
+            .zip(b.flows.as_ref().unwrap())
+        {
+            assert!((fa.pf - fb.pf).abs() < 1e-4, "flow {fa:?} vs {fb:?}");
+        }
+    }
+
+    #[test]
+    fn dropping_angle_rows_shrinks_the_program_without_moving_the_optimum() {
+        let network = case3_json();
+        let full = solve_limits(&network, serde_json::json!({})).expect("full");
+        let lean =
+            solve_limits(&network, serde_json::json!({ "angle_difference": false })).expect("lean");
+        assert_same_solution(&full, &lean);
+        let (full, lean) = (
+            &full.limit_rounds.as_ref().unwrap()[0],
+            &lean.limit_rounds.as_ref().unwrap()[0],
+        );
+        // Three branches, two angle rows each.
+        assert_eq!(full.rows - lean.rows, 6);
+        assert_eq!(full.variables, lean.variables);
+        assert_eq!((full.enforced, full.violated, full.added), (3, 0, 0));
+    }
+
+    #[test]
+    fn a_request_without_limit_options_reports_no_rounds() {
+        let out = solve_test_network_json(&case3_json(), r#"{"formulation":"dcopf"}"#).unwrap();
+        let value: Value = serde_json::from_str(&out).unwrap();
+        assert!(value.get("limit_rounds").is_none());
+    }
+
+    #[test]
+    fn thermal_policies_select_the_enforced_limits() {
+        // Branch 2 (1-3) unrated: PowerIO synthesizes its limit from the angle
+        // window, and the rated policy drops it.
+        let text = CASE3.replace(
+            " 1 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;",
+            " 1 3 0.01 0.1 0 0 0 0 0 0 1 -360 360;",
+        );
+        let network = serde_json::to_string(&crate::model::parse_matpower(&text).unwrap()).unwrap();
+        let enforced = |thermal: Value| {
+            let response =
+                solve_limits(&network, serde_json::json!({ "thermal": thermal })).expect("solve");
+            response.limit_rounds.unwrap()[0].enforced
+        };
+        assert_eq!(enforced(serde_json::json!("all")), 3);
+        assert_eq!(enforced(serde_json::json!("rated")), 2);
+        assert_eq!(enforced(serde_json::json!({ "branches": [1, 3] })), 2);
+        assert_eq!(enforced(serde_json::json!({ "branches": [] })), 0);
+        let error = solve_limits(
+            &network,
+            serde_json::json!({ "thermal": { "branches": [9] } }),
+        )
+        .expect_err("an unknown branch");
+        assert_eq!(error, "unknown thermal limit branch 9");
+    }
+
+    #[test]
+    fn lazy_limits_reach_the_full_optimum_and_report_their_rounds() {
+        let network = congested_case3_json();
+        let full = solve_limits(&network, serde_json::json!({})).expect("full");
+        let lazy = solve_limits(&network, serde_json::json!({ "lazy": {} })).expect("lazy");
+        assert_same_solution(&full, &lazy);
+        let lmp: Vec<f64> = lazy.lmp.as_ref().unwrap().iter().map(|p| p.value).collect();
+        for (price, expected) in lmp.iter().zip([10.0, 30.0, 20.0]) {
+            assert!((price - expected).abs() < 1e-4, "{lmp:?}");
+        }
+        let rounds = lazy.limit_rounds.unwrap();
+        assert_eq!(rounds.len(), 2, "{rounds:?}");
+        // The first round enforces nothing and finds line 1-2 at 60 MW against its
+        // 50 MW limit; the second enforces it and violates nothing.
+        assert_eq!((rounds[0].enforced, rounds[0].violated), (0, 1));
+        assert!((rounds[0].max_loading - 1.2).abs() < 1e-6, "{rounds:?}");
+        assert_eq!(rounds[0].added, 1);
+        assert_eq!(
+            (rounds[1].enforced, rounds[1].violated, rounds[1].added),
+            (1, 0, 0)
+        );
+        assert_eq!(rounds[0].rows + 2, rounds[1].rows);
+        assert!(rounds.iter().all(|round| round.ipm_iterations > 0));
+    }
+
+    #[test]
+    fn lazy_limits_refuse_a_solution_still_violated_after_the_last_round() {
+        let error = solve_limits(
+            &congested_case3_json(),
+            serde_json::json!({ "lazy": { "max_rounds": 1 } }),
+        )
+        .expect_err("one round cannot enforce the binding limit");
+        assert_eq!(
+            error,
+            "lazy thermal limits still violate 1 limit(s) after 1 round(s)"
+        );
+    }
+
+    #[test]
+    fn malformed_limit_options_are_refused() {
+        let network = case3_json();
+        for (limits, expected) in [
+            (
+                serde_json::json!({ "lazy": { "max_rounds": 0 } }),
+                "lazy limits need at least one round",
+            ),
+            (
+                serde_json::json!({ "lazy": { "near_binding": 1.5 } }),
+                "lazy near_binding must be in (0, 1]",
+            ),
+        ] {
+            assert_eq!(solve_limits(&network, limits).unwrap_err(), expected);
+        }
+        let error = solve_limits(&network, serde_json::json!({ "thermal": "some" }))
+            .expect_err("an unknown policy");
+        assert!(error.contains("unknown variant `some`"), "{error}");
+        let error = solve_limits(&network, serde_json::json!({ "angles": false }))
+            .expect_err("an unknown field");
+        assert!(error.contains("unknown field `angles`"), "{error}");
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn limit_options_are_refused_outside_dc_opf() {
+        let mut formulations = vec!["dcpf", "acpf"];
+        if cfg!(feature = "conic") {
+            formulations.push("socwr");
+        }
+        if cfg!(feature = "acopf") {
+            formulations.push("acopf");
+        }
+        for formulation in formulations {
+            let request = format!(r#"{{"formulation":"{formulation}","limits":{{}}}}"#);
+            let error = solve_test_network_json(&case3_json(), &request).unwrap_err();
+            assert_eq!(
+                error,
+                format!("limit options apply only to dcopf, not {formulation}")
+            );
+        }
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn lazy_limits_keep_the_sensitivities_of_the_full_program() {
+        let network = congested_case3_json();
+        let cells = r#"[{"operand":{"Price":"Active"},"parameter":"LineLimit","indices":[0]}]"#;
+        let solve = |limits: &str| -> SolveResponse {
+            let request =
+                format!(r#"{{"formulation":"dcopf","limits":{limits},"sensitivities":{cells}}}"#);
+            serde_json::from_str(&solve_test_network_json(&network, &request).unwrap()).unwrap()
+        };
+        let full = solve("{}");
+        let lazy = solve(r#"{"lazy":{}}"#);
+        for (a, b) in full.sensitivities[0]
+            .values
+            .iter()
+            .zip(&lazy.sensitivities[0].values)
+        {
+            assert!((a[0] - b[0]).abs() < 1e-4, "{a:?} vs {b:?}");
+        }
+    }
+
+    #[test]
+    fn lazy_limits_enforce_a_limit_the_relaxation_meets() {
+        // Unconstrained, line 1-2 carries exactly the 60 MW it is rated: the
+        // first round violates nothing but meets that limit, so it joins the
+        // second round instead of being left out at its bound.
+        let network = case3_line_1_2_rated_json(60);
+        let full = solve_limits(&network, serde_json::json!({})).expect("full");
+        let lazy = solve_limits(&network, serde_json::json!({ "lazy": {} })).expect("lazy");
+        // A limit met with nothing pressing on it leaves the prices at bus 2
+        // degenerate, so compare the primal solution only.
+        let (a, b) = (full.objective.unwrap(), lazy.objective.unwrap());
+        assert!(
+            (a - b).abs() < 1e-5 * (1.0 + a.abs()),
+            "objective {a} vs {b}"
+        );
+        for (fa, fb) in full.flows.unwrap().iter().zip(lazy.flows.as_ref().unwrap()) {
+            assert!((fa.pf - fb.pf).abs() < 1e-4, "flow {fa:?} vs {fb:?}");
+        }
+        let rounds = lazy.limit_rounds.unwrap();
+        assert_eq!(rounds.len(), 2, "{rounds:?}");
+        assert_eq!(
+            (rounds[0].enforced, rounds[0].violated, rounds[0].added),
+            (0, 0, 1)
+        );
+        assert_eq!(
+            (rounds[1].enforced, rounds[1].violated, rounds[1].added),
+            (1, 0, 0)
+        );
+        let error = solve_limits(&network, serde_json::json!({ "lazy": { "max_rounds": 1 } }))
+            .expect_err("one round leaves the met limit out");
+        assert_eq!(
+            error,
+            "lazy thermal limits still leave 1 limit(s) at their limit unenforced after 1 round(s)"
+        );
+    }
+
+    /// CASE3_TWIN with line 2-3 rated 45 MW. Unconstrained, it would carry
+    /// 60 - g1/3, about 50 MW, so its limit binds in island 1-3.
+    fn congested_twin_json() -> String {
+        let text = crate::model::CASE3_TWIN.replacen(
+            " 2 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;",
+            " 2 3 0.01 0.1 0 45 45 45 0 0 1 -360 360;",
+            1,
+        );
+        serde_json::to_string(&crate::model::parse_matpower(&text).expect("parse"))
+            .expect("network JSON")
+    }
+
+    #[cfg(feature = "sensitivity")]
+    #[test]
+    fn lazy_and_reduced_limits_keep_the_full_sensitivities_with_constraints_and_islands() {
+        let network = congested_twin_json();
+        // Island 4-6's bus 6 unit is held to 40 MW, below its unconstrained 43.6,
+        // and a row over the bus 1 and bus 4 units, one in each island, sits
+        // between its limits.
+        let constraints = serde_json::json!([
+            {
+                "id": "bus 6 unit",
+                "terms": [{ "kind": "generator", "element": 4, "coefficient": 1.0 }],
+                "upper": 40.0
+            },
+            {
+                "id": "both islands",
+                "terms": [
+                    { "kind": "generator", "element": 1, "coefficient": 1.0 },
+                    { "kind": "generator", "element": 3, "coefficient": 1.0 }
+                ],
+                "lower": 0.0,
+                "upper": 200.0
+            }
+        ]);
+        let cells = serde_json::json!([
+            { "operand": { "Price": "Active" }, "parameter": { "Demand": "Active" } },
+            { "operand": { "Dispatch": "Active" }, "parameter": "LineLimit" },
+            { "operand": { "Price": "Active" }, "parameter": "ConstraintLimit" },
+            {
+                "operand": { "Flow": { "power": "Active", "end": "From" } },
+                "parameter": { "Demand": "Active" }
+            }
+        ]);
+        let solve = |limits: Option<Value>| -> SolveResponse {
+            let mut request = serde_json::json!({
+                "formulation": "dcopf",
+                "constraints": constraints,
+                "sensitivities": cells
+            });
+            if let Some(limits) = limits {
+                request["limits"] = limits;
+            }
+            let out = solve_test_network_json(&network, &request.to_string()).expect("solve");
+            serde_json::from_str(&out).expect("response")
+        };
+        let full = solve(None);
+        // The rows the fixture means to bind: line 2-3 and the bus 6 unit.
+        let flows = full.flows.as_ref().unwrap();
+        assert!((flows[2].pf.abs() - 45.0).abs() < 1e-5, "{flows:?}");
+        let rows = full.constraints.as_ref().unwrap();
+        assert!(rows[0].binding && !rows[1].binding, "{rows:?}");
+
+        for limits in [
+            serde_json::json!({ "lazy": {} }),
+            serde_json::json!({ "lazy": {}, "thermal": "rated" }),
+            serde_json::json!({ "thermal": { "branches": [3] } }),
+        ] {
+            let reduced = solve(Some(limits.clone()));
+            assert_same_solution(&full, &reduced);
+            for (cell, (a, b)) in full
+                .sensitivities
+                .iter()
+                .zip(&reduced.sensitivities)
+                .enumerate()
+            {
+                for (ra, rb) in a.values.iter().zip(&b.values) {
+                    for (x, y) in ra.iter().zip(rb) {
+                        assert!(
+                            (x - y).abs() < 1e-5 * x.abs().max(1.0),
+                            "{limits}: cell {cell}: {x} vs {y}"
+                        );
+                    }
+                }
+            }
+        }
+        let lazy = solve(Some(serde_json::json!({ "lazy": {} })));
+        let rounds = lazy.limit_rounds.unwrap();
+        assert!(rounds.len() >= 2 && rounds[0].violated >= 1, "{rounds:?}");
+        assert_eq!(rounds.last().unwrap().violated, 0);
+    }
+
+    #[test]
+    fn edit_validation_resolves_uid_and_id_keys_through_its_lookups() {
+        let net: BalancedNetwork = serde_json::from_str(&case3_with_uids_json()).unwrap();
+        let edits: Edits = serde_json::from_value(serde_json::json!({
+            "deltas": { "2": 5.0, "buses:2": 1.0 },
+            "rates": { "branches:1": 5.0, "3": -5.0 }
+        }))
+        .unwrap();
+        validate_canonical_edits(&net, &edits).expect("known keys");
+        let unknown: Edits =
+            serde_json::from_value(serde_json::json!({ "rates": { "branches:9": 1.0 } })).unwrap();
+        assert_eq!(
+            validate_canonical_edits(&net, &unknown).unwrap_err(),
+            "unknown rating delta branch \"branches:9\""
         );
     }
 

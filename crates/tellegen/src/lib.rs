@@ -59,8 +59,8 @@ pub use api::{
     capabilities_json, solve_instance, solve_instance_cancellable, solve_module_json,
     validate_canonical_identity, AcOpfResiduals, BranchFlow, BranchScalar, BusInjection, BusScalar,
     ConstraintResult, ConstraintTerm, ConstraintTermKind, Edits, ElementKey, GenDispatch,
-    Iterations, LinearConstraint, PowerFlowStart, Problem, ProblemCaps, SolveRequest,
-    SolveResponse, SolveStatus,
+    Iterations, LazyLimits, LimitOptions, LimitRound, LinearConstraint, PowerFlowStart, Problem,
+    ProblemCaps, SolveRequest, SolveResponse, SolveStatus, ThermalLimits,
 };
 #[cfg(feature = "acopf")]
 pub use api::{solve_ac_opf_instance, solve_ac_opf_instance_cancellable};

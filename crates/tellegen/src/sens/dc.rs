@@ -1167,48 +1167,11 @@ mod tests {
         check_parity(&equality_constrained_case3(), "equality case3");
     }
 
-    /// Two copies of case3 as islands 1-3 and 4-6, each with its own reference.
-    /// Island 4-6 serves 60 MW; unconstrained, its line 4-5 carries
-    /// 20 + g4/3, about 25.5 MW.
-    const TWIN_CASE3: &str = "\
-function mpc = twin
-mpc.version = '2';
-mpc.baseMVA = 100;
-mpc.bus = [
- 1 3 0  0  0 0 1 1 0 230 1 1.1 0.9;
- 2 1 90 30 0 0 1 1 0 230 1 1.1 0.9;
- 3 2 0  0  0 0 1 1 0 230 1 1.1 0.9;
- 4 3 0  0  0 0 1 1 0 230 1 1.1 0.9;
- 5 1 60 20 0 0 1 1 0 230 1 1.1 0.9;
- 6 2 0  0  0 0 1 1 0 230 1 1.1 0.9;
-];
-mpc.gen = [
- 1 0  0 300 -300 1 100 1 250 10 0 0 0 0 0 0 0 0 0 0 0;
- 3 60 0 300 -300 1 100 1 270 10 0 0 0 0 0 0 0 0 0 0 0;
- 4 0  0 300 -300 1 100 1 250 10 0 0 0 0 0 0 0 0 0 0 0;
- 6 40 0 300 -300 1 100 1 270 10 0 0 0 0 0 0 0 0 0 0 0;
-];
-mpc.branch = [
- 1 2 0.01 0.1 0 250 250 250 0 0 1 -360 360;
- 1 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;
- 2 3 0.01 0.1 0 250 250 250 0 0 1 -360 360;
- 4 5 0.01 0.1 0 250 250 250 0 0 1 -360 360;
- 4 6 0.01 0.1 0 250 250 250 0 0 1 -360 360;
- 5 6 0.01 0.1 0 250 250 250 0 0 1 -360 360;
-];
-mpc.gencost = [
- 2 0 0 3 0.11  5   0;
- 2 0 0 3 0.085 1.2 0;
- 2 0 0 3 0.11  5   0;
- 2 0 0 3 0.085 1.2 0;
-];
-";
-
     /// An interface limit binds in each island, and a two-sided row on the
     /// output of both islands' bus 1 and bus 4 units sits between its limits.
     #[test]
     fn parity_with_binding_rows_in_two_islands() {
-        let net = crate::model::parse_matpower(TWIN_CASE3).expect("parse");
+        let net = crate::model::parse_matpower(crate::model::CASE3_TWIN).expect("parse");
         let mut dc = DcNetwork::from_network(&net).expect("model");
         assert_eq!(dc.ref_buses.len(), 2);
         dc.linear_rows = vec![
@@ -1223,6 +1186,48 @@ mpc.gencost = [
         assert!(sol.linear_duals[0] > 1e-3 && sol.linear_duals[1] > 1e-3);
         assert!(sol.linear_duals[2].abs() < 1e-6, "{:?}", sol.linear_duals);
         check_parity(&dc, "two islands");
+    }
+
+    /// Limits the program leaves out, as a lazy round or a `thermal` policy
+    /// does, in two islands with a binding constraint row: one omitted limit
+    /// sits exactly at its flow and another is exceeded. Neither carries a
+    /// multiplier, so forward and adjoint derivatives agree and match finite
+    /// differences of the program as solved, even where a zero slack meets the
+    /// zero multiplier.
+    #[test]
+    fn parity_with_omitted_limits_in_two_islands() {
+        let net = crate::model::parse_matpower(crate::model::CASE3_TWIN).expect("parse");
+        let mut dc = DcNetwork::from_network(&net).expect("model");
+        dc.linear_rows = vec![linear_row(vec![(3, 1.0)], vec![], None, Some(24.0))];
+        let sol = dc_opf(&dc).expect("solve");
+        // Leave line 1-2's limit out exactly at its flow, and line 5-6's at half
+        // of it.
+        dc.thermal_limit_active[0] = false;
+        dc.fmax[0] = sol.f[0].abs();
+        dc.thermal_limit_active[5] = false;
+        dc.fmax[5] = 0.5 * sol.f[5].abs();
+        let omitted = dc_opf(&dc).expect("solve");
+        assert!((omitted.f[0].abs() - dc.fmax[0]).abs() < 1e-12);
+        assert!(omitted.f[5].abs() > dc.fmax[5]);
+        check_parity(&dc, "omitted limits");
+        let sys = DcKkt::new(&dc, &omitted);
+        for &op in &OPERANDS {
+            for &par in &PARAMETERS {
+                if param_count(&dc, par) == 0 {
+                    continue;
+                }
+                let forward = sensitivity(&sys, op, par, None, Mode::Forward).expect("forward");
+                let adjoint = sensitivity(&sys, op, par, None, Mode::Adjoint).expect("adjoint");
+                for (f, a) in forward.values.iter().zip(&adjoint.values) {
+                    for (x, y) in f.iter().zip(a) {
+                        assert!(
+                            (x - y).abs() < 1e-8 * x.abs().max(1.0),
+                            "{op:?}/{par:?}: forward {x} adjoint {y}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -1444,7 +1449,11 @@ mpc.gencost = [
         let mut minus = dc.clone();
         minus.fmax[branch] -= h;
         let finite_difference = (objective(&plus) - objective(&minus)) / (2.0 * h);
-        let tolerance = 1e-5_f64.max(1e-3 * finite_difference.abs());
+        // The price is piecewise constant in the rating here, so both values are
+        // near zero and the difference quotient is interior-point noise: each
+        // solve meets this $87.5 price to a few 1e-9, which the 2h = 2e-4 stencil
+        // turns into a few 1e-5.
+        let tolerance = 5e-5_f64.max(1e-3 * finite_difference.abs());
         assert!(
             (analytic - finite_difference).abs() < tolerance,
             "analytic {analytic}, finite difference {finite_difference}, tolerance {tolerance}"

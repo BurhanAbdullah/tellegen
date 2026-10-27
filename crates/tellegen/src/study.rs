@@ -951,6 +951,7 @@ impl Study {
             edits: fold(log),
             start: PowerFlowStart::Flat,
             constraints: self.constraints.clone(),
+            limits: None,
             sensitivities: sensitivities.to_vec(),
         };
         // Re-solve from a fresh clone of the base (the source of truth), then assemble the
