@@ -1,5 +1,5 @@
 // Generated from Rust by study_schema and generate-study-types.mjs.
-// Source SHA256: 8367802fb3705b500789689bcdae441abd9ee1e2e5acb5ba353ee52298e97807
+// Source SHA256: e836c01e4b47bacdc9a0a7568d4dd88fe3dbc8ee1b5085e19007a08b7d32b6e2
 
 export type ArtifactKind = "powerio_ir" | "geo_layer" | "evidence";
 
