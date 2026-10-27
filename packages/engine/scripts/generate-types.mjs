@@ -149,7 +149,38 @@ export interface SolveIteration {
 }
 
 export type NewtonIterations = { count: number; residual: number };
-export type Iterations = SolveIteration[] | NewtonIterations;
+export interface AcOpfResiduals {
+\tactive_balance_mw: number;
+\treactive_balance_mvar: number;
+\tvoltage_bounds_pu: number;
+\tactive_generation_bounds_mw: number;
+\treactive_generation_bounds_mvar: number;
+\treference_angles_rad: number;
+\tangle_limits_rad: number;
+\tthermal_limits_mva: number;
+\tpiecewise_epigraph_cost: number;
+\tobjective_relative_error: number;
+}
+export interface NlpIterations {
+\tnlp_iterations: number;
+\t/** Maximum independent P/Q mismatch in MW/MVAr. */
+\tprimal_residual: number;
+\tresiduals?: AcOpfResiduals;
+\tsolver_status: string;
+\tsolver_constraint_violation: number;
+\tsolver_kkt_error: number;
+\tmodel_fingerprint: string;
+\t/** Base verdict and work across all attempts (older assets omit these). */
+\tbase_solver_status?: string;
+\ttotal_nlp_iterations?: number;
+\t/** Restoration entries in the selected solve. */
+\trestoration_calls?: number;
+\t/** Restoration entries in the original solve. */
+\tbase_restoration_calls?: number;
+\trecovery_attempts?: string[];
+\trecovered_by?: string;
+}
+export type Iterations = SolveIteration[] | NewtonIterations | NlpIterations;
 
 export interface BusScalar {
 \tbus: number;

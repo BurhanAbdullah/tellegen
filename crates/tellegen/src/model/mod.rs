@@ -22,6 +22,8 @@ use powerio_tx::{IndexedNetwork, NormalizeOptions};
 
 #[cfg(feature = "sensitivity")]
 mod ac;
+#[cfg(feature = "acopf")]
+mod acopf;
 #[cfg(test)]
 mod cases;
 mod dc;
@@ -29,6 +31,8 @@ pub(crate) mod islands;
 
 #[cfg(feature = "sensitivity")]
 pub(crate) use ac::AcNetwork;
+#[cfg(feature = "acopf")]
+pub(crate) use acopf::{solve_ac_opf_cancellable, AcOpfSolved};
 pub(crate) use dc::{DcNetwork, LinearRow};
 
 #[cfg(all(test, feature = "conic"))]
@@ -306,7 +310,7 @@ fn reject_unfiltered_normalized_elements(network: &BalancedNetwork) -> Result<()
     ))
 }
 
-fn reject_unsupported_active_elements(network: &BalancedNetwork) -> Result<(), String> {
+pub(super) fn reject_unsupported_active_elements(network: &BalancedNetwork) -> Result<(), String> {
     let closed_switches = network
         .switches()
         .iter()
@@ -545,6 +549,32 @@ pub(super) fn branch_ids_for_view_rows(
                     provenance.len()
                 )
             })
+        })
+        .collect()
+}
+
+#[cfg(any(feature = "conic", feature = "acopf"))]
+pub(super) fn stable_source_ids(
+    source_rows: &[Option<usize>],
+    source_len: usize,
+    family: &str,
+) -> Result<Vec<usize>, String> {
+    let mut next_synthetic = source_len
+        .checked_add(1)
+        .ok_or_else(|| format!("{family} synthetic id space exhausted"))?;
+    source_rows
+        .iter()
+        .map(|row| match row {
+            Some(row) => row
+                .checked_add(1)
+                .ok_or_else(|| format!("{family} id space exhausted")),
+            None => {
+                let id = next_synthetic;
+                next_synthetic = next_synthetic
+                    .checked_add(1)
+                    .ok_or_else(|| format!("{family} synthetic id space exhausted"))?;
+                Ok(id)
+            }
         })
         .collect()
 }

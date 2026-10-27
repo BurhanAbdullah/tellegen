@@ -61,6 +61,12 @@
 							<dd class="mono">{iterations.length}</dd>
 						</div>
 					{/if}
+					{#if active.solveDetail}
+						<div>
+							<dt>Solve</dt>
+							<dd>{active.solveDetail}</dd>
+						</div>
+					{/if}
 					{#if server}
 						<div>
 							<dt>Solver</dt>

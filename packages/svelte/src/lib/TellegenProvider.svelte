@@ -21,6 +21,7 @@
 
 	let {
 		apiBase,
+		acOpfWasmUrl,
 		loadDefaultCases,
 		docsHref,
 		orgHref,
@@ -31,14 +32,15 @@
 		children
 	}: Props = $props();
 
-	// Read once, at mount: `apiBase` and `loadDefaultCases` configure the
-	// controller this provider owns, and the links and footer are fixed copy.
-	// `theme` and `cartoApiKey` stay live, so a host can switch them and the
-	// root attribute and the default shell's map follow.
+	// Read once, at mount: `apiBase`, `acOpfWasmUrl` and `loadDefaultCases`
+	// configure the controller this provider owns, and the links and footer are
+	// fixed copy. `theme` and `cartoApiKey` stay live, so a host can switch them
+	// and the root attribute and the default shell's map follow.
 	const config: TellegenUiConfig = {
 		...untrack(() =>
 			resolveTellegenUiConfig({
 				apiBase,
+				acOpfWasmUrl,
 				loadDefaultCases,
 				docsHref,
 				orgHref,
@@ -56,6 +58,7 @@
 	const app = createAppState();
 	const ctrl = createController(app, {
 		apiBase: config.apiBase,
+		acOpfWasmUrl: config.acOpfWasmUrl ?? undefined,
 		loadDefaultCases: config.loadDefaultCases
 	});
 	// A host that opens its own cases never calls load(), so the shell must not

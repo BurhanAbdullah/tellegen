@@ -154,15 +154,22 @@
 	{/if}
 	{@render note?.(lc)}
 	{#if lc.summary && lc.studyInputJson}
+		{@const exportUnavailable = ctrl.caseExportUnavailableReason(lc)}
 		<div class="case-actions">
-			<button class="reset" disabled={busy} onclick={() => saveCase(lc)}>Save case</button>
+			<button
+				class="reset"
+				disabled={busy || !!exportUnavailable}
+				title={exportUnavailable ?? undefined}
+				onclick={() => saveCase(lc)}>Save case</button
+			>
 			{#if lc.formulation === 'dcopf' && lc.solution}
 				<button class="reset" disabled={busy} onclick={() => saveSolution(lc)}>Save solution</button
 				>
 			{/if}
 			<button
 				class="reset"
-				disabled={busy}
+				disabled={busy || !!exportUnavailable}
+				title={exportUnavailable ?? undefined}
 				aria-expanded={exportOpen}
 				aria-controls="case-export-formats"
 				onclick={() => (exportOpen = !exportOpen)}
@@ -175,7 +182,9 @@
 				</button>
 			{/if}
 		</div>
-		{#if exportOpen}
+		{#if exportUnavailable}
+			<p class="unavailable">{exportUnavailable}</p>
+		{:else if exportOpen}
 			<ul class="case-actions" id="case-export-formats" aria-label="Export formats">
 				{#each EXPORT_FORMATS as f (f.token)}
 					<li>
@@ -265,5 +274,11 @@
 
 	.case-actions .reset {
 		margin-top: 0;
+	}
+
+	.unavailable {
+		margin: 8px 0 0;
+		font-size: 12px;
+		color: var(--text-secondary);
 	}
 </style>
