@@ -58,7 +58,8 @@ pub use api::solve_ac_instance;
 pub use api::{
     capabilities_json, solve_instance, solve_instance_cancellable, solve_module_json,
     validate_canonical_identity, AcOpfResiduals, BranchFlow, BranchScalar, BusInjection, BusScalar,
-    Edits, ElementKey, GenDispatch, Iterations, PowerFlowStart, Problem, ProblemCaps, SolveRequest,
+    ConstraintResult, ConstraintTerm, ConstraintTermKind, Edits, ElementKey, GenDispatch,
+    Iterations, LinearConstraint, PowerFlowStart, Problem, ProblemCaps, SolveRequest,
     SolveResponse, SolveStatus,
 };
 #[cfg(feature = "acopf")]

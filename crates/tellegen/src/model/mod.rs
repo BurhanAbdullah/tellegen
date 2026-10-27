@@ -33,7 +33,7 @@ pub(crate) mod islands;
 pub(crate) use ac::AcNetwork;
 #[cfg(feature = "acopf")]
 pub(crate) use acopf::{solve_ac_opf_cancellable, AcOpfSolved};
-pub(crate) use dc::DcNetwork;
+pub(crate) use dc::{DcNetwork, LinearRow};
 
 #[cfg(all(test, feature = "conic"))]
 pub(crate) use cases::parse_case3_ac;
