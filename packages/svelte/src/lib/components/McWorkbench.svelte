@@ -1,13 +1,11 @@
 <script lang="ts">
-	import type { DistGraph, McPfResult } from '@tellegen/engine';
+	import type { DistGraph } from '@tellegen/engine';
 	import MultiWire from './MultiWire.svelte';
 	import OmniSearch from './OmniSearch.svelte';
 	import ResultsTable from './ResultsTable.svelte';
 	import {
-		buildSearchIndex,
 		busState,
 		conductorBars,
-		graphInputs,
 		LOADING_WARNING,
 		loadingState,
 		magnitudeUnbalance,
@@ -15,19 +13,23 @@
 		pairBar,
 		queryTable,
 		rankIssues,
-		snapshotFromMcPf,
 		snapshotSummary,
 		tableCsv,
 		tableModel,
+		type GraphInputs,
 		type Issue,
+		type ResultSnapshot,
+		type SearchIndex,
 		type SearchMatch,
 		type TableKind
 	} from '../diagram/index.js';
 	import { neutralTerminal } from '../multiconductor.js';
 
 	let {
-		result,
+		snapshot,
 		graph,
+		inputs,
+		search,
 		loading = false,
 		selectedBus,
 		selectedEdge,
@@ -41,9 +43,14 @@
 		onhover,
 		onreveal
 	}: {
-		/** The full operating point; `null` while it is being fetched. */
-		result: McPfResult | null;
+		/** The operating point projected onto `inputs` (`snapshotFromMcPf`); `null` while it is being
+		 * fetched. `MulticonductorCase.overviewSnapshot` holds a case's, shared with the diagram. */
+		snapshot: ResultSnapshot | null;
 		graph: DistGraph;
+		/** `graphInputs(graph)`; `MulticonductorCase.overviewInputs` holds a case's. */
+		inputs: GraphInputs;
+		/** `buildSearchIndex(inputs.entities)`; `MulticonductorCase.overviewSearch` holds a case's. */
+		search: SearchIndex;
 		loading?: boolean;
 		selectedBus: string | null;
 		selectedEdge: string | null;
@@ -64,10 +71,6 @@
 	} = $props();
 
 	const ISSUE_LIMIT = 50;
-	const inputs = $derived(graphInputs(graph));
-	const snapshot = $derived(
-		result ? snapshotFromMcPf(result, inputs.buses, inputs.branches) : null
-	);
 	const issues = $derived(snapshot ? rankIssues(snapshot) : []);
 	const summary = $derived(snapshot ? snapshotSummary(snapshot, issues) : null);
 	const limitsDeclared = $derived(
@@ -86,8 +89,6 @@
 		});
 		return index;
 	});
-	// Network-only structures are rebuilt when the case changes, not after every solve.
-	const searchIndex = $derived(buildSearchIndex(inputs.entities));
 	let tableKind = $state<TableKind>('bus');
 	const tables = $derived(
 		snapshot
@@ -227,7 +228,7 @@
 			>{/if}
 	</div>
 	<OmniSearch
-		index={searchIndex}
+		index={search}
 		hint={searchHint}
 		onselect={(m) => selectOnce(m.kind === 'bus' ? 'bus' : 'branch', m.index)}
 	/>
