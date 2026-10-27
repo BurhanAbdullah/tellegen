@@ -23,20 +23,20 @@ use faer::Mat;
 mod ac;
 #[cfg(feature = "conic")]
 mod conic;
-mod contract;
 mod dc;
+mod interface;
 
 pub use ac::AcNewton;
 #[cfg(feature = "conic")]
 pub use conic::ConicKkt;
-pub use contract::{
+pub use dc::DcKkt;
+pub use interface::{
     functional_gradient, sensitivity, weighted_sensitivity, Axis, Bound, ColMeta, CostTerm,
     Differentiable, ElementId, End, Operand, Parameter, Power, RowMeta, Selector, SensError,
     SensitivityMatrix, SolveSpec, TapKind, VoltageKind, GB,
 };
-pub use dc::DcKkt;
 
-pub(crate) use contract::{served_unit_scale, served_units_label};
+pub(crate) use interface::{served_unit_scale, served_units_label};
 
 /// Which linear systems the engine factorizes. [`Forward`](Mode::Forward) and
 /// [`Adjoint`](Mode::Adjoint) return the same matrix; the choice trades a
