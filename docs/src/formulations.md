@@ -4,8 +4,8 @@ Tellegen solves DC power flow, DC OPF, AC power flow, and the Jabr SOCWR
 relaxation through the PowerIO module boundary. The shared response has
 optional fields for the quantities each formulation produces. Economic fields
 are present only when the declared objective gives them that interpretation.
-Supported implicit derivatives use the contract described in
-[the sensitivity contract](sensitivity-contract.md).
+Supported implicit derivatives use the interface described in
+[the sensitivity interface](sensitivity-interface.md).
 
 ## DC power flow and DC OPF (B–θ)
 
