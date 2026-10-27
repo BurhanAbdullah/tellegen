@@ -1489,6 +1489,13 @@
     },
     "OsmProvenance": {
       "properties": {
+        "copyright": {
+          "description": "The Overpass answer's `osm3s.copyright` notice: the licence (ODbL) the\ndata was served under.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "counts": {
           "additionalProperties": {
             "format": "uint64",
@@ -2785,5 +2792,5 @@
   ],
   "title": "SynthSchema",
   "type": "object",
-  "x-rust-source-sha256": "4d012c8adfdfccf207affed59b5cc0ae52390c38b3da4f60f1039ddda55c01ca"
+  "x-rust-source-sha256": "ac27816de6e30174f5a8569aeb41d6fea7ec6384580019d5a6ff84d6b913e4a1"
 }
