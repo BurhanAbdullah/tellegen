@@ -764,6 +764,10 @@ pub struct OsmProvenance {
     pub generator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp_osm_base: Option<String>,
+    /// The Overpass answer's `osm3s.copyright` notice: the licence (ODbL) the
+    /// data was served under.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copyright: Option<String>,
     pub document_sha256: String,
     pub elements: usize,
     pub counts: BTreeMap<String, u64>,

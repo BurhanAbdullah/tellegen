@@ -22,8 +22,9 @@ const KM_PER_DEGREE: f64 = 111.195;
 
 /// Overpass QL for the request's region: one query per bounding box, two when
 /// the region crosses the antimeridian (split at ±180°). Each query fetches
-/// substations, lines and cables, plants and generators, and converters,
-/// with centres for areas and full geometry for lines. The box is the
+/// substations, lines and cables, plants, generators rated in MW or GW (the
+/// rooftop units, most of them, are left out), and converters, with centres
+/// for areas and full geometry for lines. The box is the
 /// region's frame widened by the OSM clip buffer, so infrastructure the clip
 /// keeps is fetched.
 pub fn overpass_queries(request: &SynthRequest) -> Result<Vec<String>, SynthError> {
@@ -98,7 +99,7 @@ fn overpass_ql(bbox: &BBox) -> String {
         "[out:json][timeout:{OVERPASS_TIMEOUT_S}];\n\
          (\n  node[\"power\"=\"substation\"]{b};\n  way[\"power\"=\"substation\"]{b};\n  relation[\"power\"=\"substation\"]{b};\n)->.subs;\n\
          (\n  way[\"power\"=\"line\"]{b};\n  way[\"power\"=\"cable\"]{b};\n)->.lines;\n\
-         (\n  node[\"power\"=\"plant\"]{b};\n  way[\"power\"=\"plant\"]{b};\n  relation[\"power\"=\"plant\"]{b};\n  node[\"power\"=\"generator\"]{b};\n  way[\"power\"=\"generator\"]{b};\n)->.plants;\n\
+         (\n  node[\"power\"=\"plant\"]{b};\n  way[\"power\"=\"plant\"]{b};\n  relation[\"power\"=\"plant\"]{b};\n  node[\"power\"=\"generator\"][\"generator:output:electricity\"~\"[0-9] *[mg]w\",i]{b};\n  way[\"power\"=\"generator\"][\"generator:output:electricity\"~\"[0-9] *[mg]w\",i]{b};\n)->.plants;\n\
          (\n  node[\"power\"=\"converter\"]{b};\n  way[\"power\"=\"converter\"]{b};\n  relation[\"power\"=\"converter\"]{b};\n)->.converters;\n\
          .subs out center tags;\n.lines out geom tags;\n.plants out center tags;\n.converters out center tags;\n"
     )
@@ -117,6 +118,9 @@ mod tests {
         assert!(q[0].starts_with("[out:json][timeout:60];"));
         assert!(q[0].contains("way[\"power\"=\"line\"](36.85"));
         assert!(q[0].contains(".lines out geom tags;"));
+        assert!(q[0].contains(
+            "node[\"power\"=\"generator\"][\"generator:output:electricity\"~\"[0-9] *[mg]w\",i](36.85"
+        ));
         let req = SynthRequest::new(Region::bbox(176.0, -19.5, 182.0, -15.5, "Fiji"));
         let q = overpass_queries(&req).unwrap();
         assert_eq!(q.len(), 2);
