@@ -126,7 +126,17 @@ pub struct ParsedDocument {
 /// Parse one Overpass JSON document, or a JSON array of them (the two halves
 /// of an antimeridian-crossing region). Elements seen twice (an element both
 /// halves return) are kept once.
+/// Parse one Overpass JSON document or the two documents from an
+/// antimeridian-crossing request. Reject excessive input before creating the
+/// mapped graph.
 pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
+    if text.len() > crate::osm::MAX_OSM_DOCUMENT_BYTES {
+        return Err(SynthError::InvalidRequest(format!(
+            "Overpass document is {} bytes, over the {} byte safety limit",
+            text.len(),
+            crate::osm::MAX_OSM_DOCUMENT_BYTES
+        )));
+    }
     let trimmed = text.trim_start();
     let documents: Vec<Document> = if trimmed.starts_with('[') {
         serde_json::from_str(trimmed)
@@ -134,6 +144,13 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
         serde_json::from_str(trimmed).map(|d| vec![d])
     }
     .map_err(|e| SynthError::Osm(format!("cannot parse the Overpass JSON: {e}")))?;
+    let element_count: usize = documents.iter().map(|d| d.elements.len()).sum();
+    if element_count > crate::osm::MAX_OSM_ELEMENTS {
+        return Err(SynthError::InvalidRequest(format!(
+            "Overpass response contains {element_count} elements, over the {} element safety limit",
+            crate::osm::MAX_OSM_ELEMENTS
+        )));
+    }
     let mut seen = std::collections::BTreeSet::new();
     let mut out = ParsedDocument {
         provenance: OsmProvenance {
@@ -454,6 +471,13 @@ mod tests {
         assert_eq!(parse_power_mw(""), None);
         assert_eq!(parse_power_mw("lots"), None);
         assert_eq!(parse_power_mw("5 MWh"), None);
+    }
+
+    #[test]
+    fn oversized_raw_document_is_refused_before_json_parsing() {
+        let oversized = " ".repeat(crate::osm::MAX_OSM_DOCUMENT_BYTES + 1);
+        let err = parse_document(&oversized).unwrap_err();
+        assert!(err.to_string().contains("safety limit"), "{err}");
     }
 
     #[test]
