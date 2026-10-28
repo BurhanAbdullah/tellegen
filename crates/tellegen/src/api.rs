@@ -4723,6 +4723,7 @@ mod hvdc_tests {
         assert!(total.abs() < 1e-6, "{total}");
     }
 
+    #[cfg(feature = "sensitivity")]
     #[test]
     fn the_ac_network_model_still_refuses_hvdc() {
         let error = crate::model::AcNetwork::from_network(&with_hvdc(CASE3))
