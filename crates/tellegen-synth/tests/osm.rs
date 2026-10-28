@@ -187,7 +187,10 @@ fn island_policies() {
 fn osm_nested_options_reject_unknown_fields_and_invalid_bounds() {
     let base = serde_json::json!({
         "region": {
-            "geometry": { "type": "Polygon", "coordinates": [[[8.0,49.6],[9.5,49.6],[9.5,50.6],[8.0,50.6],[8.0,49.6]]] },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[8.0,49.6],[9.5,49.6],[9.5,50.6],[8.0,50.6],[8.0,49.6]]]
+            },
             "label": "Main valley"
         },
         "source": "osm",
@@ -195,19 +198,30 @@ fn osm_nested_options_reject_unknown_fields_and_invalid_bounds() {
         "limits": { "max_bus_count": 100 }
     });
     let mut misspelt = base;
-    misspelt.pointer_mut("/osm").unwrap().as_object_mut().unwrap().insert("snap_kmm".into(), serde_json::json!(2.0));
+    misspelt
+        .pointer_mut("/osm")
+        .unwrap()
+        .as_object_mut()
+        .unwrap()
+        .insert("snap_kmm".into(), serde_json::json!(2.0));
     let err = serde_json::from_value::<SynthRequest>(misspelt).unwrap_err();
     assert!(err.to_string().contains("unknown field `snap_kmm`"), "{err}");
 
     for value in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         let mut req = request(OsmIslands::Connect);
         req.osm.as_mut().unwrap().snap_km = value;
-        assert!(matches!(req.validate(), Err(SynthError::InvalidRequest(_))), "snap_km={value}");
+        assert!(
+            matches!(req.validate(), Err(SynthError::InvalidRequest(_))),
+            "snap_km={value}"
+        );
     }
     for value in [-1.0, f64::NAN, f64::INFINITY] {
         let mut req = request(OsmIslands::Connect);
         req.osm.as_mut().unwrap().clip_buffer_km = value;
-        assert!(matches!(req.validate(), Err(SynthError::InvalidRequest(_))), "clip_buffer_km={value}");
+        assert!(
+            matches!(req.validate(), Err(SynthError::InvalidRequest(_))),
+            "clip_buffer_km={value}"
+        );
     }
 }
 
