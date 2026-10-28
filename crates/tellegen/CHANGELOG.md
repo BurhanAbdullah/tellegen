@@ -4,6 +4,19 @@ Written by release-plz from the commits between tags. Releases through 0.1.1,
 when all three surfaces moved together, are in the
 [root `CHANGELOG.md`](../../CHANGELOG.md).
 
+## [0.5.0](https://github.com/eigenergy/tellegen/compare/v0.4.0...v0.5.0) - 2026-10-28
+
+### Other
+
+- Version the tellegen crate and Python wheel 0.5.0
+- Merge main into the overview and diagram branch
+- Merge origin/main into codex/acopf-pounce-013
+- Merge origin/main into feat/dcopf-scale
+- Merge origin/main into feat/constraint-sensitivities
+- Merge origin/main into feat/dcopf-linear-constraints
+- Merge origin/main into feat/multi-island
+- Merge origin/main into feat/multi-island
+
 ## [0.4.0](https://github.com/eigenergy/tellegen/compare/v0.3.0...v0.4.0) - 2026-10-24
 
 Released with `@tellegen/engine` and `@tellegen/svelte` 0.4.0.
