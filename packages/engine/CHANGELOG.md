@@ -1,5 +1,16 @@
 # @tellegen/engine
 
+## 0.4.4
+
+### Patch Changes
+
+- [#254](https://github.com/eigenergy/tellegen/pull/254) [`020ca51`](https://github.com/eigenergy/tellegen/commit/020ca5140035f294dbb7b14c3747cf6de4b97092) Thanks [@samtalki](https://github.com/samtalki)! - Build against PowerIO 0.11.7. AC power flow on a case with HVDC lines now
+  includes their scheduled transfers as fixed bus injections; DC OPF and DC power
+  flow still leave them out. OpenDSS feeders read the circuit's source
+  impedance, so the distribution graph gains an internal source bus and its
+  impedance line, and a `switch=y` line reads as a closed 1 mOhm line. PSS/E
+  VSC DC lines are read instead of skipped.
+
 ## 0.4.3
 
 ### Patch Changes
