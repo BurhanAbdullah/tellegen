@@ -123,12 +123,9 @@ pub struct ParsedDocument {
     pub converters: Vec<OsmConverter>,
 }
 
-/// Parse one Overpass JSON document, or a JSON array of them (the two halves
-/// of an antimeridian-crossing region). Elements seen twice (an element both
-/// halves return) are kept once.
 /// Parse one Overpass JSON document or the two documents from an
-/// antimeridian-crossing request. Reject excessive input before creating the
-/// mapped graph.
+/// antimeridian-crossing request. Elements seen twice are kept once. Reject
+/// oversized inputs before creating the mapped graph.
 pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
     if text.len() > crate::osm::MAX_OSM_DOCUMENT_BYTES {
         return Err(SynthError::InvalidRequest(format!(
@@ -476,7 +473,10 @@ mod tests {
     #[test]
     fn oversized_raw_document_is_refused_before_json_parsing() {
         let oversized = " ".repeat(crate::osm::MAX_OSM_DOCUMENT_BYTES + 1);
-        let err = parse_document(&oversized).unwrap_err();
+        let err = match parse_document(&oversized) {
+            Err(err) => err,
+            Ok(_) => panic!("oversized document was accepted"),
+        };
         assert!(err.to_string().contains("safety limit"), "{err}");
     }
 
