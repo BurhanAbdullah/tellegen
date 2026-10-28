@@ -57,6 +57,8 @@ println!("{} buses, DC OPF {:?}", module.value().buses().len(), dc.status);
 `Generator` exposes the same pipeline one stage at a time (`step`), with a
 map preview between stages, for hosts that show progress or cancel.
 
+OSM ingestion refuses raw Overpass responses larger than 64 MiB and responses with more than 500,000 elements. These defensive limits are applied before topology construction; `limits.max_bus_count` continues to govern the resulting bus count.
+
 Features: `schema` derives JSON Schema for the generated TypeScript
 types; `embedded-places` bundles `data/populated_places.json` for the
 CLI and offline tests.
