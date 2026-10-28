@@ -801,9 +801,11 @@ mod tests {
 
         assert_eq!(v["model"], "multiconductor");
         assert_eq!(v["name"], "micro");
-        // sourcebus, loadbus, secondary.
-        assert_eq!(v["n_bus"].as_u64().unwrap(), 3);
-        assert_eq!(v["n_line"].as_u64().unwrap(), 1);
+        // sourcebus, loadbus, secondary, and the internal bus behind the
+        // circuit's source impedance. PowerIO reads the Vsource as an EMF on
+        // that bus and a series impedance line to sourcebus.
+        assert_eq!(v["n_bus"].as_u64().unwrap(), 4);
+        assert_eq!(v["n_line"].as_u64().unwrap(), 2);
         assert_eq!(v["n_transformer"].as_u64().unwrap(), 1);
         assert_eq!(v["n_load"].as_u64().unwrap(), 2);
         assert_eq!(v["n_source"].as_u64().unwrap(), 1);
@@ -816,11 +818,16 @@ mod tests {
 
         // The graph carries buses with terminals and edges with endpoints.
         let buses = v["graph"]["buses"].as_array().unwrap();
-        assert_eq!(buses.len(), 3);
+        assert_eq!(buses.len(), 4);
         assert!(buses
             .iter()
             .all(|b| !b["terminals"].as_array().unwrap().is_empty()));
+        let source_bus = buses.iter().find(|b| b["has_source"] == true).unwrap();
+        assert_ne!(source_bus["id"], "sourcebus");
         let edges = v["graph"]["edges"].as_array().unwrap();
+        assert!(edges.iter().any(|e| e["kind"] == "line"
+            && e["from"] == source_bus["id"]
+            && e["to"] == "sourcebus"));
         assert!(edges.iter().any(|e| e["kind"] == "line"));
         assert!(edges.iter().any(|e| e["kind"] == "transformer"));
         // Every edge names two buses that exist in the graph.
