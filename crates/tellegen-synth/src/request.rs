@@ -594,6 +594,24 @@ impl SynthRequest {
         if !(self.limits.max_branch_factor.is_finite() && self.limits.max_branch_factor >= 1.0) {
             return bad("limits.max_branch_factor must be a finite number of at least 1".into());
         }
+        // OSM controls feed spatial clustering and clipping. Reject invalid
+        // numbers before they reach geometry operations.
+        let osm = self.osm.as_ref().cloned().unwrap_or_default();
+        for (name, value, allow_zero) in [
+            ("osm.voltage_floor_kv", osm.voltage_floor_kv, false),
+            ("osm.cluster_radius_m", osm.cluster_radius_m, false),
+            ("osm.snap_km", osm.snap_km, false),
+            ("osm.hvdc_snap_km", osm.hvdc_snap_km, false),
+            ("osm.plant_snap_km", osm.plant_snap_km, false),
+            ("osm.clip_buffer_km", osm.clip_buffer_km, true),
+        ] {
+            let valid =
+                value.is_finite() && if allow_zero { value >= 0.0 } else { value > 0.0 };
+            if !valid {
+                let constraint = if allow_zero { "non-negative" } else { "positive" };
+                return bad(format!("{name} must be a {constraint} finite number"));
+            }
+        }
         if !self
             .voltage_levels_kv
             .iter()
