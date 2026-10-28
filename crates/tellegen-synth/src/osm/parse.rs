@@ -135,20 +135,21 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
     }
     .map_err(|e| SynthError::Osm(format!("cannot parse the Overpass JSON: {e}")))?;
     let mut seen = std::collections::BTreeSet::new();
+    let copyright = documents
+        .iter()
+        .find_map(|d| d.osm3s.as_ref().and_then(|o| o.copyright.clone()));
+    let license = copyright
+        .as_deref()
+        .and_then(osm_license_from_copyright)
+        .map(str::to_owned);
     let mut out = ParsedDocument {
         provenance: OsmProvenance {
             generator: "overpass".to_owned(),
             timestamp_osm_base: documents
                 .iter()
                 .find_map(|d| d.osm3s.as_ref().and_then(|o| o.timestamp_osm_base.clone())),
-            copyright: documents
-                .iter()
-                .find_map(|d| d.osm3s.as_ref().and_then(|o| o.copyright.clone())),
-            license: documents
-                .iter()
-                .find_map(|d| d.osm3s.as_ref().and_then(|o| o.copyright.as_deref()))
-                .and_then(osm_license_from_copyright)
-                .map(str::to_owned),
+            copyright,
+            license,
             document_sha256: Sha256::digest(text.as_bytes())
                 .iter()
                 .map(|b| format!("{b:02x}"))
