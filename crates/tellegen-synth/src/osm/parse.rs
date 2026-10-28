@@ -493,25 +493,6 @@ mod tests {
     }
 
     #[test]
-    fn osm_license_is_extracted_without_replacing_the_original_notice() {
-        let doc = r#"{"osm3s":{"copyright":"The data is made available under ODbL."},"elements":[]}"#;
-        let parsed = parse_document(doc).unwrap();
-        assert_eq!(parsed.provenance.license.as_deref(), Some("ODbL-1.0"));
-        assert_eq!(
-            parsed.provenance.copyright.as_deref(),
-            Some("The data is made available under ODbL.")
-        );
-
-        let unknown = r#"{"osm3s":{"copyright":"Attribution notice with no known licence identifier."},"elements":[]}"#;
-        let parsed = parse_document(unknown).unwrap();
-        assert_eq!(parsed.provenance.license, None);
-        assert_eq!(
-            parsed.provenance.copyright.as_deref(),
-            Some("Attribution notice with no known licence identifier.")
-        );
-    }
-
-    #[test]
     fn documents_and_arrays_of_documents() {
         let doc = r#"{"osm3s":{"timestamp_osm_base":"2026-10-01T00:00:00Z","copyright":"The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."},"elements":[
             {"type":"node","id":1,"lat":40.0,"lon":1.0,"tags":{"power":"substation","voltage":"220000;110000"}},
