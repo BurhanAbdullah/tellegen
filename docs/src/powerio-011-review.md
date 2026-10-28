@@ -1,16 +1,16 @@
 # PowerIO 0.11 consumer review
 
-Tellegen uses the published PowerIO 0.11.6 crates. All seven PowerIO components
-resolve from crates.io at 0.11.6 with registry checksums.
+Tellegen uses the published PowerIO 0.11.7 crates. All eight PowerIO components
+resolve from crates.io at 0.11.7 with registry checksums.
 `docs/evidence/webmcp/powerio-releases.json` maps each release tag, such as
-[`v0.11.6`](https://github.com/eigenergy/powerio/releases/tag/v0.11.6), to its
+[`v0.11.7`](https://github.com/eigenergy/powerio/releases/tag/v0.11.7), to its
 commit.
 
 Pull requests that change the dependency manifests, lockfile, or pin scripts
 run the `PowerIO Candidate` workflow against the committed dependency set.
 Manual dispatch can test a full PowerIO commit SHA using temporary Git patches
 and a disposable lockfile. Both paths verify one common version and source for
-all seven components before exercising Rust, WebAssembly, WebMCP, and browser
+all eight components before exercising Rust, WebAssembly, WebMCP, and browser
 integration.
 
 Tellegen consumes PowerIO modules at its public entry points. `DcNetwork` and
@@ -27,9 +27,9 @@ The PowerIO release, stored IR generation, and C ABI are independent:
 
 | Concern            | Current value                        | Tellegen integration                             |
 | ------------------ | ------------------------------------ | ------------------------------------------------ |
-| Rust crate release | `0.11.6`                             | dependency requirement `0.11.6`                  |
+| Rust crate release | `0.11.7`                             | dependency requirement `0.11.7`                  |
 | Stored IR          | `"schema": "pio-ir"`, `"version": 2` | sole durable browser and CLI JSON boundary       |
-| Producer           | `powerio` `0.11.6`                   | records which release wrote an IR document       |
+| Producer           | `powerio` `0.11.7`                   | records which release wrote an IR document       |
 | C ABI              | `7`                                  | unchanged and not used as an IR or crate version |
 
 The historical `powerio.module` version 1 document and bare balanced-network
@@ -48,6 +48,22 @@ way so no SINCAL code comes in through them. The CLI, server and browser
 therefore list no SINCAL format, and PowerIO refuses a SINCAL source or target
 with `REQUEST.SINCAL.FEATURE_DISABLED`. `powerio-tnd` itself, which composes
 transmission and distribution models, is always part of the facade.
+
+## HVDC lines
+
+Since PowerIO 0.11.7, an AC power flow instance built from a network adds each
+in-service HVDC line's terminal powers to its buses' stated injections, and
+Tellegen's AC power flow solves those specifications as stated. A stored
+instance without `hvdc_treatment` reads as `ignore`, so earlier documents
+solve as before. Tellegen's DC OPF and DC power flow build their bus balance
+from the preparation's demand, shunt and phase shift terms and do not read its
+`p_hvdc` yet, so they still leave HVDC transfers out. `tellegen-synth`
+validates on a copy that replaces each HVDC link with a fixed transfer, so its
+verdicts do not change.
+
+OpenDSS imports carry the circuit's source impedance: PowerIO places the
+Vsource EMF on an internal bus behind a series impedance line to the source
+bus, and the distribution graph shows both.
 
 ## Current module API
 
