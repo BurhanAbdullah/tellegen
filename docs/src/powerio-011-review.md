@@ -52,14 +52,25 @@ transmission and distribution models, is always part of the facade.
 ## HVDC lines
 
 Since PowerIO 0.11.7, an AC power flow instance built from a network adds each
-in-service HVDC line's terminal powers to its buses' stated injections, and
-Tellegen's AC power flow solves those specifications as stated. A stored
-instance without `hvdc_treatment` reads as `ignore`, so earlier documents
-solve as before. Tellegen's DC OPF and DC power flow build their bus balance
-from the preparation's demand, shunt and phase shift terms and do not read its
-`p_hvdc` yet, so they still leave HVDC transfers out. `tellegen-synth`
-validates on a copy that replaces each HVDC link with a fixed transfer, so its
-verdicts do not change.
+in-service HVDC line's terminal powers to its buses' stated injections, and the
+DC OPF preparation states the same transfers as `p_hvdc`. A stored instance
+without `hvdc_treatment` reads as `ignore`, so earlier documents solve as
+before.
+
+Tellegen's DC OPF, DC power flow and AC power flow carry each in-service HVDC
+line as these fixed injections. The DC models subtract `p_hvdc` from the fixed
+withdrawal, so the balance is `p_d + g_s + p_shift - p_hvdc`, and an emitted DC
+OPF solution restates the same bus injections. The AC power flow solves the
+instance's stated injections; a network solved directly goes through that
+instance when it has in-service HVDC lines. A line with a terminal bus outside
+the solve, for example in an island with no generator, injects at neither end.
+Each solve reports PowerIO's `BUILD.HVDC.FIXED_INJECTION` and
+`BUILD.HVDC.TERMINAL_INACTIVE` diagnostics. The AC OPF and the SOC relaxation
+have no HVDC term yet and still refuse a network with an in-service HVDC line.
+
+`tellegen-synth` validates on a copy that replaces each HVDC link with a fixed
+transfer, so its verdicts do not change; the viewer and the CLI now solve the
+generated network as written.
 
 OpenDSS imports carry the circuit's source impedance: PowerIO places the
 Vsource EMF on an internal bus behind a series impedance line to the source
