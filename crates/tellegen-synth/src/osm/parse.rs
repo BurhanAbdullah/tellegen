@@ -247,6 +247,7 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
 }
 
 /// Return the recognized licence identifier in an Overpass attribution notice.
+///
 /// Keep the source notice verbatim as well; this field is only a machine-readable hint.
 fn osm_license_from_copyright(copyright: &str) -> Option<&'static str> {
     let notice = copyright.to_ascii_lowercase();
@@ -471,7 +472,6 @@ mod tests {
         assert_eq!(parse_power_mw("lots"), None);
         assert_eq!(parse_power_mw("5 MWh"), None);
     }
-
 
     #[test]
     fn osm_license_is_extracted_without_replacing_the_original_notice() {
