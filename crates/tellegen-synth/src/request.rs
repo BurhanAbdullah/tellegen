@@ -434,6 +434,12 @@ pub struct Limits {
     /// Upper bound of `branch_factor`; finite and at least 1.
     #[serde(default = "default_max_branch_factor")]
     pub max_branch_factor: f64,
+    /// Maximum raw Overpass response size, in bytes.
+    #[serde(default = "default_max_osm_document_bytes")]
+    pub max_osm_document_bytes: usize,
+    /// Maximum Overpass elements accepted before topology construction.
+    #[serde(default = "default_max_osm_elements")]
+    pub max_osm_elements: usize,
 }
 
 fn default_max_bus_count() -> u32 {
@@ -448,12 +454,22 @@ fn default_max_branch_factor() -> f64 {
     4.0
 }
 
+fn default_max_osm_document_bytes() -> usize {
+    crate::osm::MAX_OSM_DOCUMENT_BYTES
+}
+
+fn default_max_osm_elements() -> usize {
+    crate::osm::MAX_OSM_ELEMENTS
+}
+
 impl Default for Limits {
     fn default() -> Self {
         Self {
             max_bus_count: default_max_bus_count(),
             max_area_km2: default_max_area_km2(),
             max_branch_factor: default_max_branch_factor(),
+            max_osm_document_bytes: default_max_osm_document_bytes(),
+            max_osm_elements: default_max_osm_elements(),
         }
     }
 }
@@ -582,6 +598,12 @@ impl SynthRequest {
         let bad = |m: String| Err(SynthError::InvalidRequest(m));
         // The upper bounds below sit far outside any real system; they keep a
         // huge but finite number from overflowing later arithmetic.
+        if self.limits.max_osm_document_bytes == 0 {
+            return bad("limits.max_osm_document_bytes must be at least 1".into());
+        }
+        if self.limits.max_osm_elements == 0 {
+            return bad("limits.max_osm_elements must be at least 1".into());
+        }
         if self.limits.max_bus_count == 0 {
             return bad("limits.max_bus_count must be at least 1".into());
         }
