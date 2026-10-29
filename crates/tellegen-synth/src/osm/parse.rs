@@ -494,13 +494,13 @@ mod tests {
 
     #[test]
     fn host_resource_limits_are_enforced() {
-        let document = r#"{\"elements\":[]}"#;
+        let document = r#"{"elements":[]}"#;
         assert!(parse_document_with_limits(document, 1, 10)
             .unwrap_err()
             .to_string()
             .contains("byte safety limit"));
 
-        let document = r#"{\"elements\":[{\"type\":\"node\",\"id\":1},{\"type\":\"node\",\"id\":2}]}"#;
+        let document = r#"{"elements":[{"type":"node","id":1},{"type":"node","id":2}]}"#;
         assert!(parse_document_with_limits(document, 1024, 1)
             .unwrap_err()
             .to_string()
