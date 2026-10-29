@@ -496,13 +496,15 @@ mod tests {
     fn host_resource_limits_are_enforced() {
         let document = r#"{"elements":[]}"#;
         assert!(parse_document_with_limits(document, 1, 10)
-            .unwrap_err()
+            .err()
+            .expect("oversized document should fail")
             .to_string()
             .contains("byte safety limit"));
 
         let document = r#"{"elements":[{"type":"node","id":1},{"type":"node","id":2}]}"#;
         assert!(parse_document_with_limits(document, 1024, 1)
-            .unwrap_err()
+            .err()
+            .expect("too many elements should fail")
             .to_string()
             .contains("element safety limit"));
     }
