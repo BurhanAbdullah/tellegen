@@ -1102,7 +1102,7 @@
 				new PathLayer<NetworkBranch>({
 					id: 'study-branches',
 					data: study.network.branches,
-					getPath: (b) => unwrapLongitudePath(b.path),
+					getPath: (b) => b.path,
 					wrapLongitude: true,
 					getColor: (b) => branchColor(flows.get(b.id) ?? 0, b.status === 1),
 					getWidth: (b) => branchWidth(flows.get(b.id) ?? 0),
@@ -1158,7 +1158,7 @@
 				new PathLayer<NetworkBranch>({
 					id: `branches-${c.id}`,
 					data: c.network.branches,
-					getPath: (b) => unwrapLongitudePath(b.path),
+					getPath: (b) => b.path,
 					wrapLongitude: true,
 					// The selected branch draws in the selection blue of the bus halo cue,
 					// wider, so the price-rating source line reads at a glance.
@@ -1234,7 +1234,7 @@
 					new PathLayer<NetworkBranch>({
 						id: `local-branches-${c.id}`,
 						data: c.view.branches,
-						getPath: (b) => unwrapLongitudePath(b.path),
+						getPath: (b) => b.path,
 					wrapLongitude: true,
 						getColor: (b) =>
 							c.id === app.activeLocalId && b.id === app.selectedBranch
@@ -1340,7 +1340,7 @@
 				new PathLayer<PlacedMultiEdge>({
 					id: `multi-edges-${c.id}`,
 					data: c.view.edges,
-					getPath: (e) => unwrapLongitudePath(e.path),
+					getPath: (e) => e.path,
 					wrapLongitude: true,
 					// The selected edge draws in the selection blue of the branch cue,
 					// wider, so its panel detail has an obvious source on the map.
