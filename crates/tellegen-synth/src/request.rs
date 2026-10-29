@@ -591,7 +591,9 @@ impl SynthRequest {
             return bad("limits.max_area_km2 must be a positive finite number".into());
         }
         // `branch_factor` must lie in 1..=max, which is empty below 1.
-        if !(self.limits.max_branch_factor.is_finite() && self.limits.max_branch_factor >= 1.0) {
+        if !(self.limits.max_branch_factor.is_finite()
+            && self.limits.max_branch_factor >= 1.0)
+        {
             return bad("limits.max_branch_factor must be a finite number of at least 1".into());
         }
         // OSM controls feed spatial clustering and clipping. Reject invalid
