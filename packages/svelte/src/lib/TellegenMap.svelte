@@ -55,6 +55,7 @@
 		transformerIconMapping
 	} from './transformer-icon.js';
 	import { foldMapBounds } from './map-bounds.js';
+	import { routeBounds, unwrapLongitudePath } from './antimeridian.js';
 	import { getAppState, getController } from './context.svelte.js';
 	import { displayFmt, fmt, rgbaCss } from './format.js';
 	import { getPanelLayout } from './panels.svelte.js';
@@ -469,8 +470,9 @@
 		if (!caseId || branchId === null) return null;
 		const branch = displayedGeometry(caseId)?.branches.find((b) => b.id === branchId);
 		const path = branch?.path.filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+		const displayPath = path ? unwrapLongitudePath(path) : path;
 		return branch && path && path.length >= 2
-			? { key: `${app.studyView?.id ?? caseId}-${branch.id}`, caseId, branchId: branch.id, path }
+			? { key: `${app.studyView?.id ?? caseId}-${branch.id}`, caseId, branchId: branch.id, path: displayPath! }
 			: null;
 	});
 	let selectedCueEl = $state.raw<HTMLDivElement | null>(null);
@@ -674,7 +676,7 @@
 	}
 
 	function branchBounds(path: [number, number][]): LngLatBoundsLike | null {
-		return foldMapBounds(path);
+		return routeBounds(unwrapLongitudePath(path));
 	}
 
 	function prefersReducedMotion(): boolean {
@@ -1100,7 +1102,8 @@
 				new PathLayer<NetworkBranch>({
 					id: 'study-branches',
 					data: study.network.branches,
-					getPath: (b) => b.path,
+					getPath: (b) => unwrapLongitudePath(b.path),
+					wrapLongitude: true,
 					getColor: (b) => branchColor(flows.get(b.id) ?? 0, b.status === 1),
 					getWidth: (b) => branchWidth(flows.get(b.id) ?? 0),
 					widthUnits: 'pixels',
@@ -1155,7 +1158,8 @@
 				new PathLayer<NetworkBranch>({
 					id: `branches-${c.id}`,
 					data: c.network.branches,
-					getPath: (b) => b.path,
+					getPath: (b) => unwrapLongitudePath(b.path),
+					wrapLongitude: true,
 					// The selected branch draws in the selection blue of the bus halo cue,
 					// wider, so the price-rating source line reads at a glance.
 					getColor: (b) =>
@@ -1230,7 +1234,8 @@
 					new PathLayer<NetworkBranch>({
 						id: `local-branches-${c.id}`,
 						data: c.view.branches,
-						getPath: (b) => b.path,
+						getPath: (b) => unwrapLongitudePath(b.path),
+					wrapLongitude: true,
 						getColor: (b) =>
 							c.id === app.activeLocalId && b.id === app.selectedBranch
 								? [47, 111, 187, 255]
@@ -1335,7 +1340,8 @@
 				new PathLayer<PlacedMultiEdge>({
 					id: `multi-edges-${c.id}`,
 					data: c.view.edges,
-					getPath: (e) => e.path,
+					getPath: (e) => unwrapLongitudePath(e.path),
+					wrapLongitude: true,
 					// The selected edge draws in the selection blue of the branch cue,
 					// wider, so its panel detail has an obvious source on the map.
 					getColor: (e) =>
