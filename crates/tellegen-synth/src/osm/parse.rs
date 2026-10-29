@@ -252,7 +252,9 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
 /// Keep the source notice verbatim as well; this field is only a machine-readable hint.
 fn osm_license_from_copyright(copyright: &str) -> Option<&'static str> {
     let notice = copyright.to_ascii_lowercase();
-    if notice.contains("opendatacommons.org/licenses/odbl") || notice.contains("under odbl") {
+    if notice.contains("opendatacommons.org/licenses/odbl")
+        || notice.contains("under odbl")
+    {
         Some("ODbL-1.0")
     } else {
         None
