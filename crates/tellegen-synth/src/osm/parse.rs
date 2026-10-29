@@ -128,8 +128,8 @@ pub struct ParsedDocument {
 /// oversized inputs before creating the mapped graph.
 pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
     if text.len() > crate::osm::MAX_OSM_DOCUMENT_BYTES {
-        return Err(SynthError::InvalidRequest(format!(
-            "Overpass document is {} bytes, over the {} byte safety limit",
+        return Err(SynthError::Osm(format!(
+            "document is {} bytes, over the {} byte safety limit",
             text.len(),
             crate::osm::MAX_OSM_DOCUMENT_BYTES
         )));
@@ -143,8 +143,8 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
     .map_err(|e| SynthError::Osm(format!("cannot parse the Overpass JSON: {e}")))?;
     let element_count: usize = documents.iter().map(|d| d.elements.len()).sum();
     if element_count > crate::osm::MAX_OSM_ELEMENTS {
-        return Err(SynthError::InvalidRequest(format!(
-            "Overpass response contains {element_count} elements, over the {} element safety limit",
+        return Err(SynthError::Osm(format!(
+            "response contains {element_count} elements, over the {} element safety limit",
             crate::osm::MAX_OSM_ELEMENTS
         )));
     }
