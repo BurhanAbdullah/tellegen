@@ -239,10 +239,12 @@ fn the_bus_cap_drops_the_lowest_levels_first() {
         "{:?}",
         net.buses().iter().map(|b| &b.name).collect::<Vec<_>>()
     );
-    assert!(net.buses().iter().all(|b| b.base_kv == 380.0
-        || b.name
-            .as_deref()
-            .is_some_and(|n| n.starts_with("OSM Converter"))));
+    assert!(net.buses().iter().all(|b| {
+        b.base_kv == 380.0
+            || b.name
+                .as_deref()
+                .is_some_and(|n| n.starts_with("OSM Converter"))
+    }));
     assert_eq!(count(&report, "substation_sites"), 3);
     assert_eq!(count(&report, "converters"), 2);
     assert_eq!(count(&report, "transformers"), 0);
