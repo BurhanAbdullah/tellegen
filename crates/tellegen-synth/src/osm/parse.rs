@@ -127,11 +127,24 @@ pub struct ParsedDocument {
 /// antimeridian-crossing request. Elements seen twice are kept once. Reject
 /// oversized inputs before creating the mapped graph.
 pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
-    if text.len() > crate::osm::MAX_OSM_DOCUMENT_BYTES {
+    parse_document_with_limits(
+        text,
+        crate::osm::MAX_OSM_DOCUMENT_BYTES,
+        crate::osm::MAX_OSM_ELEMENTS,
+    )
+}
+
+/// Parse an Overpass document under the host's explicit resource limits.
+pub fn parse_document_with_limits(
+    text: &str,
+    max_document_bytes: usize,
+    max_elements: usize,
+) -> Result<ParsedDocument, SynthError> {
+    if text.len() > max_document_bytes {
         return Err(SynthError::Osm(format!(
             "document is {} bytes, over the {} byte safety limit",
             text.len(),
-            crate::osm::MAX_OSM_DOCUMENT_BYTES
+            max_document_bytes
         )));
     }
     let trimmed = text.trim_start();
@@ -142,10 +155,9 @@ pub fn parse_document(text: &str) -> Result<ParsedDocument, SynthError> {
     }
     .map_err(|e| SynthError::Osm(format!("cannot parse the Overpass JSON: {e}")))?;
     let element_count: usize = documents.iter().map(|d| d.elements.len()).sum();
-    if element_count > crate::osm::MAX_OSM_ELEMENTS {
+    if element_count > max_elements {
         return Err(SynthError::Osm(format!(
-            "response contains {element_count} elements, over the {} element safety limit",
-            crate::osm::MAX_OSM_ELEMENTS
+            "response contains {element_count} elements, over the {max_elements} element safety limit"
         )));
     }
     let mut seen = std::collections::BTreeSet::new();
