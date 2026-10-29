@@ -1375,6 +1375,20 @@
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
+        },
+        "max_osm_document_bytes": {
+          "default": 67108864,
+          "description": "Maximum raw Overpass response size, in bytes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_osm_elements": {
+          "default": 500000,
+          "description": "Maximum Overpass elements accepted before topology construction.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -2792,5 +2806,5 @@
   ],
   "title": "SynthSchema",
   "type": "object",
-  "x-rust-source-sha256": "d89563659a580caf4db54aeb831c88e91e36a20bbc58c8a415973c7c7dd3d831"
+  "x-rust-source-sha256": "f1e7810de0893fc37afbfdd86a3cbcd94cb20fdeb70aed089991a14234c9b8f5"
 }
