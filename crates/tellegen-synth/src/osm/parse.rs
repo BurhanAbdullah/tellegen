@@ -493,6 +493,21 @@ mod tests {
     }
 
     #[test]
+    fn host_resource_limits_are_enforced() {
+        let document = r#"{\"elements\":[]}"#;
+        assert!(parse_document_with_limits(document, 1, 10)
+            .unwrap_err()
+            .to_string()
+            .contains("byte safety limit"));
+
+        let document = r#"{\"elements\":[{\"type\":\"node\",\"id\":1},{\"type\":\"node\",\"id\":2}]}"#;
+        assert!(parse_document_with_limits(document, 1024, 1)
+            .unwrap_err()
+            .to_string()
+            .contains("element safety limit"));
+    }
+
+    #[test]
     fn documents_and_arrays_of_documents() {
         let doc = r#"{"osm3s":{"timestamp_osm_base":"2026-10-01T00:00:00Z","copyright":"The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."},"elements":[
             {"type":"node","id":1,"lat":40.0,"lon":1.0,"tags":{"power":"substation","voltage":"220000;110000"}},
