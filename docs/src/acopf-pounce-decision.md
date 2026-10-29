@@ -392,7 +392,6 @@ checks the served WASM hash against its manifest, and requires checksum-keyed
 independent objectives. For example, after an opt-in build:
 
 ```sh
-TELLEGEN_TEST_ACOPF=1 \
 TELLEGEN_ACOPF_CORPUS=/path/to/pglib-opf \
 TELLEGEN_ACOPF_REFERENCE=/path/to/reference.json \
 TELLEGEN_ACOPF_CASES=pglib_opf_case14_ieee,pglib_opf_case30_ieee,pglib_opf_case300_ieee,pglib_opf_case6468_rte \

@@ -111,6 +111,63 @@ for (const mode of ['preview', 'development']) {
 	});
 }
 
+test('a backend transmission case switches from cached DC OPF to browser AC OPF', async ({
+	page
+}, testInfo) => {
+	const port = Number(
+		process.env.TELLEGEN_MC_PREVIEW_PORT ?? Number(process.env.TELLEGEN_PREVIEW_PORT ?? 4173) + 1
+	);
+	await page.goto(`http://127.0.0.1:${port}/acopf.html`);
+	await page.waitForFunction(() => typeof window.prepareBackendTransmissionCase === 'function');
+	const fixture = await page.evaluate(
+		(text) => window.prepareBackendTransmissionCase(text),
+		CASE3_PLANNING
+	);
+	const { network, solution, moduleJson, nGen } = fixture;
+	await page.route('**/api/compute', (route) => route.fulfill({ json: { enabled: false } }));
+	await page.route('**/api/cases', (route) =>
+		route.fulfill({
+			json: [
+				{
+					id: network.id,
+					name: network.name,
+					n_bus: network.buses.length,
+					n_branch: network.branches.length,
+					n_gen: nGen
+				}
+			]
+		})
+	);
+	await page.route('**/api/cases/transmission/network', (route) =>
+		route.fulfill({ json: network })
+	);
+	await page.route('**/api/cases/transmission/solution', (route) =>
+		route.fulfill({ json: solution })
+	);
+	let moduleLoads = 0;
+	await page.route('**/api/cases/transmission/case', (route) => {
+		moduleLoads++;
+		return route.fulfill({ contentType: 'application/json', body: moduleJson });
+	});
+	let serverSolves = 0;
+	await page.route('**/api/cases/transmission/solve**', (route) => {
+		serverSolves++;
+		return route.abort();
+	});
+	await page.goto('/');
+	const calculation = page.getByRole('combobox', { name: 'Calculation', exact: true });
+	await expect(calculation).toHaveValue('dcopf');
+	await expect(calculation.locator('option[value="acopf"]')).toHaveJSProperty('disabled', false);
+	await calculation.selectOption('acopf');
+	await expect(page.locator('.solvecard')).toContainText('NLP iterations', { timeout: 120_000 });
+	await expect(calculation).toBeEnabled();
+	await expect(calculation).toHaveValue('acopf');
+	expect(moduleLoads).toBeGreaterThan(0);
+	expect(serverSolves).toBe(0);
+	await expect(page.locator('.error')).toHaveCount(0);
+	await page.screenshot({ path: testInfo.outputPath('backend-transmission-acopf.png') });
+});
+
 test('imports and solves a retained canonical AC OPF instance', async ({ page }) => {
 	test.setTimeout(180_000);
 	const port = Number(
