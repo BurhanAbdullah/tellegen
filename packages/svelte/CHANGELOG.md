@@ -1,5 +1,11 @@
 # @tellegen/svelte
 
+## 0.4.6
+
+### Patch Changes
+
+- [#277](https://github.com/eigenergy/tellegen/pull/277) [`fa48812`](https://github.com/eigenergy/tellegen/commit/fa48812d3a8c883e779108cffd132f57008febe7) Thanks [@samtalki](https://github.com/samtalki)! - On the globe, a network on the far hemisphere no longer draws through the earth. `TellegenMap`'s overlay depth-tests against the globe in globe projection and still draws on top of the flat map.
+
 ## 0.4.5
 
 ### Patch Changes
