@@ -307,6 +307,9 @@ export interface Solution {
 	w: { bus: number; value: number }[];
 	flows: { branch: number; mw: number; loading: number }[];
 	dispatch: { gen: number; bus?: number; mw: number }[];
+	/** How the solve treated the network: islands, HVDC transfers. Absent when it
+	 * solved the case as stated. */
+	diagnostics?: SolveDiagnostic[];
 }
 
 export interface SensitivityColumn {

@@ -25,6 +25,7 @@ import {
 	type SolvableCase
 } from './state.svelte.js';
 import { placeSyntheticTopology } from './synthetic-layout.js';
+import { powerIoEntry, solveEntry } from './log.svelte.js';
 import { distExtensionFormat, isGeoFileName } from './drop-classify.js';
 import { DropBatchGate, readDropFileBytes, validateDropBatch } from './drop-limits.js';
 import { buildGeographicView, buildDiagramView, placeMultiView } from './multiconductor.js';
@@ -77,7 +78,11 @@ const DEFAULT_CASE_ID = 'case500';
 /** A parsed geographic sidecar awaiting application: the canonical `.geo.json`
  * layer document from the engine's tolerant reader, its source file name, and
  * the reader's notes on records it could not use. */
-type GeoLayerFile = { name: string; layer: string; diagnostics: PowerIoDiagnostic[] };
+type GeoLayerFile = {
+	name: string;
+	layer: string;
+	diagnostics: PowerIoDiagnostic[];
+};
 
 /** Whether a local case renders or will render a bus with this id. */
 function localHasBus(c: LocalCase, busId: number): boolean {
@@ -153,7 +158,7 @@ function delayUntilFocusSettles(ms: number, signal: AbortSignal): Promise<void> 
 
 /** Trigger a browser download of in-memory text. Case files never leave the machine:
  * a save is a local Blob download. */
-function downloadText(text: string, filename: string, mime: string) {
+export function downloadText(text: string, filename: string, mime: string) {
 	const url = URL.createObjectURL(new Blob([text], { type: mime }));
 	const anchor = document.createElement('a');
 	anchor.href = url;
@@ -643,6 +648,13 @@ export class Controller {
 	finishSolve(c: SolvableCase, seq: number, target: SensTarget | null) {
 		if (seq !== (c.solveSeq ?? 0)) return;
 		c.solving = false;
+		// Every solve of a case restates the same findings; they count once.
+		const findings = c.solution?.diagnostics ?? [];
+		if (findings.length)
+			this.app.log.record(
+				findings.map((d) => solveEntry(d, { subject: this.caseName(c) })),
+				{ repeat: false }
+			);
 		const selectionLive =
 			target !== null &&
 			this.isActiveSolveCase(c) &&
@@ -1262,6 +1274,7 @@ export class Controller {
 				...l.diagnostics.map((d) => `${l.name}: ${formatPowerIoDiagnostic(d)}`),
 				...payload.report.notes.map((n) => `${l.name}: ${n}`)
 			);
+			this.logCoordinates(l.name, l.diagnostics, payload.report.notes);
 		}
 		if (!payload) return;
 		const sourceLabel = layers.map((l) => l.name).join(' + ');
@@ -2295,6 +2308,7 @@ export class Controller {
 					summary.name && summary.name !== 'case'
 						? summary.name
 						: file.name.replace(/\.[^.]+$/, '');
+				this.logImport(file.name, summary);
 				const local = new LocalCase({
 					id,
 					label,
@@ -2491,6 +2505,7 @@ export class Controller {
 			coordsKind === 'geographic'
 				? buildGeographicView(graph, payload.geo_layer)
 				: buildDiagramView(graph, payload.geo_layer);
+		this.logImport(fileName, summary);
 		const c = new MulticonductorCase({
 			id: `dist-${++this.localSeq}`,
 			label,
@@ -2787,6 +2802,7 @@ export class Controller {
 				...payload.report.notes,
 				...layer.diagnostics.map(formatPowerIoDiagnostic)
 			);
+			this.logCoordinates(layer.name, layer.diagnostics, payload.report.notes);
 		}
 		if (!payload || !matched) throw new Error('No coordinates matched the selected case');
 		if (
@@ -3017,7 +3033,13 @@ export class Controller {
 			...placeSyntheticTopology(c.topology, { lon: 0, lat: 0 }),
 			coordinate_space: 'diagram' as const
 		};
-		return { id: 'study', name: c.name, base_mva: c.base_mva, synthetic_coords: !c.view, ...view };
+		return {
+			id: 'study',
+			name: c.name,
+			base_mva: c.base_mva,
+			synthetic_coords: !c.view,
+			...view
+		};
 	}
 
 	async caseGeographyLayers(c: LocalCase): Promise<string[]> {
@@ -3063,9 +3085,46 @@ export class Controller {
 				JSON.stringify(snapshot.display_solution) !== JSON.stringify(c.solution)
 			)
 				throw new Error('The server case changed. Reload it before saving.');
-			return { input: snapshot.input, solution: snapshot.solution, view: snapshot.view };
+			return {
+				input: snapshot.input,
+				solution: snapshot.solution,
+				view: snapshot.view
+			};
 		}
 		return { input: base };
+	}
+
+	/** Record what PowerIO and the engine said while reading a case file. */
+	private logImport(
+		fileName: string,
+		summary: { diagnostics?: PowerIoDiagnostic[]; warnings?: string[] }
+	) {
+		this.app.log.record([
+			...(summary.diagnostics ?? []).map((d) =>
+				powerIoEntry(d, { stage: 'Open', subject: fileName })
+			),
+			...(summary.warnings ?? []).map((message) => ({
+				severity: 'note' as const,
+				stage: 'Open',
+				source: 'tellegen',
+				subject: fileName,
+				message
+			}))
+		]);
+	}
+
+	/** Record a geographic layer's reader findings and placement notes. */
+	private logCoordinates(layer: string, diagnostics?: PowerIoDiagnostic[], notes?: string[]) {
+		this.app.log.record([
+			...(diagnostics ?? []).map((d) => powerIoEntry(d, { stage: 'Coordinates', subject: layer })),
+			...(notes ?? []).map((message) => ({
+				severity: 'note' as const,
+				stage: 'Coordinates',
+				source: 'tellegen',
+				subject: layer,
+				message
+			}))
+		]);
 	}
 
 	/** Build a local case from a balanced PowerIO ingest payload without activating
@@ -3074,6 +3133,7 @@ export class Controller {
 		const { module_json, topology, view, formulation, ...summary } = payload;
 		const label =
 			summary.name && summary.name !== 'case' ? summary.name : fileName.replace(/\.[^.]+$/, '');
+		this.logImport(fileName, summary);
 		return new LocalCase({
 			id: `local-${++this.localSeq}`,
 			label,
@@ -3116,7 +3176,11 @@ export class Controller {
 			if (input.formulation) local.formulation = input.formulation;
 			if (input.geoLayer) {
 				await this.applyGeoLayers(local, [
-					{ name: `${input.name}.geo.json`, layer: input.geoLayer, diagnostics: [] }
+					{
+						name: `${input.name}.geo.json`,
+						layer: input.geoLayer,
+						diagnostics: []
+					}
 				]);
 			}
 			this.placeTopologyAsDiagram(local);
@@ -3230,8 +3294,15 @@ export class Controller {
 		if (!study) return [];
 		try {
 			const exported = await study.export(format);
-			downloadText(exported.text, `${this.caseFileStem(c)}.${exported.extension}`, 'text/plain');
+			const fileName = `${this.caseFileStem(c)}.${exported.extension}`;
+			downloadText(exported.text, fileName, 'text/plain');
 			this.app.error = null;
+			this.app.log.record(
+				(exported.diagnostics ?? []).map((d) =>
+					powerIoEntry(d, { stage: 'Export', subject: fileName })
+				),
+				{ repeat: false }
+			);
 			return exported.diagnostics;
 		} catch (e) {
 			this.app.error = `${this.caseName(c)}: could not export study: ${errorText(e)}`;
