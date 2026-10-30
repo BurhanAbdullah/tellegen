@@ -27,6 +27,7 @@ import {
 	type Topology
 } from '@tellegen/engine';
 import type { MultiView } from './multiconductor.js';
+import { DiagnosticLog, errorEntry } from './log.svelte.js';
 import { graphInputs, type GraphInputs } from './diagram/graph-inputs.js';
 import { buildSearchIndex, type SearchIndex } from './diagram/search.js';
 import { snapshotFromMcPf, type ResultSnapshot } from './diagram/snapshot.js';
@@ -119,8 +120,12 @@ export class LocalCase {
 	syntheticCenter: { lon: number; lat: number } | undefined = $state.raw<
 		{ lon: number; lat: number } | undefined
 	>(undefined);
-	diagram: { view: LocalView; layer: string; name: string; warnings: string[] } | null =
-		$state.raw(null);
+	diagram: {
+		view: LocalView;
+		layer: string;
+		name: string;
+		warnings: string[];
+	} | null = $state.raw(null);
 	displayMode: 'geographic' | 'diagram' = $state('geographic');
 	geoSource: string | undefined = $state.raw<string | undefined>(undefined);
 	geoWarnings: string[] | undefined = $state.raw<string[] | undefined>(undefined);
@@ -405,7 +410,11 @@ export class AppState {
 			throw new Error('Invalid saved drawing view');
 		}
 		this.settleFrame();
-		this.diagramCameraRequest = { caseId, center: [...snapshot.center], scale: snapshot.scale };
+		this.diagramCameraRequest = {
+			caseId,
+			center: [...snapshot.center],
+			scale: snapshot.scale
+		};
 		this.diagramCameraSeq++;
 	}
 
@@ -465,7 +474,9 @@ export class AppState {
 	/** Technical detail behind the current `error`, when the message itself is
 	 * written for people; notices keep it in their disclosure. Every write to
 	 * `error` clears it, as it clears `errorRetry`. */
-	errorDetail = $state<string | null>(null);
+	#errorDetail = $state<string | null>(null);
+	/** Every error and engine finding of this session, structured; see `DiagnosticLog`. */
+	readonly log = new DiagnosticLog();
 
 	get error(): string | null {
 		return this.#error;
@@ -473,9 +484,21 @@ export class AppState {
 
 	set error(message: string | null) {
 		this.#error = message;
-		if (message) this.errorRevision++;
+		if (message) {
+			this.errorRevision++;
+			this.log.record(errorEntry(message));
+		}
 		this.errorRetry = null;
-		this.errorDetail = null;
+		this.#errorDetail = null;
+	}
+
+	get errorDetail(): string | null {
+		return this.#errorDetail;
+	}
+
+	set errorDetail(detail: string | null) {
+		this.#errorDetail = detail;
+		if (detail && this.#error) this.log.record(errorEntry(this.#error, detail), { repeat: false });
 	}
 
 	/** Case files parsed in the browser via the powerio wasm module. */

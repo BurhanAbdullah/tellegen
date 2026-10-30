@@ -29,6 +29,7 @@ import type {
   ProblemCaps,
   SensitivityColumn,
   Solution,
+  SolveDiagnostic,
   SolveRequest,
   SolveResponse,
   SolveIteration,
@@ -1442,6 +1443,7 @@ interface StudySolveResponse {
   w?: { bus: number; value: number }[];
   flows?: { branch: number; pf: number; loading: number }[];
   dispatch?: { gen: number; bus?: number; pg: number }[];
+  diagnostics?: SolveDiagnostic[];
 }
 
 /** The Preview JSON the Study returns: first-order operand changes plus the
@@ -1510,6 +1512,7 @@ export interface SolutionResponseProjection {
   w?: { bus: number; value: number }[] | null;
   flows?: { branch: number; pf: number; loading: number }[] | null;
   dispatch?: { gen: number; bus?: number | null; pg: number }[] | null;
+  diagnostics?: SolveDiagnostic[] | null;
 }
 
 /** Project the formulation-agnostic wire response onto the compact map result. */
@@ -1532,6 +1535,7 @@ export function solveResponseToSolution(
       bus: d.bus ?? undefined,
       mw: d.pg,
     })),
+    ...(out.diagnostics?.length ? { diagnostics: out.diagnostics } : {}),
   };
 }
 
