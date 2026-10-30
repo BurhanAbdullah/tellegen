@@ -844,17 +844,26 @@
 	// maplibre's own WebGL2 context instead of a second canvas, so the page
 	// holds one GL context rather than two. Safari evicts WebGL contexts under
 	// memory and tab pressure, and one context survives that far better; the
-	// deck layers also inherit maplibre's 4096 canvas clamp. The flat positron
-	// basemap writes no depth, so the overlay always draws on top.
-	function buildOverlay(MapLibreOverlay: MapModules['MapLibreOverlay']): MapLibreOverlay {
+	// deck layers also inherit maplibre's 4096 canvas clamp. The flat basemap
+	// writes no depth, so on the flat map the overlay always draws on top. On
+	// the globe it tests against the depth maplibre writes for the earth, so a
+	// network on the far hemisphere hides behind it instead of showing through.
+	function overlayParameters(type: MapProjection) {
+		return {
+			depthWriteEnabled: false,
+			depthCompare: type === 'globe' ? ('less-equal' as const) : ('always' as const)
+		};
+	}
+
+	function buildOverlay(
+		MapLibreOverlay: MapModules['MapLibreOverlay'],
+		type: MapProjection
+	): MapLibreOverlay {
 		const touch = coarsePointer();
 		return new MapLibreOverlay({
 			interleaved: true,
 			layers: [],
-			parameters: {
-				depthWriteEnabled: false,
-				depthCompare: 'always'
-			},
+			parameters: overlayParameters(type),
 			// a small bus draws ~9px across, well under a fingertip
 			pickingRadius: touch ? 12 : 0,
 			onClick: (info: PickingInfo) => {
@@ -915,7 +924,10 @@
 					onFallback: (reason) => onBasemapFallback?.(reason),
 					onFailure: (reason) => onBasemapError?.(reason)
 				});
-				const o = buildOverlay(MapLibreOverlay);
+				const o = buildOverlay(
+					MapLibreOverlay,
+					untrack(() => projection)
+				);
 				m.addControl(o);
 				m.on('click', (e) => {
 					if (app.placingId) onplacecase(e.lngLat.lng, e.lngLat.lat);
@@ -1057,6 +1069,7 @@
 	// MapLibre throws, and the `style.load` handler above applies it instead.
 	$effect(() => {
 		const type = projection;
+		overlay?.setProps({ parameters: overlayParameters(type) });
 		const m = map;
 		if (!m) return;
 		try {
