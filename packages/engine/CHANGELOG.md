@@ -1,5 +1,28 @@
 # @tellegen/engine
 
+## 0.4.6
+
+### Patch Changes
+
+- [#273](https://github.com/eigenergy/tellegen/pull/273) [`5e9b3a8`](https://github.com/eigenergy/tellegen/commit/5e9b3a8a5b1ef616091366e53ce7059d97162d79) Thanks [@samtalki](https://github.com/samtalki)! - Add a structured log of errors and engine findings. `app.log` records what PowerIO reported while reading a case or a geographic layer, what each solve reported, what each export's writer reported, and every `app.error`, with severity, step, source, code, file, element and buses. `DiagnosticLogView` shows it grouped by step and file with filters, Copy and Download; the default shell adds a "Log" panel, and case import notes now list their findings as rows. `Solution` carries the solve's `diagnostics` (islands, HVDC transfers), which the browser Study already returned.
+
+## 0.4.5
+
+### Patch Changes
+
+- [#264](https://github.com/eigenergy/tellegen/pull/264) [`75edb80`](https://github.com/eigenergy/tellegen/commit/75edb800137d908d56f17aa38221fa62f96e0615) Thanks [@samtalki](https://github.com/samtalki)! - The DC OPF, DC power flow and AC power flow solve networks with in-service HVDC lines. Each line's stated transfer enters the bus balance as fixed injections at its two terminal buses, as PowerIO 0.11.7 prepares them, and the solve reports PowerIO's `BUILD.HVDC.FIXED_INJECTION` diagnostic. A line with a terminal bus outside the solve injects at neither end and reports `BUILD.HVDC.TERMINAL_INACTIVE`. Generated OpenStreetMap grids with HVDC links now open, solve and export. The AC OPF and the SOC relaxation still refuse in-service HVDC lines.
+
+## 0.4.4
+
+### Patch Changes
+
+- [#254](https://github.com/eigenergy/tellegen/pull/254) [`020ca51`](https://github.com/eigenergy/tellegen/commit/020ca5140035f294dbb7b14c3747cf6de4b97092) Thanks [@samtalki](https://github.com/samtalki)! - Build against PowerIO 0.11.7. AC power flow on a case with HVDC lines now
+  includes their scheduled transfers as fixed bus injections; DC OPF and DC power
+  flow still leave them out. OpenDSS feeders read the circuit's source
+  impedance, so the distribution graph gains an internal source bus and its
+  impedance line, and a `switch=y` line reads as a closed 1 mOhm line. PSS/E
+  VSC DC lines are read instead of skipped.
+
 ## 0.4.3
 
 ### Patch Changes
